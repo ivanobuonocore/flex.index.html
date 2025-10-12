@@ -97,3 +97,8 @@ width: 60%;
 background: pink;
     width: 40%;
 }
+
+.section-row{
+padding: 1em 0 ;
+min-height: 200px;
+}
