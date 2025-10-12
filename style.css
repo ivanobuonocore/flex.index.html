@@ -18,11 +18,11 @@ display: flex;
 border: dashed 2px black;
 }
 
-.bg-orange {
+.bg-orange{
     background-color: orange;
 }
 
-.bg-gray {
+.bg-gray{
   background-color: lightgray;  
 }
 
@@ -49,7 +49,7 @@ max-width: 1000px; ;
 margin:0 auto ;
 }
 
-.nav-logo {
+.nav-logo{
 width: 20%;
 }
 
@@ -70,7 +70,7 @@ text-align: right;
     padding: 1em;
 }
 
-.jumbotron {
+.jumbotron{
 background-color: blue;
 height:auto ;
 margin-top: 1em;
