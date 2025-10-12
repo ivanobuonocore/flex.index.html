@@ -18,14 +18,31 @@ display: flex;
 border: dashed 2px black;
 }
 
+.bg-orange {
+    background-color: orange;
+}
+
+.bg-gray {
+  background-color: lightgray;  
+}
+
 
 header{
 background:lightblue ;
+padding-top: 1em;
+padding-bottom: 5px;
 }
 
 #header-container{
 background: orange;
 }
+
+body{
+background: white; 
+color: black;   
+font-family: sans-serif;
+}
+
 
 .boxed{
 max-width: 1000px; ;
@@ -38,10 +55,12 @@ width: 20%;
 
 .nav-link{
 width: 60%;
+text-align: center;
 }
 
 .nav-login{
 width: 20%;
+text-align: right;
 }
 
 
@@ -49,4 +68,32 @@ width: 20%;
 .nav-link,
 .nav-login{
     padding: 1em;
+}
+
+.jumbotron {
+background-color: blue;
+height:auto ;
+margin-top: 1em;
+}
+
+.jambotron-container{
+justify-content: center
+min-height 250px;
+padding: 1em ;
+}
+
+.jambotron-content{
+background-color: pink;
+width: 100% ;
+height: 100px;
+}
+
+.big-column{
+background: lightblue;
+width: 60%;
+}
+
+.small-column{
+background: pink;
+    width: 40%;
 }
