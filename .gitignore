@@ -1,0 +1,32 @@
+# Flutter / Dart
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+*.g.dart
+*.freezed.dart
+# pubspec.lock si committa per le app (apps/*), non per i package di libreria (packages/*)
+packages/*/pubspec.lock
+
+# Supabase CLI (locale)
+infrastructure/supabase/.branches/
+infrastructure/supabase/.temp/
+
+# Node / backend
+**/node_modules/
+**/dist/
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

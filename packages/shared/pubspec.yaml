@@ -1,0 +1,13 @@
+name: pip_shared
+description: >
+  Utility condivise indipendenti dal framework (Result/Failure, tipi di errore).
+  Vedi Engineering Constitution, Articolo 6 — "Ogni errore è gestito".
+version: 0.1.0
+publish_to: "none"
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^4.0.0

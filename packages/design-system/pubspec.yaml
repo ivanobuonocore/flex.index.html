@@ -1,0 +1,19 @@
+name: pip_design_system
+description: >
+  Token di design e temi condivisi (docs/product/05-design-system.md).
+  Unica fonte di verità per colori, tipografia, spaziature, raggi, ombre.
+version: 0.1.0
+publish_to: "none"
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+  flutter_test:
+    sdk: flutter
