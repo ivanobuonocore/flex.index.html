@@ -22,3 +22,7 @@ enum MemoryLevel { global, workspace, conversation }
 
 /// Chi ha generato una Memoria (Domain Model, entità Memory).
 enum MemoryOrigin { user, ai }
+
+/// Tipo di contenuto trovato dalla Ricerca Universale
+/// (docs/product/06-information-architecture.md, "Ricerca").
+enum SearchResultType { workspace, note, task, document }

@@ -39,6 +39,12 @@ npx supabase db push
   schema `storage` fittizio (non è Supabase Storage reale) — ha comunque permesso di individuare e
   correggere un bug di ambiguità di colonna nella condizione RLS. Dettagli in
   `docs/database/README.md`.
+- `migrations/20260719071418_universal_search.sql` — funzione `search_workspace_content`
+  (Ricerca Universale, Fase 2 slice 3), `security invoker` esplicito: l'isolamento dipende
+  dalle RLS delle 4 tabelle sottostanti, non da un filtro nella funzione. Verificato
+  manualmente con due utenti — nessuna fuga di dati cross-Workspace. Verifica ha anche trovato
+  un bug di qualità (non sicurezza) sulla tokenizzazione dei nomi file, corretto. Dettagli in
+  `docs/database/README.md`.
 
 Le altre entità del Domain Model (Chat, Memory, Agent, ...) avranno le proprie migrazioni quando
 le rispettive feature verranno implementate (Fase 2+, `docs/product/26-execution-blueprint.md`)

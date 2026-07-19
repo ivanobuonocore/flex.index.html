@@ -20,13 +20,14 @@ Implementate, con dati reali via Supabase:
   toggle rapido todo↔done.
 - **document** (Fase 2 slice 2) — upload/apertura/eliminazione per Workspace
   (`/workspace/:id/documents`), Supabase Storage con signed URL, realtime.
+- **search** (Fase 2 slice 3) — Ricerca Universale cross-tabella (Workspace/Note/Task/
+  Documenti) via full-text search Postgres, debounce lato UI.
 - **today** (Fase 1) — saluto, Workspace recenti.
 
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
 
 - **chat** — Fase 3 (richiede l'AI Engine).
-- **search** — richiede contenuti indicizzabili di più feature (prossima slice di Fase 2).
 - **profile** — identità account e logout ora; abbonamento, tema, memoria, privacy nelle fasi
   successive.
 
