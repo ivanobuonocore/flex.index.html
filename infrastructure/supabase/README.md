@@ -50,6 +50,11 @@ npx supabase db push
   Chat, come `notes`/`tasks` verso `workspaces`); trigger che aggiorna `chats.last_message_at`
   a ogni nuovo messaggio. Verificato manualmente: isolamento cross-utente su entrambe le tabelle,
   trigger funzionante. Dettagli in `docs/database/README.md`.
+- `migrations/20260719150000_expenses.sql` — tabella `expenses` (aggiunta oltre allo scaffold
+  originale, vedi `docs/database/README.md`), stesso pattern RLS a join di `notes`/`tasks`. Le
+  spese estratte dalla Chat dall'AI Engine nascono `pending` e contano nei totali solo dopo
+  conferma esplicita dell'utente (AI Constitution, Principio 1). Verificato manualmente:
+  isolamento cross-utente, constraint su importo e descrizione.
 
 Le altre entità del Domain Model (Memory, Agent, ...) avranno le proprie migrazioni quando le
 rispettive feature verranno implementate (`docs/product/26-execution-blueprint.md`) — lo schema
@@ -59,7 +64,10 @@ non richiede di riscrivere quelle esistenti per crescere (Engineering Constituti
 
 L'AI Engine è la Edge Function `functions/ai-chat` (Deno/TypeScript) — non un servizio separato
 (Architectural Principles: "mai il frontend collegato direttamente a un provider LLM"; tutte le
-chiamate AI passano da qui). Richiede una chiave Anthropic, mai committata nel repository:
+chiamate AI passano da qui). Oltre a rispondere in chat, quando la Chat ha un Workspace la
+function offre ad Anthropic uno strumento (`tool use`) `extract_expenses` per riconoscere spese
+descritte dall'utente e registrarle come "in attesa di conferma" (`docs/database/README.md`,
+Fase 3 slice 2). Richiede una chiave Anthropic, mai committata nel repository:
 
 ```
 npx supabase secrets set ANTHROPIC_API_KEY=<la-tua-chiave>

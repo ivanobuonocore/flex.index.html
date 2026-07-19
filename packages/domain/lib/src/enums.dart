@@ -26,3 +26,9 @@ enum MemoryOrigin { user, ai }
 /// Tipo di contenuto trovato dalla Ricerca Universale
 /// (docs/product/06-information-architecture.md, "Ricerca").
 enum SearchResultType { workspace, note, task, document }
+
+/// Stato di conferma di una Spesa (Domain Model, entità Expense). Le spese
+/// suggerite dall'AI restano "pending" finché l'utente non le conferma
+/// esplicitamente (AI Constitution, Principio 1 — "l'AI può suggerire,
+/// l'utente decide").
+enum ExpenseStatus { pending, confirmed }

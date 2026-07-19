@@ -8,6 +8,7 @@ import 'package:pip_mobile/main.dart';
 import '../../../support/fake_auth_repository.dart';
 import '../../../support/fake_chat_repository.dart';
 import '../../../support/fake_document_repository.dart';
+import '../../../support/fake_expense_repository.dart';
 import '../../../support/fake_note_repository.dart';
 import '../../../support/fake_task_repository.dart';
 import '../../../support/fake_workspace_repository.dart';
@@ -21,12 +22,14 @@ void main() {
     final fakeTask = FakeTaskRepository();
     final fakeDocument = FakeDocumentRepository();
     final fakeChat = FakeChatRepository();
+    final fakeExpense = FakeExpenseRepository();
     addTearDown(fakeAuth.dispose);
     addTearDown(fakeWorkspace.dispose);
     addTearDown(fakeNote.dispose);
     addTearDown(fakeTask.dispose);
     addTearDown(fakeDocument.dispose);
     addTearDown(fakeChat.dispose);
+    addTearDown(fakeExpense.dispose);
 
     final user = User(
       id: 'u1',
@@ -53,6 +56,7 @@ void main() {
           taskRepositoryProvider.overrideWithValue(fakeTask),
           documentRepositoryProvider.overrideWithValue(fakeDocument),
           chatRepositoryProvider.overrideWithValue(fakeChat),
+          expenseRepositoryProvider.overrideWithValue(fakeExpense),
         ],
         child: const PipApp(),
       ),
@@ -77,19 +81,22 @@ void main() {
     fakeTask.emit(const []);
     fakeDocument.emit(const []);
     fakeChat.emit(const []);
+    fakeExpense.emit(const []);
     await tester.pumpAndSettle();
 
     expect(find.text('Note'), findsOneWidget);
     expect(find.text('Attività'), findsOneWidget);
     expect(find.text('Documenti'), findsOneWidget);
 
-    // La sezione Chat allunga la pagina oltre il viewport di test: la sliver
-    // list costruisce "Prossimamente" solo una volta scrollato in vista.
+    // Le sezioni Chat e Spese allungano la pagina oltre il viewport di test:
+    // la sliver list costruisce "Prossimamente" solo una volta scrollato in
+    // vista.
     await tester.scrollUntilVisible(
       find.text('Prossimamente'),
       300,
       scrollable: find.byType(Scrollable),
     );
     expect(find.text('Prossimamente'), findsOneWidget);
+    expect(find.text('Spese'), findsOneWidget);
   });
 }

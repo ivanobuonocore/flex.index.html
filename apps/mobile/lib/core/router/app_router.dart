@@ -9,6 +9,7 @@ import '../../features/chat/presentation/chat_detail_screen.dart';
 import '../../features/chat/presentation/chat_list_screen.dart';
 import '../../features/chat/presentation/workspace_chat_list_screen.dart';
 import '../../features/document/presentation/document_list_screen.dart';
+import '../../features/expense/presentation/expense_report_screen.dart';
 import '../../features/note/presentation/note_list_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
@@ -107,6 +108,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                             ),
                           ),
                         ],
+                      ),
+                      GoRoute(
+                        path: 'expenses',
+                        builder: (context, state) => ExpenseReportScreen(
+                          workspaceId: state.pathParameters['id']!,
+                        ),
                       ),
                     ],
                   ),

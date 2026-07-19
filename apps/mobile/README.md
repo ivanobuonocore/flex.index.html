@@ -28,6 +28,13 @@ Implementate, con dati reali via Supabase:
   dentro un Workspace. Il frontend non chiama mai direttamente Anthropic: ogni messaggio passa
   dall'Edge Function `ai-chat` (`infrastructure/supabase/functions/ai-chat`), l'unico punto in cui
   l'app tocca un provider AI.
+- **expense** (Fase 3 slice 2, aggiunta oltre allo scaffold originale — richiesta reale
+  dell'utente) — Report Spese per Workspace (`/workspace/:id/expenses`): totale del mese
+  corrente (solo spese confermate) + lista, aggiunta manuale, e una sezione "in attesa di
+  conferma" per le spese che la Chat ha riconosciuto in un messaggio (es. "barbiere 23€,
+  supermercato 35€") ma che l'utente non ha ancora confermato — nessuna spesa suggerita
+  dall'AI conta nel totale finché non viene confermata esplicitamente (AI Constitution,
+  Principio 1).
 - **today** (Fase 1) — saluto, Workspace recenti.
 
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
@@ -40,9 +47,11 @@ Non ancora presenti: memory, settings, billing.
 
 ## Limiti noti (dichiarati, non nascosti)
 
-- Questo modulo non ha mai eseguito `flutter create`: non esistono le cartelle piattaforma
-  (`android/`, `ios/`, `web/`, ...). `flutter analyze`/`flutter test` funzionano (analisi Dart
-  pura), ma l'app non è ancora eseguibile su un device/emulatore reale.
+- Questo modulo non ha mai eseguito `flutter create` per le piattaforme native (`android/`,
+  `ios/`): non esistono, quindi l'app non è ancora installabile su un device/emulatore reale.
+  La piattaforma `web/` esiste (`flutter create --platforms=web .`, usata per generare una build
+  dimostrativa) — `flutter build web` funziona, ma non è mai stata verificata con una chiamata
+  reale a Supabase in questa sessione (restrizioni di rete dell'ambiente di sviluppo).
 - `file_picker` (selezione file) e l'apertura effettiva di un URL con `url_launcher` non sono
   testabili in questo ambiente (nessun canale di piattaforma nativo): la logica di dominio e i
   repository sono comunque coperti da test con repository fake (`document_controller_test.dart`).
@@ -52,6 +61,10 @@ Non ancora presenti: memory, settings, billing.
   coperta da test con repository fake (`chat_controller_test.dart`, `message_controller_test.dart`);
   l'Edge Function stessa è verificata solo staticamente (`deno check`/`lint`/`fmt`, vedi
   `infrastructure/supabase/README.md`).
+- Lo stesso vale per il riconoscimento delle spese in Chat (`extract_expenses`): la logica
+  applicativa lato app è coperta da test con repository fake
+  (`expense_controller_test.dart`), ma se il modello riconosce correttamente le spese descritte
+  in linguaggio naturale non è verificabile senza una chiamata reale ad Anthropic.
 
 ## Setup locale
 

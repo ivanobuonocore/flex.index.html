@@ -6,6 +6,7 @@ import '../features/auth/data/supabase_auth_repository.dart';
 import '../features/chat/data/supabase_chat_repository.dart';
 import '../features/chat/data/supabase_message_repository.dart';
 import '../features/document/data/supabase_document_repository.dart';
+import '../features/expense/data/supabase_expense_repository.dart';
 import '../features/note/data/supabase_note_repository.dart';
 import '../features/search/data/supabase_search_repository.dart';
 import '../features/task/data/supabase_task_repository.dart';
@@ -47,4 +48,8 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
 
 final messageRepositoryProvider = Provider<MessageRepository>((ref) {
   return SupabaseMessageRepository(ref.watch(supabaseClientProvider));
+});
+
+final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
+  return SupabaseExpenseRepository(ref.watch(supabaseClientProvider));
 });

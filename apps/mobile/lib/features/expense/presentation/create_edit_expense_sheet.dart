@@ -1,0 +1,179 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pip_design_system/pip_design_system.dart';
+import 'package:pip_domain/pip_domain.dart';
+
+import '../application/expense_controller.dart';
+
+/// Creazione o modifica manuale di una Spesa
+/// (docs/product/06-information-architecture.md, "Pulsante +"). Una spesa
+/// creata da qui è sempre `confirmed` fin da subito: l'utente l'ha scritta
+/// deliberatamente, a differenza di quelle suggerite dall'AI Engine.
+Future<void> showCreateEditExpenseSheet(
+  BuildContext context, {
+  required String workspaceId,
+  Expense? expense,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.cardPremium)),
+    ),
+    builder: (context) => _CreateEditExpenseSheet(workspaceId: workspaceId, expense: expense),
+  );
+}
+
+class _CreateEditExpenseSheet extends ConsumerStatefulWidget {
+  const _CreateEditExpenseSheet({required this.workspaceId, this.expense});
+
+  final String workspaceId;
+  final Expense? expense;
+
+  @override
+  ConsumerState<_CreateEditExpenseSheet> createState() => _CreateEditExpenseSheetState();
+}
+
+class _CreateEditExpenseSheetState extends ConsumerState<_CreateEditExpenseSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final _descriptionController =
+      TextEditingController(text: widget.expense?.description);
+  late final _amountController = TextEditingController(
+    text: widget.expense != null ? _formatAmountForInput(widget.expense!.amountCents) : null,
+  );
+  late DateTime _occurredAt = widget.expense?.occurredAt ?? DateTime.now();
+  String? _errorMessage;
+
+  bool get _isEditing => widget.expense != null;
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _occurredAt,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      setState(() => _occurredAt = picked);
+    }
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final amountCents = _parseAmountToCents(_amountController.text);
+    if (amountCents == null) return;
+
+    setState(() => _errorMessage = null);
+
+    final controller = ref.read(expenseFormControllerProvider.notifier);
+    final failure = _isEditing
+        ? await controller.updateExpense(
+            widget.expense!.copyWith(
+              description: _descriptionController.text,
+              amountCents: amountCents,
+              occurredAt: _occurredAt,
+            ),
+          )
+        : await controller.create(
+            workspaceId: widget.workspaceId,
+            description: _descriptionController.text,
+            amountCents: amountCents,
+            occurredAt: _occurredAt,
+          );
+
+    if (!mounted) return;
+    if (failure != null) {
+      setState(() => _errorMessage = failure.message);
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isLoading = ref.watch(expenseFormControllerProvider).isLoading;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: AppSpacing.lg,
+        right: AppSpacing.lg,
+        top: AppSpacing.lg,
+        bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg,
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _isEditing ? 'Modifica spesa' : 'Nuova spesa',
+              style: AppTypography.heading2,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            TextFormField(
+              controller: _descriptionController,
+              autofocus: !_isEditing,
+              decoration: const InputDecoration(labelText: 'Descrizione'),
+              validator: (value) =>
+                  (value == null || value.trim().isEmpty) ? 'La descrizione è obbligatoria' : null,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              controller: _amountController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Importo (€)'),
+              validator: (value) =>
+                  _parseAmountToCents(value ?? '') == null ? 'Importo non valido' : null,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Data'),
+              subtitle: Text(_formatDate(_occurredAt)),
+              trailing: const Icon(Icons.calendar_today_outlined),
+              onTap: _pickDate,
+            ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              Text(_errorMessage!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ],
+            const SizedBox(height: AppSpacing.lg),
+            ElevatedButton(
+              onPressed: isLoading ? null : _submit,
+              child: isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(_isEditing ? 'Salva' : 'Crea spesa'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Accetta sia `,` sia `.` come separatore decimale (tastiera italiana vs
+/// numerica); ritorna `null` se il testo non rappresenta un importo positivo.
+int? _parseAmountToCents(String input) {
+  final normalized = input.trim().replaceAll(',', '.');
+  if (normalized.isEmpty) return null;
+  final value = double.tryParse(normalized);
+  if (value == null || value <= 0) return null;
+  return (value * 100).round();
+}
+
+String _formatAmountForInput(int amountCents) => (amountCents / 100).toStringAsFixed(2);
+
+String _formatDate(DateTime date) =>
+    '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';

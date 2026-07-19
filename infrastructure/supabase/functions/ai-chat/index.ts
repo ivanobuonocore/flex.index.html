@@ -45,6 +45,62 @@ cosa manca invece di colmare i vuoti con supposizioni presentate come fatti.
 Quando la risposta si basa su Note, Attività o Documenti del Workspace elencati nel
 contesto, indicalo esplicitamente (a quale nota/attività/documento ti riferisci).`;
 
+// Addendum al system prompt, solo quando è disponibile un Workspace reale (vedi
+// `expenseToolEnabled` in buildSystemPrompt): istruisce l'uso dello strumento
+// extract_expenses e richiede sempre una risposta testuale di conferma, così
+// l'utente può controllare a colpo d'occhio l'importo estratto prima di
+// confermarlo (AI Constitution, Principio 5 — nessuna falsa certezza).
+const EXPENSE_TOOL_INSTRUCTIONS =
+  `Quando l'utente descrive una o più spese già sostenute (es. "barbiere 23€, supermercato
+35€"), usa lo strumento extract_expenses per registrarle — non limitarti a scriverle in prosa.
+Le spese estratte restano "in attesa di conferma" finché l'utente non le conferma esplicitamente
+nella schermata Spese del Workspace: non contano ancora in nessun totale. Includi sempre, oltre
+all'eventuale uso dello strumento, una risposta testuale breve che nomini cosa hai registrato
+(descrizione e importo di ciascuna spesa) e che è in attesa di conferma.`;
+
+// Nome e schema dello strumento Anthropic per l'estrazione strutturata delle spese
+// (Fase 3 slice 2 — vedi docs/database/README.md). Niente `currency`: questa slice
+// registra sempre in EUR. Attaccato alla richiesta solo quando esiste un Workspace
+// reale a cui collegare le spese (vedi `expenseToolEnabled`).
+const EXTRACT_EXPENSES_TOOL = {
+  name: "extract_expenses",
+  description:
+    "Registra una o più spese personali che l'utente descrive esplicitamente come già " +
+    "sostenute (es. 'ho speso 23€ dal barbiere', 'nota spese: supermercato 35€'). Non " +
+    "usarlo per importi futuri, preventivi, stime o ipotesi.",
+  input_schema: {
+    type: "object",
+    properties: {
+      expenses: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            description: {
+              type: "string",
+              description: "Breve descrizione, es. 'Barbiere'.",
+            },
+            amount_cents: {
+              type: "integer",
+              description:
+                "Importo in centesimi, sempre positivo (es. 23,00€ = 2300).",
+            },
+            occurred_at: {
+              type: "string",
+              description:
+                "Data della spesa in formato YYYY-MM-DD. Se l'utente indica solo un mese, " +
+                "usa il giorno 1 di quel mese, nell'anno corrente rispetto alla data odierna " +
+                "fornita nel contesto.",
+            },
+          },
+          required: ["description", "amount_cents", "occurred_at"],
+        },
+      },
+    },
+    required: ["expenses"],
+  },
+};
+
 interface RequestBody {
   chatId: string;
   workspaceId?: string | null;
@@ -53,6 +109,12 @@ interface RequestBody {
 interface ContextItem {
   id: string;
   label: string;
+}
+
+interface ExpenseSuggestion {
+  description: string;
+  amountCents: number;
+  occurredAt: string;
 }
 
 Deno.serve(async (req) => {
@@ -110,10 +172,11 @@ Deno.serve(async (req) => {
       return jsonError("Non è stato possibile leggere la conversazione.", 500);
     }
 
-    const { systemPrompt, sourceReferences } = await buildSystemPrompt(
-      supabase,
-      body.workspaceId ?? null,
-    );
+    const { systemPrompt, sourceReferences, expenseToolEnabled } =
+      await buildSystemPrompt(
+        supabase,
+        body.workspaceId ?? null,
+      );
 
     const anthropicMessages = (historyRows ?? [])
       .filter((row) => row.role === "user" || row.role === "ai")
@@ -138,6 +201,7 @@ Deno.serve(async (req) => {
         max_tokens: MAX_OUTPUT_TOKENS,
         system: systemPrompt,
         messages: anthropicMessages,
+        ...(expenseToolEnabled ? { tools: [EXTRACT_EXPENSES_TOOL] } : {}),
       }),
     });
 
@@ -153,7 +217,49 @@ Deno.serve(async (req) => {
 
     const anthropicBody = await anthropicResponse.json();
     const replyText = extractText(anthropicBody);
-    if (!replyText) {
+
+    const suggestions = expenseToolEnabled
+      ? extractExpenseSuggestions(anthropicBody)
+        .map(sanitizeExpense)
+        .filter((s): s is ExpenseSuggestion => s !== null)
+      : [];
+
+    let expenseInsertFailed = false;
+    if (suggestions.length > 0) {
+      const { error: expenseInsertError } = await supabase.from("expenses")
+        .insert(
+          suggestions.map((s) => ({
+            workspace_id: body.workspaceId,
+            chat_id: body.chatId,
+            description: s.description,
+            amount_cents: s.amountCents,
+            occurred_at: s.occurredAt,
+            status: "pending",
+            created_by_ai: true,
+          })),
+        );
+      if (expenseInsertError) {
+        console.error("ai-chat: errore insert expenses", expenseInsertError);
+        expenseInsertFailed = true;
+      }
+    }
+
+    // Il testo finale non deve mai affermare un successo che non c'è stato: se
+    // l'insert delle spese fallisce, lo diciamo esplicitamente invece di lasciare
+    // che la risposta del modello (scritta prima di sapere se l'insert sarebbe
+    // riuscito) suggerisca il contrario.
+    let finalReplyText = replyText;
+    if (expenseInsertFailed) {
+      finalReplyText =
+        "Non sono riuscito a salvare le spese rilevate: riprova." +
+        (replyText ? `\n\n${replyText}` : "");
+    } else if (!finalReplyText && suggestions.length > 0) {
+      finalReplyText = `Ho registrato ${suggestions.length} ${
+        suggestions.length === 1 ? "spesa" : "spese"
+      } in attesa di conferma nella sezione Spese.`;
+    }
+
+    if (!finalReplyText) {
       console.error("ai-chat: risposta Anthropic senza testo", anthropicBody);
       return jsonError("Il servizio AI ha restituito una risposta vuota.", 502);
     }
@@ -161,7 +267,7 @@ Deno.serve(async (req) => {
     const { error: insertError } = await supabase.from("messages").insert({
       chat_id: body.chatId,
       role: "ai",
-      content: replyText,
+      content: finalReplyText,
       tokens_used: anthropicBody?.usage?.output_tokens ?? null,
       source_references: sourceReferences,
     });
@@ -189,9 +295,20 @@ async function buildSystemPrompt(
   // deno-lint-ignore no-explicit-any
   supabase: any,
   workspaceId: string | null,
-): Promise<{ systemPrompt: string; sourceReferences: string[] }> {
+): Promise<
+  {
+    systemPrompt: string;
+    sourceReferences: string[];
+    expenseToolEnabled: boolean;
+  }
+> {
   if (!workspaceId) {
-    return { systemPrompt: ASSISTANT_PERSONA, sourceReferences: [] };
+    // Una Chat senza Workspace non ha dove collegare una spesa: niente strumento.
+    return {
+      systemPrompt: ASSISTANT_PERSONA,
+      sourceReferences: [],
+      expenseToolEnabled: false,
+    };
   }
 
   const { data: workspace } = await supabase
@@ -202,8 +319,13 @@ async function buildSystemPrompt(
 
   if (!workspace) {
     // L'utente non ha accesso a questo Workspace (RLS) o non esiste più: rispondi
-    // senza contesto invece di fallire l'intero turno.
-    return { systemPrompt: ASSISTANT_PERSONA, sourceReferences: [] };
+    // senza contesto invece di fallire l'intero turno. Nessuno strumento spese: non
+    // c'è un Workspace verificato a cui collegarle (difesa in profondità oltre a RLS).
+    return {
+      systemPrompt: ASSISTANT_PERSONA,
+      sourceReferences: [],
+      expenseToolEnabled: false,
+    };
   }
 
   const [{ data: notes }, { data: tasks }, { data: documents }] = await Promise
@@ -247,7 +369,11 @@ async function buildSystemPrompt(
     (d: { id: string; name: string }) => ({ id: d.id, label: `- ${d.name}` }),
   );
 
+  // "Data odierna" dà al modello un riferimento affidabile per risolvere date
+  // relative ("questo mese", "il mese scorso") quando estrae le spese.
+  const today = new Date().toISOString().slice(0, 10);
   const sections: string[] = [
+    `Data odierna: ${today}.`,
     `Workspace attivo: "${workspace.name}"${
       workspace.description ? ` — ${workspace.description}` : ""
     }`,
@@ -266,12 +392,15 @@ async function buildSystemPrompt(
     );
   }
 
-  const systemPrompt = `${ASSISTANT_PERSONA}\n\n${sections.join("\n\n")}`;
+  const systemPrompt =
+    `${ASSISTANT_PERSONA}\n\n${EXPENSE_TOOL_INSTRUCTIONS}\n\n${
+      sections.join("\n\n")
+    }`;
   const sourceReferences = [...noteItems, ...taskItems, ...documentItems].map((
     i,
   ) => i.id);
 
-  return { systemPrompt, sourceReferences };
+  return { systemPrompt, sourceReferences, expenseToolEnabled: true };
 }
 
 // deno-lint-ignore no-explicit-any
@@ -286,6 +415,40 @@ function extractText(anthropicBody: any): string | null {
     .join("\n")
     .trim();
   return text.length > 0 ? text : null;
+}
+
+// Estrae le chiamate allo strumento extract_expenses dalla risposta Anthropic.
+// Un turno può contenere sia un blocco `text` sia uno o più blocchi `tool_use`
+// (tool_choice di default è "auto": il modello decide se/quando usarlo).
+// deno-lint-ignore no-explicit-any
+function extractExpenseSuggestions(anthropicBody: any): unknown[] {
+  const blocks = anthropicBody?.content;
+  if (!Array.isArray(blocks)) return [];
+  return blocks
+    .filter((block: { type: string; name?: string }) =>
+      block.type === "tool_use" && block.name === "extract_expenses"
+    )
+    // deno-lint-ignore no-explicit-any
+    .flatMap((block: any) =>
+      Array.isArray(block.input?.expenses) ? block.input.expenses : []
+    );
+}
+
+// Validazione difensiva: lo schema del tool vincola la forma del JSON, non la sua
+// correttezza — un valore strutturalmente valido ma sbagliato (es. importo 0, data
+// non parsabile) va scartato qui, non solo delegato al check constraint del DB.
+function sanitizeExpense(raw: unknown): ExpenseSuggestion | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const description = typeof r.description === "string"
+    ? r.description.trim()
+    : "";
+  const amountCents = Math.round(Number(r.amount_cents));
+  const occurredAt = typeof r.occurred_at === "string" ? r.occurred_at : "";
+  if (!description) return null;
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(occurredAt)) return null;
+  return { description, amountCents, occurredAt };
 }
 
 function jsonError(message: string, status: number): Response {

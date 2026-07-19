@@ -8,6 +8,7 @@ import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../../chat/application/chat_controller.dart';
 import '../../document/application/document_controller.dart';
+import '../../expense/application/expense_controller.dart';
 import '../../note/application/note_controller.dart';
 import '../../task/application/task_controller.dart';
 import '../application/workspace_controller.dart';
@@ -70,6 +71,7 @@ class _WorkspaceDetailBody extends ConsumerWidget {
     final tasksAsync = ref.watch(tasksProvider(workspace.id));
     final documentsAsync = ref.watch(documentsProvider(workspace.id));
     final chatsAsync = ref.watch(chatsProvider(workspace.id));
+    final expensesAsync = ref.watch(expensesProvider(workspace.id));
 
     return CustomScrollView(
       slivers: [
@@ -232,6 +234,42 @@ class _WorkspaceDetailBody extends ConsumerWidget {
                                 ))
                             .toList(growable: false),
                       ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              _SectionHeader(
+                title: 'Spese',
+                onSeeAll: () => context.push('/workspace/${workspace.id}/expenses'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              expensesAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (_, __) =>
+                    const Text('Non è stato possibile caricare le spese.'),
+                data: (expenses) {
+                  final confirmed = confirmedThisMonth(expenses);
+                  final pending = pendingExpenses(expenses);
+                  if (confirmed.isEmpty && pending.isEmpty) {
+                    return const _EmptySectionHint(
+                      message:
+                          'Nessuna spesa. Toccando "Vedi tutte" puoi aggiungerne una.',
+                    );
+                  }
+                  final totalLabel =
+                      '${(totalCents(confirmed) / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
+                  return Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.euro_outlined),
+                      title: Text('Totale questo mese: $totalLabel'),
+                      subtitle: pending.isNotEmpty
+                          ? Text('${pending.length} in attesa di conferma')
+                          : null,
+                      onTap: () => context.push('/workspace/${workspace.id}/expenses'),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: AppSpacing.lg),
               const Text('Prossimamente', style: AppTypography.heading3),
