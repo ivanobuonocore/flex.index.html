@@ -1,10 +1,14 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
+import 'package:pip_shared/pip_shared.dart';
 
+import '../../../core/providers.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
+import '../../document/application/document_controller.dart';
 import '../application/message_controller.dart';
 
 /// Dettaglio di una Chat: storico messaggi (realtime) + campo di invio
@@ -96,6 +100,10 @@ class _MessageBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            for (final attachmentId in message.attachmentIds) ...[
+              _AttachmentImage(documentId: attachmentId),
+              const SizedBox(height: AppSpacing.xs),
+            ],
             Text(message.content, style: AppTypography.body.copyWith(color: textColor)),
             const SizedBox(height: AppSpacing.xs),
             Text(
@@ -113,6 +121,46 @@ class _MessageBubble extends StatelessWidget {
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+}
+
+/// Foto allegata a un messaggio: la UI conosce solo l'id del [Document]
+/// ([Message.attachmentIds]), quindi legge l'oggetto e il suo URL firmato
+/// tramite [documentDownloadUrlProvider] prima di poterla mostrare.
+class _AttachmentImage extends ConsumerWidget {
+  const _AttachmentImage({required this.documentId});
+
+  final String documentId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final urlAsync = ref.watch(documentDownloadUrlProvider(documentId));
+
+    return ClipRRect(
+      borderRadius: AppRadii.standardRadius,
+      child: urlAsync.when(
+        loading: () => const SizedBox(
+          height: 160,
+          width: 160,
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+        error: (_, __) => const SizedBox(
+          height: 80,
+          width: 80,
+          child: Center(child: Icon(Icons.broken_image_outlined)),
+        ),
+        data: (url) => Image.network(
+          url,
+          height: 200,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => const SizedBox(
+            height: 80,
+            width: 80,
+            child: Center(child: Icon(Icons.broken_image_outlined)),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -157,6 +205,12 @@ class _MessageInput extends ConsumerStatefulWidget {
 class _MessageInputState extends ConsumerState<_MessageInput> {
   final _controller = TextEditingController();
   String? _errorMessage;
+  PlatformFile? _pendingPhoto;
+  bool _isUploadingPhoto = false;
+
+  /// Una Chat privata (senza Workspace) non ha dove allegare la foto — stesso
+  /// limite già applicato alle Transazioni estratte dall'AI Engine.
+  bool get _canAttachPhoto => widget.workspaceId != null;
 
   @override
   void dispose() {
@@ -164,17 +218,50 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     super.dispose();
   }
 
+  Future<void> _pickPhoto() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+    final file = result?.files.single;
+    if (file == null || file.bytes == null) return;
+    setState(() => _pendingPhoto = file);
+  }
+
   Future<void> _submit() async {
     final content = _controller.text;
     if (content.trim().isEmpty) return;
 
     setState(() => _errorMessage = null);
+
+    var attachmentIds = const <String>[];
+    final photo = _pendingPhoto;
+    if (photo != null) {
+      setState(() => _isUploadingPhoto = true);
+      final uploadResult = await ref.read(documentRepositoryProvider).uploadDocument(
+            workspaceId: widget.workspaceId!,
+            fileName: photo.name,
+            mimeType: _guessImageMimeType(photo.extension),
+            bytes: photo.bytes!,
+            chatId: widget.chatId,
+          );
+      if (!mounted) return;
+      setState(() => _isUploadingPhoto = false);
+      if (uploadResult.isErr) {
+        setState(() => _errorMessage = (uploadResult as Err<Document>).failure.message);
+        return;
+      }
+      attachmentIds = [(uploadResult as Ok<Document>).value.id];
+    }
+
     _controller.clear();
+    setState(() => _pendingPhoto = null);
 
     final failure = await ref.read(messageFormControllerProvider.notifier).send(
           chatId: widget.chatId,
           workspaceId: widget.workspaceId,
           content: content,
+          attachmentIds: attachmentIds,
         );
 
     if (!mounted) return;
@@ -183,9 +270,26 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     }
   }
 
+  String _guessImageMimeType(String? extension) {
+    switch (extension?.toLowerCase()) {
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      case 'heic':
+        return 'image/heic';
+      case 'jpg':
+      case 'jpeg':
+      default:
+        return 'image/jpeg';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isSending = ref.watch(messageFormControllerProvider).isLoading;
+    final isSending = ref.watch(messageFormControllerProvider).isLoading || _isUploadingPhoto;
 
     return SafeArea(
       top: false,
@@ -194,6 +298,14 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (_pendingPhoto != null) ...[
+              Chip(
+                avatar: const Icon(Icons.image_outlined, size: 18),
+                label: Text(_pendingPhoto!.name, overflow: TextOverflow.ellipsis),
+                onDeleted: isSending ? null : () => setState(() => _pendingPhoto = null),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
             if (_errorMessage != null) ...[
               Text(
                 _errorMessage!,
@@ -203,6 +315,13 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
             ],
             Row(
               children: [
+                IconButton(
+                  tooltip: _canAttachPhoto
+                      ? 'Allega una foto'
+                      : 'Le chat private non possono allegare foto',
+                  onPressed: (isSending || !_canAttachPhoto) ? null : _pickPhoto,
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                ),
                 Expanded(
                   child: TextField(
                     controller: _controller,

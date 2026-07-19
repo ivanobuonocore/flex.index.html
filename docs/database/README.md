@@ -89,6 +89,12 @@ reale, ma la stessa logica SQL, ed è quanto basta per aver individuato il bug.
 generazione di signed URL) richiede `supabase start` (Docker) o un progetto remoto — non
 disponibili in questa sessione.
 
+**`chat_id` (Fase 3 slice 2)**: colonna presente fin dallo scaffold originale ma popolata solo a
+partire dalla feature "foto nei messaggi di Chat" — un documento con `chat_id` valorizzato è una
+foto allegata a un messaggio (`Message.attachmentIds`), non un documento della sezione Documenti
+del Workspace. Stessa tabella, stesso bucket, nessuna nuova migrazione: solo un nuovo modo di
+popolare una colonna già esistente.
+
 ## Fase 2 (slice 3) — Ricerca Universale
 
 ### `public.search_workspace_content(query text)`
@@ -218,6 +224,33 @@ solo `confirmed`) verificato con dati misti.
 al provider Anthropic — il comportamento dello strumento `extract_transactions` (se il modello lo
 usa correttamente, se distingue bene entrate/uscite, se risolve bene le date relative) non è
 testabile senza una chiave reale. Verificato solo staticamente (`deno check`/`lint`/`fmt`).
+
+## Fase 3 (slice 3) — Foto nei messaggi di Chat
+
+Nessuna nuova tabella: riusa `public.documents` e il bucket Storage `documents` esistenti
+(vedi sopra, "`chat_id` (Fase 3 slice 2)"). Una foto allegata a un messaggio è un `Document` con
+`chat_id` valorizzato; il suo id viene referenziato in `Message.attachmentIds` (colonna già
+presente dallo scaffold originale, mai popolata fino a questa slice).
+
+**Edge Function `ai-chat`**: solo l'**ultimo messaggio dell'utente** (non l'intera cronologia, per
+contenere costo/latenza) può includere immagini nella chiamata ad Anthropic. Se ha
+`attachment_ids`, la function legge `storage_path`/`mime_type` da `documents` (stesso client
+JWT-scoped, stesse RLS/policy Storage già verificate per la sezione Documenti — nessun privilegio
+aggiuntivo), scarica i byte e li converte in un blocco immagine Anthropic (`type: "image", source:
+{type: "base64", ...}`). Massimo 3 immagini per messaggio, ciascuna scartata silenziosamente
+(turno comunque proseguito con testo + immagini valide) se supera ~5MB o non è scaricabile. La
+codifica base64 è scritta a mano nella function stessa, senza dipendenze esterne — evita lo stesso
+problema già incontrato con `jsr:` irraggiungibile nella rete di verifica di questo sandbox.
+
+**Limite noto**: Anthropic supporta ufficialmente immagini JPEG/PNG/GIF/WebP. `apps/mobile`
+permette di scegliere qualunque immagine dalla libreria (inclusi formati come HEIC, comune su
+iPhone): un'immagine in un formato non supportato non causa un crash, ma il turno può fallire con
+l'errore generico già gestito ("Il servizio AI non è disponibile al momento") — non verificabile
+senza chiave Anthropic reale.
+
+**Non verificabile in questa sessione**: come per il resto di `ai-chat`, nessuna chiamata reale al
+provider Anthropic — se il modello interpreta correttamente le immagini non è testabile senza una
+chiave reale. Verificato solo staticamente (`deno check`/`lint`/`fmt`).
 
 ## Fasi successive
 

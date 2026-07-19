@@ -43,7 +43,10 @@ posto dell'utente. Se le informazioni nel contesto sono incomplete, dichiaralo e
 cosa manca invece di colmare i vuoti con supposizioni presentate come fatti.
 
 Quando la risposta si basa su Note, Attività o Documenti del Workspace elencati nel
-contesto, indicalo esplicitamente (a quale nota/attività/documento ti riferisci).`;
+contesto, indicalo esplicitamente (a quale nota/attività/documento ti riferisci).
+
+Se l'utente allega una foto, guardala e usala per rispondere (es. leggi uno scontrino, descrivi
+un documento, riconosci un oggetto) invece di ignorarla.`;
 
 // Addendum al system prompt, solo quando è disponibile un Workspace reale (vedi
 // `transactionToolEnabled` in buildSystemPrompt): istruisce l'uso dello strumento
@@ -124,6 +127,25 @@ interface TransactionSuggestion {
   occurredAt: string;
 }
 
+interface AnthropicTextBlock {
+  type: "text";
+  text: string;
+}
+
+interface AnthropicImageBlock {
+  type: "image";
+  source: { type: "base64"; media_type: string; data: string };
+}
+
+type AnthropicContentBlock = AnthropicTextBlock | AnthropicImageBlock;
+
+// Solo l'ultimo messaggio dell'utente può includere immagini (non l'intera
+// cronologia, per contenere costo/latenza — vedi buildAnthropicMessages).
+const MAX_IMAGE_ATTACHMENTS = 3;
+// Limite prudenziale per immagine, coerente con i limiti pratici di Anthropic
+// per contenuto base64 in un singolo messaggio.
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORS_HEADERS });
@@ -169,7 +191,7 @@ Deno.serve(async (req) => {
 
     const { data: historyRows, error: historyError } = await supabase
       .from("messages")
-      .select("role, content")
+      .select("role, content, attachment_ids")
       .eq("chat_id", body.chatId)
       .order("created_at", { ascending: true })
       .limit(MAX_HISTORY_MESSAGES);
@@ -185,12 +207,10 @@ Deno.serve(async (req) => {
         body.workspaceId ?? null,
       );
 
-    const anthropicMessages = (historyRows ?? [])
-      .filter((row) => row.role === "user" || row.role === "ai")
-      .map((row) => ({
-        role: row.role === "ai" ? "assistant" : "user",
-        content: row.content as string,
-      }));
+    const anthropicMessages = await buildAnthropicMessages(
+      supabase,
+      historyRows ?? [],
+    );
 
     if (anthropicMessages.length === 0) {
       return jsonError("Nessun messaggio da elaborare.", 400);
@@ -416,6 +436,122 @@ async function buildSystemPrompt(
   ) => i.id);
 
   return { systemPrompt, sourceReferences, transactionToolEnabled: true };
+}
+
+// Costruisce i messaggi nel formato Anthropic. Solo l'ultimo messaggio
+// dell'utente può portare immagini (non l'intera cronologia, per contenere
+// costo/latenza): per quella riga, se ha `attachment_ids`, il content
+// diventa un array di blocchi testo+immagini invece di una semplice stringa.
+async function buildAnthropicMessages(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  // deno-lint-ignore no-explicit-any
+  historyRows: any[],
+): Promise<{ role: string; content: string | AnthropicContentBlock[] }[]> {
+  const rows = historyRows.filter((row) =>
+    row.role === "user" || row.role === "ai"
+  );
+
+  let lastUserRowIndex = -1;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].role === "user") {
+      lastUserRowIndex = i;
+      break;
+    }
+  }
+
+  return await Promise.all(
+    rows.map(async (row, index) => {
+      const role = row.role === "ai" ? "assistant" : "user";
+      const attachmentIds: string[] = Array.isArray(row.attachment_ids)
+        ? row.attachment_ids
+        : [];
+
+      if (index !== lastUserRowIndex || attachmentIds.length === 0) {
+        return { role, content: row.content as string };
+      }
+
+      const blocks: AnthropicContentBlock[] = [
+        { type: "text", text: row.content as string },
+      ];
+      for (const documentId of attachmentIds.slice(0, MAX_IMAGE_ATTACHMENTS)) {
+        const imageBlock = await fetchImageBlock(supabase, documentId);
+        if (imageBlock) blocks.push(imageBlock);
+      }
+      return { role, content: blocks };
+    }),
+  );
+}
+
+// Scarica un allegato (righe `documents`, bucket Storage `documents` — stesso
+// bucket/tabella usati da apps/mobile per la sezione Documenti, riusati qui
+// per gli allegati di Chat) e lo converte in un blocco immagine Anthropic.
+// Nessun privilegio aggiuntivo: stesso client autenticato col JWT del
+// chiamante usato per il resto della function — le stesse RLS/policy Storage
+// già verificate per la sezione Documenti si applicano identiche qui.
+// Ritorna `null` (silenziosamente, non un errore che blocca il turno) se il
+// documento non è leggibile o l'immagine supera MAX_IMAGE_BYTES.
+async function fetchImageBlock(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  documentId: string,
+): Promise<AnthropicImageBlock | null> {
+  const { data: document } = await supabase
+    .from("documents")
+    .select("storage_path, mime_type")
+    .eq("id", documentId)
+    .maybeSingle();
+  if (!document) return null;
+
+  const { data: blob, error } = await supabase.storage
+    .from("documents")
+    .download(document.storage_path);
+  if (error || !blob) return null;
+
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  if (bytes.byteLength > MAX_IMAGE_BYTES) return null;
+
+  return {
+    type: "image",
+    source: {
+      type: "base64",
+      media_type: document.mime_type,
+      data: encodeBase64(bytes),
+    },
+  };
+}
+
+const BASE64_CHARS =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// Codifica base64 scritta a mano, nessuna dipendenza esterna: evita lo stesso
+// problema già incontrato in questa sessione con `jsr:` irraggiungibile nella
+// rete di verifica del sandbox (funzionerebbe nel runtime reale di Supabase,
+// ma qui non è verificabile — meglio non dipenderne affatto).
+function encodeBase64(bytes: Uint8Array): string {
+  let result = "";
+  let i = 0;
+  for (; i + 3 <= bytes.length; i += 3) {
+    const chunk = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+    result += BASE64_CHARS[(chunk >> 18) & 0x3f];
+    result += BASE64_CHARS[(chunk >> 12) & 0x3f];
+    result += BASE64_CHARS[(chunk >> 6) & 0x3f];
+    result += BASE64_CHARS[chunk & 0x3f];
+  }
+  const remaining = bytes.length - i;
+  if (remaining === 1) {
+    const chunk = bytes[i] << 16;
+    result += BASE64_CHARS[(chunk >> 18) & 0x3f];
+    result += BASE64_CHARS[(chunk >> 12) & 0x3f];
+    result += "==";
+  } else if (remaining === 2) {
+    const chunk = (bytes[i] << 16) | (bytes[i + 1] << 8);
+    result += BASE64_CHARS[(chunk >> 18) & 0x3f];
+    result += BASE64_CHARS[(chunk >> 12) & 0x3f];
+    result += BASE64_CHARS[(chunk >> 6) & 0x3f];
+    result += "=";
+  }
+  return result;
 }
 
 // deno-lint-ignore no-explicit-any

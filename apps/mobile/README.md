@@ -22,12 +22,15 @@ Implementate, con dati reali via Supabase:
   (`/workspace/:id/documents`), Supabase Storage con signed URL, realtime.
 - **search** (Fase 2 slice 3) — Ricerca Universale cross-tabella (Workspace/Note/Task/
   Documenti) via full-text search Postgres, debounce lato UI.
-- **chat** (Fase 3 slice 1) — Chat contestuale al Workspace (`/workspace/:id/chat`) e tab globale
-  con tutte le Chat dell'utente; invio messaggio + risposta AI in tempo reale (realtime, non
-  streaming token-by-token), indicatore "l'assistente sta scrivendo". La creazione avviene sempre
-  dentro un Workspace. Il frontend non chiama mai direttamente Anthropic: ogni messaggio passa
-  dall'Edge Function `ai-chat` (`infrastructure/supabase/functions/ai-chat`), l'unico punto in cui
-  l'app tocca un provider AI.
+- **chat** (Fase 3 slice 1, foto in Fase 3 slice 3) — Chat contestuale al Workspace
+  (`/workspace/:id/chat`) e tab globale con tutte le Chat dell'utente; invio messaggio + risposta
+  AI in tempo reale (realtime, non streaming token-by-token), indicatore "l'assistente sta
+  scrivendo". La creazione avviene sempre dentro un Workspace. Il frontend non chiama mai
+  direttamente Anthropic: ogni messaggio passa dall'Edge Function `ai-chat`
+  (`infrastructure/supabase/functions/ai-chat`), l'unico punto in cui l'app tocca un provider AI.
+  Si può allegare una foto a un messaggio (solo dentro un Workspace, non in Chat private): la foto
+  viene caricata come `Document` (stesso bucket/sezione di Documenti, riusati — nessuna nuova
+  infrastruttura) e l'assistente la "vede" tramite il supporto immagini di Claude.
 - **transaction** (Fase 3 slice 2, aggiunta oltre allo scaffold originale — richiesta reale
   dell'utente, ispirata all'app Planito) — Bilancio per Workspace (`/workspace/:id/transactions`):
   saldo del mese corrente (entrate meno uscite confermate) + lista con totali separati, aggiunta
@@ -66,6 +69,10 @@ Non ancora presenti: memory, settings, billing.
   logica applicativa lato app è coperta da test con repository fake
   (`transaction_controller_test.dart`), ma se il modello riconosce correttamente le transazioni
   descritte in linguaggio naturale non è verificabile senza una chiamata reale ad Anthropic.
+- Lo stesso per le foto nei messaggi: la logica applicativa (upload, invio dell'id come allegato,
+  rendering della bolla) è verificata; se Claude interpreta correttamente l'immagine non è
+  verificabile senza chiave reale. Solo JPEG/PNG/GIF/WebP sono garantiti compatibili — formati
+  come HEIC (comune su iPhone) possono far fallire il turno con un errore generico, non un crash.
 
 ## Setup locale
 

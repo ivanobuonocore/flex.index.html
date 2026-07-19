@@ -73,6 +73,15 @@ contano nel saldo della schermata Bilancio solo dopo che l'utente le conferma es
 Constitution, Principio 1 — "l'AI suggerisce, l'utente decide"). RLS verificata su Postgres
 locale; Edge Function verificata solo staticamente, stessi limiti della slice precedente.
 
+**Fase 3 (slice 3)**: Foto nei messaggi di Chat — continuazione della richiesta "rendi l'app
+simile a Planito". Riusa la sezione Documenti esistente (nessuna nuova tabella/migrazione): una
+foto allegata a un messaggio è un `Document` con `chat_id` valorizzato, referenziato in
+`Message.attachmentIds`. L'Edge Function `ai-chat` invia l'immagine dell'ultimo messaggio a
+Claude come contenuto visivo (max 3 foto, ~5MB ciascuna). I messaggi vocali restano fuori scope:
+richiederebbero un servizio di trascrizione aggiuntivo non ancora attivato. I promemoria con
+notifiche push restano sospesi in attesa di trasformare l'app in una PWA installabile (richiede
+una pianificazione a sé).
+
 Memoria resta nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.

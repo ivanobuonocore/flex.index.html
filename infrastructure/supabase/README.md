@@ -68,8 +68,10 @@ L'AI Engine è la Edge Function `functions/ai-chat` (Deno/TypeScript) — non un
 chiamate AI passano da qui). Oltre a rispondere in chat, quando la Chat ha un Workspace la
 function offre ad Anthropic uno strumento (`tool use`) `extract_transactions` per riconoscere
 spese ed entrate descritte dall'utente e registrarle come "in attesa di conferma"
-(`docs/database/README.md`,
-Fase 3 slice 2). Richiede una chiave Anthropic, mai committata nel repository:
+(`docs/database/README.md`, Fase 3 slice 2). Legge anche eventuali foto allegate all'ultimo
+messaggio dell'utente e le invia ad Anthropic come immagini (Fase 3 slice 3) — vedi
+`docs/database/README.md` per i limiti (max 3 foto, ~5MB ciascuna, formati non standard come
+HEIC non garantiti). Richiede una chiave Anthropic, mai committata nel repository:
 
 ```
 npx supabase secrets set ANTHROPIC_API_KEY=<la-tua-chiave>

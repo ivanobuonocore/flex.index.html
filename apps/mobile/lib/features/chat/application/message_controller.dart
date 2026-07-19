@@ -23,11 +23,15 @@ class MessageFormController extends AutoDisposeAsyncNotifier<void> {
     required String chatId,
     required String? workspaceId,
     required String content,
+    List<String> attachmentIds = const [],
   }) async {
     state = const AsyncLoading();
-    final result = await ref
-        .read(messageRepositoryProvider)
-        .sendMessage(chatId: chatId, workspaceId: workspaceId, content: content);
+    final result = await ref.read(messageRepositoryProvider).sendMessage(
+          chatId: chatId,
+          workspaceId: workspaceId,
+          content: content,
+          attachmentIds: attachmentIds,
+        );
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);
   }

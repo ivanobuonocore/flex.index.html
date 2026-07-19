@@ -31,6 +31,7 @@ class SupabaseMessageRepository implements MessageRepository {
     required String chatId,
     required String? workspaceId,
     required String content,
+    List<String> attachmentIds = const [],
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty) {
@@ -42,6 +43,7 @@ class SupabaseMessageRepository implements MessageRepository {
         'chat_id': chatId,
         'role': MessageRole.user.name,
         'content': trimmed,
+        'attachment_ids': attachmentIds,
       });
     } catch (e) {
       return Result.err(

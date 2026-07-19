@@ -14,9 +14,13 @@ abstract interface class MessageRepository {
   /// risposta dell'assistente arriva tramite [watchMessages] (realtime), non
   /// come valore di ritorno qui — l'implementazione nasconde al chiamante
   /// che sono due passi (insert + invocazione dell'AI Engine).
+  /// [attachmentIds]: id di [Document] caricati come foto allegate a questo
+  /// messaggio (docs/database/README.md, sezione Documenti) — vuoto per un
+  /// messaggio di solo testo.
   Future<Result<Unit>> sendMessage({
     required String chatId,
     required String? workspaceId,
     required String content,
+    List<String> attachmentIds = const [],
   });
 }

@@ -5,12 +5,14 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
 
 class FakeDocumentRepository implements DocumentRepository {
-  FakeDocumentRepository({this.uploadResult, this.downloadUrlResult});
+  FakeDocumentRepository({this.uploadResult, this.downloadUrlResult, this.getDocumentResult});
 
   final _controller = StreamController<List<Document>>.broadcast();
   Result<Document>? uploadResult;
   Result<String>? downloadUrlResult;
+  Result<Document>? getDocumentResult;
   Document? lastUploaded;
+  String? lastUploadedChatId;
   String? lastDeletedId;
 
   void emit(List<Document> documents) => _controller.add(documents);
@@ -25,6 +27,7 @@ class FakeDocumentRepository implements DocumentRepository {
     required String fileName,
     required String mimeType,
     required Uint8List bytes,
+    String? chatId,
   }) async {
     final result = uploadResult ??
         const Result<Document>.err(
@@ -32,6 +35,7 @@ class FakeDocumentRepository implements DocumentRepository {
     if (result.isOk) {
       lastUploaded = (result as Ok<Document>).value;
     }
+    lastUploadedChatId = chatId;
     return result;
   }
 
@@ -44,6 +48,12 @@ class FakeDocumentRepository implements DocumentRepository {
   @override
   Future<Result<String>> getDownloadUrl(Document document) async {
     return downloadUrlResult ??
+        const Result.err(UnexpectedFailure('Nessun risultato configurato.'));
+  }
+
+  @override
+  Future<Result<Document>> getDocument(String documentId) async {
+    return getDocumentResult ??
         const Result.err(UnexpectedFailure('Nessun risultato configurato.'));
   }
 

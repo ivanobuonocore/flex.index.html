@@ -64,4 +64,23 @@ void main() {
 
     expect(failure, isA<UnexpectedFailure>());
   });
+
+  test('send inoltra attachmentIds al repository', () async {
+    await container.read(messageFormControllerProvider.notifier).send(
+          chatId: chatId,
+          workspaceId: workspaceId,
+          content: 'Guarda questa foto',
+          attachmentIds: const ['d1'],
+        );
+
+    expect(fakeRepository.lastAttachmentIds, ['d1']);
+  });
+
+  test('send senza attachmentIds inoltra una lista vuota', () async {
+    await container
+        .read(messageFormControllerProvider.notifier)
+        .send(chatId: chatId, workspaceId: workspaceId, content: 'Ciao');
+
+    expect(fakeRepository.lastAttachmentIds, isEmpty);
+  });
 }
