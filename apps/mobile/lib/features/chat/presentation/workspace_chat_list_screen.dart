@@ -6,43 +6,46 @@ import 'package:pip_design_system/pip_design_system.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
-import '../../workspace/application/workspace_controller.dart';
 import '../application/chat_controller.dart';
+import 'create_chat_sheet.dart';
 
-/// Tab globale "Chat" (docs/product/06-information-architecture.md, "Chat"):
-/// tutte le Chat dell'utente, indipendentemente dal Workspace. La creazione
-/// avviene sempre dentro un Workspace (richiederebbe altrimenti un
-/// selettore di Workspace, fuori scope di questa slice) — qui si può solo
-/// aprire una Chat esistente.
-class ChatListScreen extends ConsumerWidget {
-  const ChatListScreen({super.key});
+/// Elenco delle Chat di un Workspace
+/// (docs/product/06-information-architecture.md, "Menu Workspace").
+/// Distinta dalla tab globale "Chat" (`chat_list_screen.dart`), che mostra
+/// tutte le Chat dell'utente indipendentemente dal Workspace.
+class WorkspaceChatListScreen extends ConsumerWidget {
+  const WorkspaceChatListScreen({super.key, required this.workspaceId});
+
+  final String workspaceId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final chatsAsync = ref.watch(chatsProvider(null));
-    final workspacesAsync = ref.watch(workspacesProvider);
+    final chatsAsync = ref.watch(chatsProvider(workspaceId));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Chat')),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => showCreateChatSheet(context, workspaceId: workspaceId),
+        child: const Icon(Icons.add),
+      ),
       body: chatsAsync.when(
         loading: () => const LoadingView(),
         error: (error, stackTrace) => ErrorView(
           message: 'Non è stato possibile caricare le chat.',
-          onRetry: () => ref.invalidate(chatsProvider(null)),
+          onRetry: () => ref.invalidate(chatsProvider(workspaceId)),
         ),
         data: (chats) {
           if (chats.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.chat_bubble_outline,
               title: 'Nessuna chat ancora',
-              message: 'Apri un Workspace per iniziare la tua prima chat.',
+              message: 'Crea la prima chat di questo Workspace.',
+              action: FilledButton(
+                onPressed: () => showCreateChatSheet(context, workspaceId: workspaceId),
+                child: const Text('Crea la prima chat'),
+              ),
             );
           }
-
-          final workspaceNames = <String, String>{
-            for (final workspace in workspacesAsync.value ?? const [])
-              workspace.id: workspace.name,
-          };
 
           return ListView.separated(
             padding: const EdgeInsets.all(AppSpacing.md),
@@ -50,19 +53,13 @@ class ChatListScreen extends ConsumerWidget {
             separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, index) {
               final chat = chats[index];
-              final workspaceId = chat.workspaceId;
-              final subtitle = workspaceId == null
-                  ? 'Chat privata'
-                  : workspaceNames[workspaceId] ?? 'Workspace';
-
               return Card(
                 child: ListTile(
                   leading: const Icon(Icons.chat_bubble_outline),
                   title: Text(chat.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(subtitle),
-                  onTap: workspaceId == null
-                      ? null
-                      : () => context.push('/workspace/$workspaceId/chat/${chat.id}'),
+                  onTap: () => context.push(
+                    '/workspace/$workspaceId/chat/${chat.id}',
+                  ),
                 ),
               );
             },

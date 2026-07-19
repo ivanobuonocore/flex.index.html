@@ -22,12 +22,17 @@ Implementate, con dati reali via Supabase:
   (`/workspace/:id/documents`), Supabase Storage con signed URL, realtime.
 - **search** (Fase 2 slice 3) — Ricerca Universale cross-tabella (Workspace/Note/Task/
   Documenti) via full-text search Postgres, debounce lato UI.
+- **chat** (Fase 3 slice 1) — Chat contestuale al Workspace (`/workspace/:id/chat`) e tab globale
+  con tutte le Chat dell'utente; invio messaggio + risposta AI in tempo reale (realtime, non
+  streaming token-by-token), indicatore "l'assistente sta scrivendo". La creazione avviene sempre
+  dentro un Workspace. Il frontend non chiama mai direttamente Anthropic: ogni messaggio passa
+  dall'Edge Function `ai-chat` (`infrastructure/supabase/functions/ai-chat`), l'unico punto in cui
+  l'app tocca un provider AI.
 - **today** (Fase 1) — saluto, Workspace recenti.
 
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
 
-- **chat** — Fase 3 (richiede l'AI Engine).
 - **profile** — identità account e logout ora; abbonamento, tema, memoria, privacy nelle fasi
   successive.
 
@@ -41,6 +46,12 @@ Non ancora presenti: memory, settings, billing.
 - `file_picker` (selezione file) e l'apertura effettiva di un URL con `url_launcher` non sono
   testabili in questo ambiente (nessun canale di piattaforma nativo): la logica di dominio e i
   repository sono comunque coperti da test con repository fake (`document_controller_test.dart`).
+- La Chat non è stata verificata con una chiamata reale all'Edge Function `ai-chat` né al
+  provider Anthropic (nessuna chiave disponibile in questa sessione, nessun `supabase start` con
+  Docker): la logica applicativa (invio messaggio, stato di caricamento, propagazione errori) è
+  coperta da test con repository fake (`chat_controller_test.dart`, `message_controller_test.dart`);
+  l'Edge Function stessa è verificata solo staticamente (`deno check`/`lint`/`fmt`, vedi
+  `infrastructure/supabase/README.md`).
 
 ## Setup locale
 

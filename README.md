@@ -40,7 +40,7 @@ pip/
 
 ## Stato del progetto
 
-Fase attuale: **Fase 2 — Core Product**, in corso (vedi `docs/product/26-execution-blueprint.md`).
+Fase attuale: **Fase 3 — AI Layer**, in corso (vedi `docs/product/26-execution-blueprint.md`).
 
 **Fase 1 — Foundation** (completata): repository monorepo, modello di dominio
 (`packages/domain`), Design System (`packages/design-system`), autenticazione e navigazione
@@ -54,9 +54,17 @@ assenza di Docker in questa sessione — dettagli in `docs/database/README.md`).
 
 **Fase 2 (slice 3)**: Ricerca Universale — full-text search cross-tabella (Postgres, funzione
 `security invoker`) su Workspace/Note/Task/Documenti, RLS verificata (nessun filtro esplicito
-nella funzione: l'isolamento dipende dalle RLS delle tabelle sottostanti).
+nella funzione: l'isolamento dipende dalle RLS delle tabelle sottostanti). Fase 2 completa.
 
-Memoria e Chat (quest'ultima legata alla Fase 3 — AI Layer) restano nelle prossime slice.
+**Fase 3 (slice 1)**: AI Engine + Chat contestuale al Workspace. L'AI Engine è una Supabase Edge
+Function (`ai-chat`) — mai il frontend collegato direttamente ad Anthropic. Contesto costruito
+per euristica (Workspace + Note/Task/Documenti recenti, non ricerca semantica), un solo agente
+generico, nessuno streaming. Non verificata con una chiamata reale al provider (nessuna chiave
+Anthropic disponibile in questa sessione): verificata staticamente (`deno check`/`lint`/`fmt`) e
+con test applicativi su repository fake — dettagli in `docs/database/README.md` e
+`apps/mobile/README.md`.
+
+Memoria resta nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.
 

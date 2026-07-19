@@ -21,7 +21,9 @@ export 'src/entities/user.dart';
 export 'src/entities/workspace.dart';
 
 export 'src/repositories/auth_repository.dart';
+export 'src/repositories/chat_repository.dart';
 export 'src/repositories/document_repository.dart';
+export 'src/repositories/message_repository.dart';
 export 'src/repositories/note_repository.dart';
 export 'src/repositories/search_repository.dart';
 export 'src/repositories/task_repository.dart';

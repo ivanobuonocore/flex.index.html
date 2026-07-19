@@ -6,16 +6,17 @@ import 'package:pip_domain/pip_domain.dart';
 
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
+import '../../chat/application/chat_controller.dart';
 import '../../document/application/document_controller.dart';
 import '../../note/application/note_controller.dart';
 import '../../task/application/task_controller.dart';
 import '../application/workspace_controller.dart';
 
 /// Home del Workspace (docs/product/06-information-architecture.md, "Home del
-/// Workspace"): nome, descrizione, anteprima Note/Task/Documenti, menu verso
-/// le altre sezioni. Chat/Calendario/Knowledge/Memoria/Impostazioni non sono
-/// ancora implementate (Fase 2 successive slice / Fase 3) e vengono mostrate
-/// come "Prossimamente" — comunica lo stato reale, non è un placeholder finto.
+/// Workspace"): nome, descrizione, anteprima Note/Task/Documenti/Chat, menu
+/// verso le altre sezioni. Calendario/Knowledge/Memoria/Impostazioni non sono
+/// ancora implementate (fasi successive) e vengono mostrate come
+/// "Prossimamente" — comunica lo stato reale, non è un placeholder finto.
 class WorkspaceDetailScreen extends ConsumerWidget {
   const WorkspaceDetailScreen({super.key, required this.workspaceId});
 
@@ -56,7 +57,6 @@ class _WorkspaceDetailBody extends ConsumerWidget {
   final Workspace workspace;
 
   static const _comingSoon = [
-    (icon: Icons.chat_bubble_outline, label: 'Chat'),
     (icon: Icons.event_outlined, label: 'Calendario'),
     (icon: Icons.hub_outlined, label: 'Knowledge Base'),
     (icon: Icons.psychology_outlined, label: 'Memoria'),
@@ -69,6 +69,7 @@ class _WorkspaceDetailBody extends ConsumerWidget {
     final notesAsync = ref.watch(notesProvider(workspace.id));
     final tasksAsync = ref.watch(tasksProvider(workspace.id));
     final documentsAsync = ref.watch(documentsProvider(workspace.id));
+    final chatsAsync = ref.watch(chatsProvider(workspace.id));
 
     return CustomScrollView(
       slivers: [
@@ -191,6 +192,42 @@ class _WorkspaceDetailBody extends ConsumerWidget {
                                     ),
                                     onTap: () => context.push(
                                         '/workspace/${workspace.id}/documents'),
+                                  ),
+                                ))
+                            .toList(growable: false),
+                      ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              _SectionHeader(
+                title: 'Chat',
+                onSeeAll: () => context.push('/workspace/${workspace.id}/chat'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              chatsAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (_, __) =>
+                    const Text('Non è stato possibile caricare le chat.'),
+                data: (chats) => chats.isEmpty
+                    ? const _EmptySectionHint(
+                        message:
+                            'Nessuna chat. Toccando "Vedi tutte" puoi crearne una.',
+                      )
+                    : Column(
+                        children: chats
+                            .take(3)
+                            .map((chat) => Card(
+                                  child: ListTile(
+                                    leading: const Icon(Icons.chat_bubble_outline),
+                                    title: Text(
+                                      chat.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    onTap: () => context.push(
+                                        '/workspace/${workspace.id}/chat/${chat.id}'),
                                   ),
                                 ))
                             .toList(growable: false),
