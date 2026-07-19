@@ -89,6 +89,31 @@ reale, ma la stessa logica SQL, ed è quanto basta per aver individuato il bug.
 generazione di signed URL) richiede `supabase start` (Docker) o un progetto remoto — non
 disponibili in questa sessione.
 
+## Fase 2 (slice 3) — Ricerca Universale
+
+### `public.search_workspace_content(query text)`
+
+Funzione SQL (`language sql`, `stable`) che unisce con `UNION ALL` risultati full-text da
+`workspaces`, `notes`, `tasks`, `documents` — non è una tabella, è un read-model derivato
+(`SearchResult` lato dominio). Indici GIN su `to_tsvector('simple', ...)` per ciascuna tabella
+(config `simple`: nessuno stemming linguistico, i contenuti dell'utente non sono garantiti in
+una sola lingua).
+
+**Sicurezza — `security invoker` esplicito**: la funzione gira con i privilegi di chi chiama,
+quindi le policy RLS di ciascuna tabella si applicano automaticamente alle `SELECT` al suo
+interno. Non c'è nessun filtro `owner_id`/`EXISTS` duplicato dentro la funzione: l'isolamento
+dipende interamente da questo meccanismo. **Verificato manualmente** con due utenti/due
+Workspace: ciascuno vede solo i propri risultati tramite la funzione, esattamente come le
+tabelle sottostanti.
+
+**Bug di qualità trovato e corretto durante la verifica** (non di sicurezza): i nomi file
+generati da `SupabaseDocumentRepository` contengono `_` (sanitizzazione dei caratteri non
+alfanumerici). Il parser `simple` di Postgres tratta `contratto_alfa.pdf` come un unico
+lessema, quindi cercare "contratto" non trovava il documento. Corretto normalizzando `_`/`.` in
+spazi prima della tokenizzazione (`regexp_replace(name, '[_.]', ' ', 'g')`), sia nell'indice sia
+nella funzione. Verificato: senza la normalizzazione il documento non compariva tra i
+risultati, con la normalizzazione sì.
+
 ## Fasi successive
 
 Chat, Message, Memory, Agent, Calendar Event, Timeline Event sono già modellate in

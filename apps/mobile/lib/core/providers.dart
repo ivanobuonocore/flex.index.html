@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../features/auth/data/supabase_auth_repository.dart';
 import '../features/document/data/supabase_document_repository.dart';
 import '../features/note/data/supabase_note_repository.dart';
+import '../features/search/data/supabase_search_repository.dart';
 import '../features/task/data/supabase_task_repository.dart';
 import '../features/workspace/data/supabase_workspace_repository.dart';
 import 'supabase/supabase_bootstrap.dart';
@@ -32,4 +33,8 @@ final taskRepositoryProvider = Provider<TaskRepository>((ref) {
 
 final documentRepositoryProvider = Provider<DocumentRepository>((ref) {
   return SupabaseDocumentRepository(ref.watch(supabaseClientProvider));
+});
+
+final searchRepositoryProvider = Provider<SearchRepository>((ref) {
+  return SupabaseSearchRepository(ref.watch(supabaseClientProvider));
 });

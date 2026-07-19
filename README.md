@@ -52,7 +52,11 @@ principale su Supabase con Row Level Security.
 privato, signed URL), RLS verificata (anche sulle policy di Storage, con uno schema fittizio in
 assenza di Docker in questa sessione — dettagli in `docs/database/README.md`).
 
-Ricerca, Memoria e Chat (quest'ultima legata alla Fase 3 — AI Layer) restano nelle prossime slice.
+**Fase 2 (slice 3)**: Ricerca Universale — full-text search cross-tabella (Postgres, funzione
+`security invoker`) su Workspace/Note/Task/Documenti, RLS verificata (nessun filtro esplicito
+nella funzione: l'isolamento dipende dalle RLS delle tabelle sottostanti).
+
+Memoria e Chat (quest'ultima legata alla Fase 3 — AI Layer) restano nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.
 
