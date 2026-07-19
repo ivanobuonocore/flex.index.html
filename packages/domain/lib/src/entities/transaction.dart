@@ -1,14 +1,17 @@
 import '../enums.dart';
 
-/// Spesa personale registrata in un Workspace (Domain Model — entità aggiunta
-/// oltre allo scaffold originale, vedi docs/database/README.md). Le spese
-/// create manualmente nascono già `confirmed`; quelle estratte dall'AI Engine
-/// dalla Chat nascono `pending` e diventano `confirmed` solo su conferma
-/// esplicita dell'utente (AI Constitution, Principio 1).
-final class Expense {
-  const Expense({
+/// Entrata o uscita personale registrata in un Workspace (Domain Model —
+/// entità aggiunta oltre allo scaffold originale, vedi
+/// docs/database/README.md). Le transazioni create manualmente nascono già
+/// `confirmed`; quelle estratte dall'AI Engine dalla Chat nascono `pending` e
+/// diventano `confirmed` solo su conferma esplicita dell'utente (AI
+/// Constitution, Principio 1). Il bilancio di un Workspace è la somma delle
+/// transazioni `confirmed`, con segno dato da [type].
+final class Transaction {
+  const Transaction({
     required this.id,
     required this.workspaceId,
+    required this.type,
     required this.description,
     required this.amountCents,
     required this.occurredAt,
@@ -23,33 +26,37 @@ final class Expense {
   final String id;
   final String workspaceId;
 
-  /// Valorizzato solo per le spese estratte dall'AI Engine da un messaggio
-  /// di Chat (traccia la fonte, AI Constitution, Principio 3 — Trasparenza).
+  /// Valorizzato solo per le transazioni estratte dall'AI Engine da un
+  /// messaggio di Chat (traccia la fonte, AI Constitution, Principio 3 —
+  /// Trasparenza).
   final String? chatId;
 
+  final TransactionType type;
   final String description;
 
-  /// Importo in centesimi (mai un double, per evitare errori di somma).
+  /// Importo in centesimi, sempre positivo (mai un double, per evitare
+  /// errori di somma): il segno nel bilancio lo decide [type].
   final int amountCents;
   final String currency;
   final DateTime occurredAt;
-  final ExpenseStatus status;
+  final TransactionStatus status;
   final bool createdByAi;
   final DateTime createdAt;
 
   /// Soft delete (Domain Model, "Principi del modello").
   final DateTime? deletedAt;
 
-  Expense copyWith({
+  Transaction copyWith({
     String? description,
     int? amountCents,
     DateTime? occurredAt,
-    ExpenseStatus? status,
+    TransactionStatus? status,
   }) {
-    return Expense(
+    return Transaction(
       id: id,
       workspaceId: workspaceId,
       chatId: chatId,
+      type: type,
       description: description ?? this.description,
       amountCents: amountCents ?? this.amountCents,
       currency: currency,
@@ -63,10 +70,11 @@ final class Expense {
 
   @override
   bool operator ==(Object other) =>
-      other is Expense &&
+      other is Transaction &&
       other.id == id &&
       other.workspaceId == workspaceId &&
       other.chatId == chatId &&
+      other.type == type &&
       other.description == description &&
       other.amountCents == amountCents &&
       other.currency == currency &&
@@ -81,6 +89,7 @@ final class Expense {
         id,
         workspaceId,
         chatId,
+        type,
         description,
         amountCents,
         currency,
@@ -93,5 +102,5 @@ final class Expense {
 
   @override
   String toString() =>
-      'Expense(id: $id, description: $description, amountCents: $amountCents, status: $status)';
+      'Transaction(id: $id, type: $type, description: $description, amountCents: $amountCents, status: $status)';
 }

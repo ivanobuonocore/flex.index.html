@@ -27,8 +27,12 @@ enum MemoryOrigin { user, ai }
 /// (docs/product/06-information-architecture.md, "Ricerca").
 enum SearchResultType { workspace, note, task, document }
 
-/// Stato di conferma di una Spesa (Domain Model, entità Expense). Le spese
-/// suggerite dall'AI restano "pending" finché l'utente non le conferma
-/// esplicitamente (AI Constitution, Principio 1 — "l'AI può suggerire,
-/// l'utente decide").
-enum ExpenseStatus { pending, confirmed }
+/// Stato di conferma di una Transazione (Domain Model, entità Transaction).
+/// Le transazioni suggerite dall'AI restano "pending" finché l'utente non le
+/// conferma esplicitamente (AI Constitution, Principio 1 — "l'AI può
+/// suggerire, l'utente decide").
+enum TransactionStatus { pending, confirmed }
+
+/// Entrata o uscita (Domain Model, entità Transaction). `amountCents` resta
+/// sempre positivo: è questo campo a determinare il segno nel bilancio.
+enum TransactionType { income, expense }

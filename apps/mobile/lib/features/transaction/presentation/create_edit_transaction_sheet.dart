@@ -3,16 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
-import '../application/expense_controller.dart';
+import '../application/transaction_controller.dart';
 
-/// Creazione o modifica manuale di una Spesa
-/// (docs/product/06-information-architecture.md, "Pulsante +"). Una spesa
-/// creata da qui è sempre `confirmed` fin da subito: l'utente l'ha scritta
-/// deliberatamente, a differenza di quelle suggerite dall'AI Engine.
-Future<void> showCreateEditExpenseSheet(
+/// Creazione o modifica manuale di una Transazione (entrata o uscita)
+/// (docs/product/06-information-architecture.md, "Pulsante +"). Una
+/// transazione creata da qui è sempre `confirmed` fin da subito: l'utente
+/// l'ha scritta deliberatamente, a differenza di quelle suggerite dall'AI
+/// Engine. Il tipo (entrata/uscita) non è modificabile in modifica: si
+/// elimina e se ne crea una nuova, coerente con l'assenza di un campo `type`
+/// in [TransactionRepository.updateTransaction].
+Future<void> showCreateEditTransactionSheet(
   BuildContext context, {
   required String workspaceId,
-  Expense? expense,
+  Transaction? transaction,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -20,31 +23,35 @@ Future<void> showCreateEditExpenseSheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.cardPremium)),
     ),
-    builder: (context) => _CreateEditExpenseSheet(workspaceId: workspaceId, expense: expense),
+    builder: (context) =>
+        _CreateEditTransactionSheet(workspaceId: workspaceId, transaction: transaction),
   );
 }
 
-class _CreateEditExpenseSheet extends ConsumerStatefulWidget {
-  const _CreateEditExpenseSheet({required this.workspaceId, this.expense});
+class _CreateEditTransactionSheet extends ConsumerStatefulWidget {
+  const _CreateEditTransactionSheet({required this.workspaceId, this.transaction});
 
   final String workspaceId;
-  final Expense? expense;
+  final Transaction? transaction;
 
   @override
-  ConsumerState<_CreateEditExpenseSheet> createState() => _CreateEditExpenseSheetState();
+  ConsumerState<_CreateEditTransactionSheet> createState() =>
+      _CreateEditTransactionSheetState();
 }
 
-class _CreateEditExpenseSheetState extends ConsumerState<_CreateEditExpenseSheet> {
+class _CreateEditTransactionSheetState extends ConsumerState<_CreateEditTransactionSheet> {
   final _formKey = GlobalKey<FormState>();
   late final _descriptionController =
-      TextEditingController(text: widget.expense?.description);
+      TextEditingController(text: widget.transaction?.description);
   late final _amountController = TextEditingController(
-    text: widget.expense != null ? _formatAmountForInput(widget.expense!.amountCents) : null,
+    text:
+        widget.transaction != null ? _formatAmountForInput(widget.transaction!.amountCents) : null,
   );
-  late DateTime _occurredAt = widget.expense?.occurredAt ?? DateTime.now();
+  late DateTime _occurredAt = widget.transaction?.occurredAt ?? DateTime.now();
+  late TransactionType _type = widget.transaction?.type ?? TransactionType.expense;
   String? _errorMessage;
 
-  bool get _isEditing => widget.expense != null;
+  bool get _isEditing => widget.transaction != null;
 
   @override
   void dispose() {
@@ -72,10 +79,10 @@ class _CreateEditExpenseSheetState extends ConsumerState<_CreateEditExpenseSheet
 
     setState(() => _errorMessage = null);
 
-    final controller = ref.read(expenseFormControllerProvider.notifier);
+    final controller = ref.read(transactionFormControllerProvider.notifier);
     final failure = _isEditing
-        ? await controller.updateExpense(
-            widget.expense!.copyWith(
+        ? await controller.updateTransaction(
+            widget.transaction!.copyWith(
               description: _descriptionController.text,
               amountCents: amountCents,
               occurredAt: _occurredAt,
@@ -83,6 +90,7 @@ class _CreateEditExpenseSheetState extends ConsumerState<_CreateEditExpenseSheet
           )
         : await controller.create(
             workspaceId: widget.workspaceId,
+            type: _type,
             description: _descriptionController.text,
             amountCents: amountCents,
             occurredAt: _occurredAt,
@@ -98,7 +106,7 @@ class _CreateEditExpenseSheetState extends ConsumerState<_CreateEditExpenseSheet
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = ref.watch(expenseFormControllerProvider).isLoading;
+    final isLoading = ref.watch(transactionFormControllerProvider).isLoading;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -114,10 +122,29 @@ class _CreateEditExpenseSheetState extends ConsumerState<_CreateEditExpenseSheet
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              _isEditing ? 'Modifica spesa' : 'Nuova spesa',
+              _isEditing ? 'Modifica transazione' : 'Nuova transazione',
               style: AppTypography.heading2,
             ),
             const SizedBox(height: AppSpacing.lg),
+            if (!_isEditing) ...[
+              SegmentedButton<TransactionType>(
+                segments: const [
+                  ButtonSegment(
+                    value: TransactionType.expense,
+                    label: Text('Uscita'),
+                    icon: Icon(Icons.remove_circle_outline),
+                  ),
+                  ButtonSegment(
+                    value: TransactionType.income,
+                    label: Text('Entrata'),
+                    icon: Icon(Icons.add_circle_outline),
+                  ),
+                ],
+                selected: {_type},
+                onSelectionChanged: (selection) => setState(() => _type = selection.first),
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
             TextFormField(
               controller: _descriptionController,
               autofocus: !_isEditing,
@@ -154,7 +181,7 @@ class _CreateEditExpenseSheetState extends ConsumerState<_CreateEditExpenseSheet
                       width: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Text(_isEditing ? 'Salva' : 'Crea spesa'),
+                  : Text(_isEditing ? 'Salva' : 'Crea transazione'),
             ),
           ],
         ),

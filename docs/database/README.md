@@ -164,53 +164,60 @@ chiave disponibile) né alla Edge Function stessa tramite Supabase Functions run
 verificabile: il codice TypeScript con `deno check`/`deno lint`/`deno fmt --check` (Deno
 installato in sessione), tutti puliti.
 
-## Fase 3 (slice 2) — Spese
+## Fase 3 (slice 2) — Bilancio (entrate e uscite)
 
 Aggiunta oltre allo scaffold originale: richiesta reale dell'utente ("scrivo le spese in chat,
-voglio vedere il totale"), non descritta in `docs/product/26-execution-blueprint.md`. Non viola
-i principi architetturali (Workspace resta il confine, l'AI Engine resta l'unico punto di
-contatto col provider) — vedi anche `docs/product/12-domain-model.md`, entità `Expense`.
+voglio vedere il totale", poi estesa a "rendi l'app simile a Planito" — un assistente su WhatsApp
+con contabilità in linguaggio naturale), non descritta in `docs/product/26-execution-blueprint.md`.
+Non viola i principi architetturali (Workspace resta il confine, l'AI Engine resta l'unico punto
+di contatto col provider) — vedi anche `docs/product/12-domain-model.md`, entità `Transaction`.
+Generalizza la prima versione, che copriva solo le uscite, in un'unica tabella con un campo
+`type` invece di un'entità separata per le entrate — evita di duplicare schema/RLS/repository per
+una struttura dati quasi identica.
 
-### `public.expenses`
+### `public.transactions`
 
-| Colonna         | Note                                                                        |
-|-----------------|--------------------------------------------------------------------------------|
-| `workspace_id`  | FK cascade, obbligatorio — una spesa non esiste senza Workspace                |
-| `chat_id`       | FK set null, nullable — valorizzato solo se estratta dall'AI Engine da una Chat |
-| `description`   | non vuota (constraint)                                                         |
-| `amount_cents`  | intero, `> 0` (constraint) — mai un float, per evitare errori di somma         |
-| `currency`      | default `'EUR'` (solo EUR gestito in questa slice)                             |
-| `occurred_at`   | data della spesa                                                               |
-| `status`        | `pending` / `confirmed`, default `confirmed`                                   |
-| `created_by_ai` | `true` solo per le spese inserite dalla Edge Function `ai-chat`                |
+| Colonna         | Note                                                                              |
+|-----------------|----------------------------------------------------------------------------------|
+| `workspace_id`  | FK cascade, obbligatorio — una transazione non esiste senza Workspace            |
+| `chat_id`       | FK set null, nullable — valorizzato solo se estratta dall'AI Engine da una Chat  |
+| `type`          | `income` / `expense` (constraint) — decide il segno nel saldo                    |
+| `description`   | non vuota (constraint)                                                           |
+| `amount_cents`  | intero, `> 0` (constraint) — sempre positivo, mai un float, per evitare errori di somma |
+| `currency`      | default `'EUR'` (solo EUR gestito in questa slice)                               |
+| `occurred_at`   | data della transazione                                                           |
+| `status`        | `pending` / `confirmed`, default `confirmed`                                     |
+| `created_by_ai` | `true` solo per le transazioni inserite dalla Edge Function `ai-chat`            |
 
 Stesso pattern RLS a join di `notes`/`tasks`/`documents` (`EXISTS` su
 `workspaces.owner_id = auth.uid()`). Indice composito `(workspace_id, occurred_at desc)` per
-l'aggregazione mensile nella schermata Spese (calcolata lato client su questa slice, non con una
-funzione SQL dedicata — scope volutamente ridotto).
+l'aggregazione mensile nella schermata Bilancio (calcolata lato client su questa slice, non con
+una funzione SQL dedicata — scope volutamente ridotto).
 
-**`status` e AI Constitution, Principio 1** ("l'AI può suggerire, l'utente decide"): le spese
-inserite manualmente dall'utente nascono `confirmed` da subito (l'ha scritte deliberatamente);
-quelle estratte dall'AI Engine nascono `pending` e contano nei totali della schermata Spese solo
-dopo che l'utente le conferma esplicitamente.
+**`status` e AI Constitution, Principio 1** ("l'AI può suggerire, l'utente decide"): le
+transazioni inserite manualmente dall'utente nascono `confirmed` da subito (le ha scritte
+deliberatamente); quelle estratte dall'AI Engine nascono `pending` e contano nel saldo della
+schermata Bilancio solo dopo che l'utente le conferma esplicitamente.
 
 **Estrazione lato Edge Function `ai-chat`**: quando la Chat ha un Workspace valido (verificato
 tramite RLS, non solo per presenza del parametro), la function offre ad Anthropic uno strumento
-(`tool use`) `extract_expenses` con uno schema JSON esplicito
-(`description`, `amount_cents`, `occurred_at`); il modello decide autonomamente se e quando
-usarlo (`tool_choice: "auto"`, nessuna forzatura). L'output dello strumento viene validato di
-nuovo lato function (`sanitizeExpense`) prima dell'insert: lo schema JSON vincola la forma, non
-la correttezza semantica dei valori. Stesso client autenticato col JWT del chiamante usato per
+(`tool use`) `extract_transactions` con uno schema JSON esplicito
+(`type`, `description`, `amount_cents`, `occurred_at`); il modello decide autonomamente se e
+quando usarlo (`tool_choice: "auto"`, nessuna forzatura), riconoscendo sia spese sia entrate
+(es. "ho ricevuto lo stipendio di 1500€"). L'output dello strumento viene validato di nuovo lato
+function (`sanitizeTransaction`) prima dell'insert: lo schema JSON vincola la forma, non la
+correttezza semantica dei valori. Stesso client autenticato col JWT del chiamante usato per
 `messages` — nessun privilegio aggiuntivo.
 
-**Verificato manualmente su Postgres locale**: isolamento cross-utente su `expenses` (select,
-insert, update, delete tutti bloccati per un Workspace non proprio); constraint `amount_cents >
-0` e descrizione non vuota entrambi verificati.
+**Verificato manualmente su Postgres locale**: isolamento cross-utente su `transactions` (select,
+insert, update, delete tutti bloccati per un Workspace non proprio); constraint `type`,
+`amount_cents > 0` e descrizione non vuota tutti verificati; calcolo del saldo (entrate − uscite,
+solo `confirmed`) verificato con dati misti.
 
 **Non verificabile in questa sessione**: come per il resto di `ai-chat`, nessuna chiamata reale
-al provider Anthropic — il comportamento dello strumento `extract_expenses` (se il modello lo
-usa correttamente, se risolve bene le date relative) non è testabile senza una chiave reale.
-Verificato solo staticamente (`deno check`/`lint`/`fmt`).
+al provider Anthropic — il comportamento dello strumento `extract_transactions` (se il modello lo
+usa correttamente, se distingue bene entrate/uscite, se risolve bene le date relative) non è
+testabile senza una chiave reale. Verificato solo staticamente (`deno check`/`lint`/`fmt`).
 
 ## Fasi successive
 

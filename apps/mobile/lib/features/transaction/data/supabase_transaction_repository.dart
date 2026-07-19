@@ -2,19 +2,19 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
-/// Implementazione di [ExpenseRepository] su Supabase Postgres. L'isolamento
-/// tra Workspace è garantito dalle policy RLS di `expenses`
+/// Implementazione di [TransactionRepository] su Supabase Postgres.
+/// L'isolamento tra Workspace è garantito dalle policy RLS di `transactions`
 /// (`infrastructure/supabase/migrations`), non dal filtro applicativo qui
 /// sotto — stesso principio di [SupabaseTaskRepository].
-class SupabaseExpenseRepository implements ExpenseRepository {
-  SupabaseExpenseRepository(this._client);
+class SupabaseTransactionRepository implements TransactionRepository {
+  SupabaseTransactionRepository(this._client);
 
   final supabase.SupabaseClient _client;
 
-  static const _table = 'expenses';
+  static const _table = 'transactions';
 
   @override
-  Stream<List<Expense>> watchExpenses(String workspaceId) {
+  Stream<List<Transaction>> watchTransactions(String workspaceId) {
     return _client
         .from(_table)
         .stream(primaryKey: ['id'])
@@ -29,8 +29,9 @@ class SupabaseExpenseRepository implements ExpenseRepository {
   }
 
   @override
-  Future<Result<Expense>> createExpense({
+  Future<Result<Transaction>> createTransaction({
     required String workspaceId,
+    required TransactionType type,
     required String description,
     required int amountCents,
     String currency = 'EUR',
@@ -38,7 +39,7 @@ class SupabaseExpenseRepository implements ExpenseRepository {
   }) async {
     if (description.trim().isEmpty) {
       return const Result.err(
-          ValidationFailure('La descrizione della spesa è obbligatoria.'));
+          ValidationFailure('La descrizione della transazione è obbligatoria.'));
     }
     if (amountCents <= 0) {
       return const Result.err(
@@ -50,11 +51,12 @@ class SupabaseExpenseRepository implements ExpenseRepository {
           .from(_table)
           .insert({
             'workspace_id': workspaceId,
+            'type': type.name,
             'description': description.trim(),
             'amount_cents': amountCents,
             'currency': currency,
             'occurred_at': occurredAt.toIso8601String(),
-            'status': ExpenseStatus.confirmed.name,
+            'status': TransactionStatus.confirmed.name,
             'created_by_ai': false,
           })
           .select()
@@ -62,17 +64,17 @@ class SupabaseExpenseRepository implements ExpenseRepository {
       return Result.ok(_toDomain(row));
     } catch (e) {
       return Result.err(
-          UnexpectedFailure('Non è stato possibile creare la spesa.', cause: e));
+          UnexpectedFailure('Non è stato possibile creare la transazione.', cause: e));
     }
   }
 
   @override
-  Future<Result<Expense>> updateExpense(Expense expense) async {
-    if (expense.description.trim().isEmpty) {
+  Future<Result<Transaction>> updateTransaction(Transaction transaction) async {
+    if (transaction.description.trim().isEmpty) {
       return const Result.err(
-          ValidationFailure('La descrizione della spesa è obbligatoria.'));
+          ValidationFailure('La descrizione della transazione è obbligatoria.'));
     }
-    if (expense.amountCents <= 0) {
+    if (transaction.amountCents <= 0) {
       return const Result.err(
           ValidationFailure('L\'importo deve essere maggiore di zero.'));
     }
@@ -81,66 +83,67 @@ class SupabaseExpenseRepository implements ExpenseRepository {
       final row = await _client
           .from(_table)
           .update({
-            'description': expense.description.trim(),
-            'amount_cents': expense.amountCents,
-            'occurred_at': expense.occurredAt.toIso8601String(),
+            'description': transaction.description.trim(),
+            'amount_cents': transaction.amountCents,
+            'occurred_at': transaction.occurredAt.toIso8601String(),
           })
-          .eq('id', expense.id)
+          .eq('id', transaction.id)
           .select()
           .single();
       return Result.ok(_toDomain(row));
     } catch (e) {
       return Result.err(
-        UnexpectedFailure('Non è stato possibile aggiornare la spesa.',
+        UnexpectedFailure('Non è stato possibile aggiornare la transazione.',
             cause: e),
       );
     }
   }
 
   @override
-  Future<Result<Expense>> confirmExpense(String expenseId) async {
+  Future<Result<Transaction>> confirmTransaction(String transactionId) async {
     try {
       final row = await _client
           .from(_table)
-          .update({'status': ExpenseStatus.confirmed.name})
-          .eq('id', expenseId)
+          .update({'status': TransactionStatus.confirmed.name})
+          .eq('id', transactionId)
           .select()
           .single();
       return Result.ok(_toDomain(row));
     } catch (e) {
       return Result.err(
-        UnexpectedFailure('Non è stato possibile confermare la spesa.',
+        UnexpectedFailure('Non è stato possibile confermare la transazione.',
             cause: e),
       );
     }
   }
 
   @override
-  Future<Result<Unit>> deleteExpense(String expenseId) async {
+  Future<Result<Unit>> deleteTransaction(String transactionId) async {
     try {
       await _client
           .from(_table)
           .update({'deleted_at': DateTime.now().toIso8601String()})
-          .eq('id', expenseId);
+          .eq('id', transactionId);
       return const Result.ok(unit);
     } catch (e) {
       return Result.err(
-        UnexpectedFailure('Non è stato possibile eliminare la spesa.',
+        UnexpectedFailure('Non è stato possibile eliminare la transazione.',
             cause: e),
       );
     }
   }
 
-  Expense _toDomain(Map<String, dynamic> row) {
-    return Expense(
+  Transaction _toDomain(Map<String, dynamic> row) {
+    return Transaction(
       id: row['id'] as String,
       workspaceId: row['workspace_id'] as String,
       chatId: row['chat_id'] as String?,
+      type: TransactionType.values.byName(row['type'] as String),
       description: row['description'] as String,
       amountCents: row['amount_cents'] as int,
       currency: row['currency'] as String,
       occurredAt: DateTime.parse(row['occurred_at'] as String),
-      status: ExpenseStatus.values.byName(row['status'] as String),
+      status: TransactionStatus.values.byName(row['status'] as String),
       createdByAi: row['created_by_ai'] as bool,
       createdAt: DateTime.parse(row['created_at'] as String),
       deletedAt: row['deleted_at'] != null

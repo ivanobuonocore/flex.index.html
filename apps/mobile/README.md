@@ -28,12 +28,13 @@ Implementate, con dati reali via Supabase:
   dentro un Workspace. Il frontend non chiama mai direttamente Anthropic: ogni messaggio passa
   dall'Edge Function `ai-chat` (`infrastructure/supabase/functions/ai-chat`), l'unico punto in cui
   l'app tocca un provider AI.
-- **expense** (Fase 3 slice 2, aggiunta oltre allo scaffold originale — richiesta reale
-  dell'utente) — Report Spese per Workspace (`/workspace/:id/expenses`): totale del mese
-  corrente (solo spese confermate) + lista, aggiunta manuale, e una sezione "in attesa di
-  conferma" per le spese che la Chat ha riconosciuto in un messaggio (es. "barbiere 23€,
-  supermercato 35€") ma che l'utente non ha ancora confermato — nessuna spesa suggerita
-  dall'AI conta nel totale finché non viene confermata esplicitamente (AI Constitution,
+- **transaction** (Fase 3 slice 2, aggiunta oltre allo scaffold originale — richiesta reale
+  dell'utente, ispirata all'app Planito) — Bilancio per Workspace (`/workspace/:id/transactions`):
+  saldo del mese corrente (entrate meno uscite confermate) + lista con totali separati, aggiunta
+  manuale (entrata o uscita), e una sezione "in attesa di conferma" per le transazioni che la
+  Chat ha riconosciuto in un messaggio (es. "barbiere 23€, supermercato 35€" oppure "ho ricevuto
+  lo stipendio di 1500€") ma che l'utente non ha ancora confermato — nessuna transazione
+  suggerita dall'AI conta nel saldo finché non viene confermata esplicitamente (AI Constitution,
   Principio 1).
 - **today** (Fase 1) — saluto, Workspace recenti.
 
@@ -61,10 +62,10 @@ Non ancora presenti: memory, settings, billing.
   coperta da test con repository fake (`chat_controller_test.dart`, `message_controller_test.dart`);
   l'Edge Function stessa è verificata solo staticamente (`deno check`/`lint`/`fmt`, vedi
   `infrastructure/supabase/README.md`).
-- Lo stesso vale per il riconoscimento delle spese in Chat (`extract_expenses`): la logica
-  applicativa lato app è coperta da test con repository fake
-  (`expense_controller_test.dart`), ma se il modello riconosce correttamente le spese descritte
-  in linguaggio naturale non è verificabile senza una chiamata reale ad Anthropic.
+- Lo stesso vale per il riconoscimento di spese/entrate in Chat (`extract_transactions`): la
+  logica applicativa lato app è coperta da test con repository fake
+  (`transaction_controller_test.dart`), ma se il modello riconosce correttamente le transazioni
+  descritte in linguaggio naturale non è verificabile senza una chiamata reale ad Anthropic.
 
 ## Setup locale
 

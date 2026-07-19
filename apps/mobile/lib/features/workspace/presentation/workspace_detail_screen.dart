@@ -8,9 +8,9 @@ import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../../chat/application/chat_controller.dart';
 import '../../document/application/document_controller.dart';
-import '../../expense/application/expense_controller.dart';
 import '../../note/application/note_controller.dart';
 import '../../task/application/task_controller.dart';
+import '../../transaction/application/transaction_controller.dart';
 import '../application/workspace_controller.dart';
 
 /// Home del Workspace (docs/product/06-information-architecture.md, "Home del
@@ -71,7 +71,7 @@ class _WorkspaceDetailBody extends ConsumerWidget {
     final tasksAsync = ref.watch(tasksProvider(workspace.id));
     final documentsAsync = ref.watch(documentsProvider(workspace.id));
     final chatsAsync = ref.watch(chatsProvider(workspace.id));
-    final expensesAsync = ref.watch(expensesProvider(workspace.id));
+    final transactionsAsync = ref.watch(transactionsProvider(workspace.id));
 
     return CustomScrollView(
       slivers: [
@@ -237,36 +237,38 @@ class _WorkspaceDetailBody extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.lg),
               _SectionHeader(
-                title: 'Spese',
-                onSeeAll: () => context.push('/workspace/${workspace.id}/expenses'),
+                title: 'Bilancio',
+                onSeeAll: () => context.push('/workspace/${workspace.id}/transactions'),
               ),
               const SizedBox(height: AppSpacing.sm),
-              expensesAsync.when(
+              transactionsAsync.when(
                 loading: () => const Padding(
                   padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Center(child: CircularProgressIndicator()),
                 ),
                 error: (_, __) =>
-                    const Text('Non è stato possibile caricare le spese.'),
-                data: (expenses) {
-                  final confirmed = confirmedThisMonth(expenses);
-                  final pending = pendingExpenses(expenses);
+                    const Text('Non è stato possibile caricare il bilancio.'),
+                data: (transactions) {
+                  final confirmed = confirmedThisMonth(transactions);
+                  final pending = pendingTransactions(transactions);
                   if (confirmed.isEmpty && pending.isEmpty) {
                     return const _EmptySectionHint(
                       message:
-                          'Nessuna spesa. Toccando "Vedi tutte" puoi aggiungerne una.',
+                          'Nessuna transazione. Toccando "Vedi tutte" puoi aggiungerne una.',
                     );
                   }
-                  final totalLabel =
-                      '${(totalCents(confirmed) / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
+                  final balance = balanceCents(confirmed);
+                  final sign = balance > 0 ? '+' : (balance < 0 ? '-' : '');
+                  final balanceLabel =
+                      '$sign${(balance.abs() / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
                   return Card(
                     child: ListTile(
-                      leading: const Icon(Icons.euro_outlined),
-                      title: Text('Totale questo mese: $totalLabel'),
+                      leading: const Icon(Icons.account_balance_wallet_outlined),
+                      title: Text('Saldo questo mese: $balanceLabel'),
                       subtitle: pending.isNotEmpty
                           ? Text('${pending.length} in attesa di conferma')
                           : null,
-                      onTap: () => context.push('/workspace/${workspace.id}/expenses'),
+                      onTap: () => context.push('/workspace/${workspace.id}/transactions'),
                     ),
                   );
                 },

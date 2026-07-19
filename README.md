@@ -64,13 +64,14 @@ Anthropic disponibile in questa sessione): verificata staticamente (`deno check`
 con test applicativi su repository fake — dettagli in `docs/database/README.md` e
 `apps/mobile/README.md`.
 
-**Fase 3 (slice 2)**: Spese dalla Chat — aggiunta oltre alla roadmap originale, su richiesta
-diretta dell'utente. L'AI Engine riconosce spese descritte in linguaggio naturale (es. "barbiere
-23€, supermercato 35€") tramite uno strumento Anthropic dedicato (`extract_expenses`) e le
-registra come "in attesa di conferma": contano nel totale della schermata Spese solo dopo che
-l'utente le conferma esplicitamente (AI Constitution, Principio 1 — "l'AI suggerisce, l'utente
-decide"). RLS verificata su Postgres locale; Edge Function verificata solo staticamente, stessi
-limiti della slice precedente.
+**Fase 3 (slice 2)**: Bilancio (entrate e uscite) — aggiunta oltre alla roadmap originale, su
+richiesta diretta dell'utente, ispirata all'app Planito (assistente su WhatsApp con contabilità
+in linguaggio naturale). L'AI Engine riconosce spese ed entrate descritte in linguaggio naturale
+(es. "barbiere 23€, supermercato 35€" oppure "ho ricevuto lo stipendio di 1500€") tramite uno
+strumento Anthropic dedicato (`extract_transactions`) e le registra come "in attesa di conferma":
+contano nel saldo della schermata Bilancio solo dopo che l'utente le conferma esplicitamente (AI
+Constitution, Principio 1 — "l'AI suggerisce, l'utente decide"). RLS verificata su Postgres
+locale; Edge Function verificata solo staticamente, stessi limiti della slice precedente.
 
 Memoria resta nelle prossime slice.
 

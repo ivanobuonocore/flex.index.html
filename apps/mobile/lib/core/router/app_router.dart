@@ -9,12 +9,12 @@ import '../../features/chat/presentation/chat_detail_screen.dart';
 import '../../features/chat/presentation/chat_list_screen.dart';
 import '../../features/chat/presentation/workspace_chat_list_screen.dart';
 import '../../features/document/presentation/document_list_screen.dart';
-import '../../features/expense/presentation/expense_report_screen.dart';
 import '../../features/note/presentation/note_list_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 import '../../features/task/presentation/task_list_screen.dart';
 import '../../features/today/presentation/today_screen.dart';
+import '../../features/transaction/presentation/transaction_report_screen.dart';
 import '../../features/workspace/presentation/workspace_detail_screen.dart';
 import '../../features/workspace/presentation/workspace_list_screen.dart';
 import 'app_shell.dart';
@@ -110,8 +110,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                         ],
                       ),
                       GoRoute(
-                        path: 'expenses',
-                        builder: (context, state) => ExpenseReportScreen(
+                        path: 'transactions',
+                        builder: (context, state) => TransactionReportScreen(
                           workspaceId: state.pathParameters['id']!,
                         ),
                       ),
