@@ -29,13 +29,17 @@ npx supabase db push
   `docs/product/12-domain-model.md`) con Row Level Security: ogni utente vede e modifica solo i
   propri Workspace (Architectural Principles, Principio 9). Verificato manualmente contro un
   Postgres locale: isolamento in lettura, scrittura e aggiornamento confermato.
+- `migrations/20260718235106_notes_and_tasks.sql` — tabelle `notes` e `tasks` (Fase 2, slice 1),
+  RLS tramite `EXISTS` sul Workspace referenziato (nessuna colonna `owner_id` diretta). Verificato
+  manualmente: select/insert/update/delete cross-Workspace tutti bloccati (vedi
+  `docs/database/README.md` per il dettaglio).
 
-Le altre entità del Domain Model (Chat, Document, Task, Note, Memory, Agent, ...) avranno le
-proprie migrazioni quando le rispettive feature verranno implementate (Fase 2+,
-`docs/product/26-execution-blueprint.md`) — lo schema non richiede di riscrivere questa
-migrazione per crescere (Engineering Constitution, Articolo 8).
+Le altre entità del Domain Model (Chat, Document, Memory, Agent, ...) avranno le proprie
+migrazioni quando le rispettive feature verranno implementate (Fase 2+,
+`docs/product/26-execution-blueprint.md`) — lo schema non richiede di riscrivere quelle esistenti
+per crescere (Engineering Constitution, Articolo 8).
 
 ## Nota su Realtime
 
-`workspaces` è pubblicata su `supabase_realtime`: `apps/mobile` osserva la tabella in streaming
-invece di fare polling (Software Architecture, "Sincronizzazione").
+`workspaces`, `notes` e `tasks` sono pubblicate su `supabase_realtime`: `apps/mobile` osserva le
+tabelle in streaming invece di fare polling (Software Architecture, "Sincronizzazione").

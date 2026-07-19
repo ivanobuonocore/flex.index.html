@@ -3,6 +3,8 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 import '../features/auth/data/supabase_auth_repository.dart';
+import '../features/note/data/supabase_note_repository.dart';
+import '../features/task/data/supabase_task_repository.dart';
 import '../features/workspace/data/supabase_workspace_repository.dart';
 import 'supabase/supabase_bootstrap.dart';
 
@@ -17,4 +19,12 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 
 final workspaceRepositoryProvider = Provider<WorkspaceRepository>((ref) {
   return SupabaseWorkspaceRepository(ref.watch(supabaseClientProvider));
+});
+
+final noteRepositoryProvider = Provider<NoteRepository>((ref) {
+  return SupabaseNoteRepository(ref.watch(supabaseClientProvider));
+});
+
+final taskRepositoryProvider = Provider<TaskRepository>((ref) {
+  return SupabaseTaskRepository(ref.watch(supabaseClientProvider));
 });

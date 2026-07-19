@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 
 import '../../../shared/widgets/empty_state.dart';
@@ -48,8 +49,10 @@ class WorkspaceListScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(AppSpacing.md),
             itemCount: workspaces.length,
             separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-            itemBuilder: (context, index) =>
-                WorkspaceCard(workspace: workspaces[index]),
+            itemBuilder: (context, index) => WorkspaceCard(
+              workspace: workspaces[index],
+              onTap: () => context.push('/workspace/${workspaces[index].id}'),
+            ),
           );
         },
       ),

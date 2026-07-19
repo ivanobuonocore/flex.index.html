@@ -37,12 +37,36 @@ non è proprietario — verificato manualmente (vedi `infrastructure/supabase/RE
   tabella `profiles` dedicata verrà introdotta quando emergerà un bisogno reale di dati utente
   interrogabili lato server (es. Billing, Fase 5/6), per evitare una tabella senza scopo concreto.
 
+## Fase 2 (slice 1) — Note e Task
+
+### `public.notes` / `public.tasks`
+
+Persistenza delle entità Note e Task (`docs/product/12-domain-model.md`). Entrambe referenziano
+`workspace_id uuid references public.workspaces (id) on delete cascade`.
+
+| Tabella | Colonne specifiche                                                                 |
+|---------|-------------------------------------------------------------------------------------|
+| `notes` | `title`, `content` (default `''`), `tags text[]`, `created_by_ai`, `updated_at`      |
+| `tasks` | `title`, `description`, `status` (`todo`/`in_progress`/`done`), `priority` (`low`/`medium`/`high`), `due_at`, `assignee_id`, `generated_by_ai`, `document_id`, `chat_id`, `created_at` |
+
+Entrambe hanno `deleted_at` (soft delete) e vincolo `title` non vuoto.
+
+**Sicurezza — differenza rispetto a `workspaces`**: `notes`/`tasks` non hanno una colonna
+`owner_id` propria. Le policy RLS verificano l'appartenenza tramite `EXISTS` sul Workspace
+referenziato (`w.owner_id = auth.uid()`), coerente con "ogni risorsa appartiene a un Workspace,
+il Workspace è il confine logico" (Architectural Principles, Principio 3). Verificato
+manualmente: select/insert/update/delete cross-Workspace tutti bloccati (vedi
+`infrastructure/supabase/README.md`).
+
+**`assignee_id`/`document_id`/`chat_id` senza FK verso Document/Chat**: quelle tabelle non
+esistono ancora (arrivano con Documenti e Chat, prossime slice di Fase 2 e Fase 3); i campi
+restano come riferimenti applicativi finché le tabelle corrispondenti non vengono create.
+
 ## Fasi successive
 
-Chat, Message, Document, Task, Note, Memory, Agent, Calendar Event, Timeline Event sono già
-modellate in `packages/domain` (`docs/product/12-domain-model.md`) ma non hanno ancora una
-migrazione: arriveranno con le rispettive feature (Fase 2 — Core Product, Fase 3 — AI Layer;
-`docs/product/26-execution-blueprint.md`).
+Chat, Message, Document, Memory, Agent, Calendar Event, Timeline Event sono già modellate in
+`packages/domain` ma non hanno ancora una migrazione: arriveranno con le rispettive feature
+(Fase 2 — prossime slice, Fase 3 — AI Layer; `docs/product/26-execution-blueprint.md`).
 
 Note tecniche aperte dal Domain Model, da risolvere prima di quelle migrazioni:
 

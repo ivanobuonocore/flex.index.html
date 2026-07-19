@@ -40,11 +40,15 @@ pip/
 
 ## Stato del progetto
 
-Fase attuale: **Fase 1 — Foundation**, in corso (vedi `docs/product/26-execution-blueprint.md`).
+Fase attuale: **Fase 2 — Core Product**, in corso (vedi `docs/product/26-execution-blueprint.md`).
 
-Completato: repository monorepo, modello di dominio (`packages/domain`), Design System
-(`packages/design-system`), autenticazione e navigazione principale su Supabase con Row Level
-Security (`apps/mobile`, `infrastructure/supabase`), CI (lint, format, test).
+**Fase 1 — Foundation** (completata): repository monorepo, modello di dominio
+(`packages/domain`), Design System (`packages/design-system`), autenticazione e navigazione
+principale su Supabase con Row Level Security.
+
+**Fase 2 (slice 1)**: Home del Workspace, Note e Task — CRUD completo, realtime, RLS verificata.
+Documenti, Ricerca, Memoria e Chat (quest'ultima legata alla Fase 3 — AI Layer) restano nelle
+prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.
 

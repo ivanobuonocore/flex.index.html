@@ -8,6 +8,7 @@ final class Note {
     required this.updatedAt,
     this.tags = const [],
     this.createdByAi = false,
+    this.deletedAt,
   });
 
   final String id;
@@ -18,6 +19,27 @@ final class Note {
   final bool createdByAi;
   final DateTime updatedAt;
 
+  /// Soft delete (Domain Model, "Principi del modello").
+  final DateTime? deletedAt;
+
+  Note copyWith({
+    String? title,
+    String? content,
+    List<String>? tags,
+    required DateTime updatedAt,
+  }) {
+    return Note(
+      id: id,
+      workspaceId: workspaceId,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      tags: tags ?? this.tags,
+      createdByAi: createdByAi,
+      updatedAt: updatedAt,
+      deletedAt: deletedAt,
+    );
+  }
+
   @override
   bool operator ==(Object other) =>
       other is Note &&
@@ -27,6 +49,7 @@ final class Note {
       other.content == content &&
       other.createdByAi == createdByAi &&
       other.updatedAt == updatedAt &&
+      other.deletedAt == deletedAt &&
       _listEquals(other.tags, tags);
 
   @override
@@ -37,6 +60,7 @@ final class Note {
         content,
         createdByAi,
         updatedAt,
+        deletedAt,
         Object.hashAll(tags),
       );
 
