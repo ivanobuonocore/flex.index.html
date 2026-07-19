@@ -6,9 +6,12 @@ import '../../features/auth/application/session_controller.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/chat/presentation/chat_list_screen.dart';
+import '../../features/note/presentation/note_list_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
+import '../../features/task/presentation/task_list_screen.dart';
 import '../../features/today/presentation/today_screen.dart';
+import '../../features/workspace/presentation/workspace_detail_screen.dart';
 import '../../features/workspace/presentation/workspace_list_screen.dart';
 import 'app_shell.dart';
 
@@ -62,6 +65,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/workspace',
                 builder: (context, state) => const WorkspaceListScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':id',
+                    builder: (context, state) => WorkspaceDetailScreen(
+                      workspaceId: state.pathParameters['id']!,
+                    ),
+                    routes: [
+                      GoRoute(
+                        path: 'notes',
+                        builder: (context, state) => NoteListScreen(
+                          workspaceId: state.pathParameters['id']!,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'tasks',
+                        builder: (context, state) => TaskListScreen(
+                          workspaceId: state.pathParameters['id']!,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),

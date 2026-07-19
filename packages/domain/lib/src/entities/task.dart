@@ -15,6 +15,7 @@ final class Task {
     this.generatedByAi = false,
     this.documentId,
     this.chatId,
+    this.deletedAt,
   });
 
   final String id;
@@ -32,6 +33,33 @@ final class Task {
   final String? chatId;
   final DateTime createdAt;
 
+  /// Soft delete (Domain Model, "Principi del modello").
+  final DateTime? deletedAt;
+
+  Task copyWith({
+    String? title,
+    String? description,
+    TaskStatus? status,
+    TaskPriority? priority,
+    DateTime? dueAt,
+  }) {
+    return Task(
+      id: id,
+      workspaceId: workspaceId,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      status: status ?? this.status,
+      priority: priority ?? this.priority,
+      dueAt: dueAt ?? this.dueAt,
+      assigneeId: assigneeId,
+      generatedByAi: generatedByAi,
+      documentId: documentId,
+      chatId: chatId,
+      createdAt: createdAt,
+      deletedAt: deletedAt,
+    );
+  }
+
   @override
   bool operator ==(Object other) =>
       other is Task &&
@@ -46,7 +74,8 @@ final class Task {
       other.generatedByAi == generatedByAi &&
       other.documentId == documentId &&
       other.chatId == chatId &&
-      other.createdAt == createdAt;
+      other.createdAt == createdAt &&
+      other.deletedAt == deletedAt;
 
   @override
   int get hashCode => Object.hash(
@@ -62,6 +91,7 @@ final class Task {
         documentId,
         chatId,
         createdAt,
+        deletedAt,
       );
 
   @override
