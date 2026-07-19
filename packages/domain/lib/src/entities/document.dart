@@ -10,6 +10,7 @@ final class Document {
     required this.hash,
     required this.uploadedAt,
     this.chatId,
+    this.deletedAt,
   });
 
   final String id;
@@ -26,6 +27,11 @@ final class Document {
   /// Chat da cui è stato caricato, se applicabile.
   final String? chatId;
 
+  /// Soft delete (Domain Model, "Principi del modello"). L'oggetto in Storage
+  /// non viene rimosso qui: la pulizia effettiva è un job separato, non
+  /// ancora implementato.
+  final DateTime? deletedAt;
+
   @override
   bool operator ==(Object other) =>
       other is Document &&
@@ -37,7 +43,8 @@ final class Document {
       other.storagePath == storagePath &&
       other.hash == hash &&
       other.uploadedAt == uploadedAt &&
-      other.chatId == chatId;
+      other.chatId == chatId &&
+      other.deletedAt == deletedAt;
 
   @override
   int get hashCode => Object.hash(
@@ -50,6 +57,7 @@ final class Document {
         hash,
         uploadedAt,
         chatId,
+        deletedAt,
       );
 
   @override

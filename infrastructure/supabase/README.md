@@ -33,13 +33,27 @@ npx supabase db push
   RLS tramite `EXISTS` sul Workspace referenziato (nessuna colonna `owner_id` diretta). Verificato
   manualmente: select/insert/update/delete cross-Workspace tutti bloccati (vedi
   `docs/database/README.md` per il dettaglio).
+- `migrations/20260719064756_documents.sql` — tabella `documents` (stesso pattern RLS di
+  notes/tasks) + bucket Storage privato `documents` + policy su `storage.objects`. Verificato
+  manualmente: la tabella contro un Postgres locale come le precedenti; le policy Storage con uno
+  schema `storage` fittizio (non è Supabase Storage reale) — ha comunque permesso di individuare e
+  correggere un bug di ambiguità di colonna nella condizione RLS. Dettagli in
+  `docs/database/README.md`.
 
-Le altre entità del Domain Model (Chat, Document, Memory, Agent, ...) avranno le proprie
-migrazioni quando le rispettive feature verranno implementate (Fase 2+,
-`docs/product/26-execution-blueprint.md`) — lo schema non richiede di riscrivere quelle esistenti
-per crescere (Engineering Constitution, Articolo 8).
+Le altre entità del Domain Model (Chat, Memory, Agent, ...) avranno le proprie migrazioni quando
+le rispettive feature verranno implementate (Fase 2+, `docs/product/26-execution-blueprint.md`)
+— lo schema non richiede di riscrivere quelle esistenti per crescere (Engineering Constitution,
+Articolo 8).
 
 ## Nota su Realtime
 
-`workspaces`, `notes` e `tasks` sono pubblicate su `supabase_realtime`: `apps/mobile` osserva le
-tabelle in streaming invece di fare polling (Software Architecture, "Sincronizzazione").
+`workspaces`, `notes`, `tasks` e `documents` sono pubblicate su `supabase_realtime`: `apps/mobile`
+osserva le tabelle in streaming invece di fare polling (Software Architecture,
+"Sincronizzazione").
+
+## Nota su Storage
+
+Il bucket `documents` è privato: `apps/mobile` non usa mai un URL pubblico diretto, solo signed
+URL a validità breve (`SupabaseDocumentRepository.getDownloadUrl`, 60 secondi). Le policy RLS su
+`storage.objects` non sono verificabili end-to-end senza il servizio Storage completo di Supabase
+(`supabase start` con Docker, o un progetto remoto) — non disponibili in questa sessione.

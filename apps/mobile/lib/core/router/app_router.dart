@@ -6,6 +6,7 @@ import '../../features/auth/application/session_controller.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/chat/presentation/chat_list_screen.dart';
+import '../../features/document/presentation/document_list_screen.dart';
 import '../../features/note/presentation/note_list_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
@@ -81,6 +82,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                       GoRoute(
                         path: 'tasks',
                         builder: (context, state) => TaskListScreen(
+                          workspaceId: state.pathParameters['id']!,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'documents',
+                        builder: (context, state) => DocumentListScreen(
                           workspaceId: state.pathParameters['id']!,
                         ),
                       ),

@@ -5,6 +5,7 @@ import 'package:pip_mobile/core/providers.dart';
 import 'package:pip_mobile/main.dart';
 
 import '../../../support/fake_auth_repository.dart';
+import '../../../support/fake_document_repository.dart';
 import '../../../support/fake_note_repository.dart';
 import '../../../support/fake_task_repository.dart';
 import '../../../support/fake_workspace_repository.dart';
@@ -16,10 +17,12 @@ void main() {
     final fakeWorkspace = FakeWorkspaceRepository();
     final fakeNote = FakeNoteRepository();
     final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
     addTearDown(fakeAuth.dispose);
     addTearDown(fakeWorkspace.dispose);
     addTearDown(fakeNote.dispose);
     addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
 
     final user = User(
       id: 'u1',
@@ -44,6 +47,7 @@ void main() {
           workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
           noteRepositoryProvider.overrideWithValue(fakeNote),
           taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
         ],
         child: const PipApp(),
       ),
@@ -63,13 +67,15 @@ void main() {
 
     await tester.tap(find.text('Lavoro'));
     await tester
-        .pump(); // costruisce WorkspaceDetailScreen, sottoscrive Note/Task
+        .pump(); // costruisce WorkspaceDetailScreen, sottoscrive Note/Task/Documenti
     fakeNote.emit(const []);
     fakeTask.emit(const []);
+    fakeDocument.emit(const []);
     await tester.pumpAndSettle();
 
     expect(find.text('Note'), findsOneWidget);
     expect(find.text('Attività'), findsOneWidget);
+    expect(find.text('Documenti'), findsOneWidget);
     expect(find.text('Prossimamente'), findsOneWidget);
   });
 }

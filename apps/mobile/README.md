@@ -12,12 +12,14 @@ Bottom Navigation a 5 sezioni).
 Implementate, con dati reali via Supabase:
 
 - **auth** (Fase 1) — login, registrazione, sessione, logout.
-- **workspace** (Fase 1 + Fase 2 slice 1) — lista, creazione, Home del Workspace
-  (`/workspace/:id`) con anteprima Note/Task e menu verso le sezioni non ancora
+- **workspace** (Fase 1 + Fase 2 slice 1/2) — lista, creazione, Home del Workspace
+  (`/workspace/:id`) con anteprima Note/Task/Documenti e menu verso le sezioni non ancora
   implementate.
 - **note** (Fase 2 slice 1) — CRUD completo per Workspace (`/workspace/:id/notes`), realtime.
 - **task** (Fase 2 slice 1) — CRUD completo per Workspace (`/workspace/:id/tasks`), realtime,
   toggle rapido todo↔done.
+- **document** (Fase 2 slice 2) — upload/apertura/eliminazione per Workspace
+  (`/workspace/:id/documents`), Supabase Storage con signed URL, realtime.
 - **today** (Fase 1) — saluto, Workspace recenti.
 
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
@@ -28,8 +30,16 @@ Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 - **profile** — identità account e logout ora; abbonamento, tema, memoria, privacy nelle fasi
   successive.
 
-Non ancora presenti: documents (prossima slice di Fase 2, richiede Supabase Storage),
-memory, settings, billing.
+Non ancora presenti: memory, settings, billing.
+
+## Limiti noti (dichiarati, non nascosti)
+
+- Questo modulo non ha mai eseguito `flutter create`: non esistono le cartelle piattaforma
+  (`android/`, `ios/`, `web/`, ...). `flutter analyze`/`flutter test` funzionano (analisi Dart
+  pura), ma l'app non è ancora eseguibile su un device/emulatore reale.
+- `file_picker` (selezione file) e l'apertura effettiva di un URL con `url_launcher` non sono
+  testabili in questo ambiente (nessun canale di piattaforma nativo): la logica di dominio e i
+  repository sono comunque coperti da test con repository fake (`document_controller_test.dart`).
 
 ## Setup locale
 

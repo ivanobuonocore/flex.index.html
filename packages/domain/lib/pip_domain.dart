@@ -20,6 +20,7 @@ export 'src/entities/user.dart';
 export 'src/entities/workspace.dart';
 
 export 'src/repositories/auth_repository.dart';
+export 'src/repositories/document_repository.dart';
 export 'src/repositories/note_repository.dart';
 export 'src/repositories/task_repository.dart';
 export 'src/repositories/workspace_repository.dart';

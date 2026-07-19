@@ -47,8 +47,12 @@ Fase attuale: **Fase 2 — Core Product**, in corso (vedi `docs/product/26-execu
 principale su Supabase con Row Level Security.
 
 **Fase 2 (slice 1)**: Home del Workspace, Note e Task — CRUD completo, realtime, RLS verificata.
-Documenti, Ricerca, Memoria e Chat (quest'ultima legata alla Fase 3 — AI Layer) restano nelle
-prossime slice.
+
+**Fase 2 (slice 2)**: Documenti — upload/apertura/eliminazione su Supabase Storage (bucket
+privato, signed URL), RLS verificata (anche sulle policy di Storage, con uno schema fittizio in
+assenza di Docker in questa sessione — dettagli in `docs/database/README.md`).
+
+Ricerca, Memoria e Chat (quest'ultima legata alla Fase 3 — AI Layer) restano nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.
 
