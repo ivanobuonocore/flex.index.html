@@ -45,11 +45,37 @@ npx supabase db push
   manualmente con due utenti — nessuna fuga di dati cross-Workspace. Verifica ha anche trovato
   un bug di qualità (non sicurezza) sulla tokenizzazione dei nomi file, corretto. Dettagli in
   `docs/database/README.md`.
+- `migrations/20260719103109_chats_and_messages.sql` — tabelle `chats` (`owner_id` diretto, come
+  `workspaces`: una Chat può esistere senza Workspace) e `messages` (RLS tramite `EXISTS` sulla
+  Chat, come `notes`/`tasks` verso `workspaces`); trigger che aggiorna `chats.last_message_at`
+  a ogni nuovo messaggio. Verificato manualmente: isolamento cross-utente su entrambe le tabelle,
+  trigger funzionante. Dettagli in `docs/database/README.md`.
 
-Le altre entità del Domain Model (Chat, Memory, Agent, ...) avranno le proprie migrazioni quando
-le rispettive feature verranno implementate (Fase 2+, `docs/product/26-execution-blueprint.md`)
-— lo schema non richiede di riscrivere quelle esistenti per crescere (Engineering Constitution,
-Articolo 8).
+Le altre entità del Domain Model (Memory, Agent, ...) avranno le proprie migrazioni quando le
+rispettive feature verranno implementate (`docs/product/26-execution-blueprint.md`) — lo schema
+non richiede di riscrivere quelle esistenti per crescere (Engineering Constitution, Articolo 8).
+
+## AI Engine (`ai-chat`)
+
+L'AI Engine è la Edge Function `functions/ai-chat` (Deno/TypeScript) — non un servizio separato
+(Architectural Principles: "mai il frontend collegato direttamente a un provider LLM"; tutte le
+chiamate AI passano da qui). Richiede una chiave Anthropic, mai committata nel repository:
+
+```
+npx supabase secrets set ANTHROPIC_API_KEY=<la-tua-chiave>
+```
+
+Per il deploy della function (richiede `supabase link` verso un progetto remoto):
+
+```
+npx supabase functions deploy ai-chat
+```
+
+**Non verificato in questa sessione**: nessuna chiave Anthropic disponibile, quindi nessuna
+chiamata reale né al provider né alla function stessa tramite il runtime Supabase Functions
+(richiederebbe `supabase start` con Docker o un progetto remoto). Verificato invece il codice
+TypeScript con `deno check`/`deno lint`/`deno fmt --check` — dettagli in
+`docs/database/README.md`.
 
 ## Nota su Realtime
 

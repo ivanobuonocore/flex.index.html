@@ -114,11 +114,60 @@ spazi prima della tokenizzazione (`regexp_replace(name, '[_.]', ' ', 'g')`), sia
 nella funzione. Verificato: senza la normalizzazione il documento non compariva tra i
 risultati, con la normalizzazione sì.
 
+## Fase 3 (slice 1) — AI Engine + Chat
+
+### `public.chats` / `public.messages`
+
+Persistenza delle entità Chat e Message (`docs/product/12-domain-model.md`).
+
+| Tabella    | Colonne specifiche                                                                          |
+|------------|------------------------------------------------------------------------------------------------|
+| `chats`    | `owner_id`, `workspace_id` (nullable), `title`, `ai_model`, `status` (`active`/`archived`), `created_at`, `last_message_at` |
+| `messages` | `chat_id`, `role` (`user`/`ai`/`system`), `content`, `attachment_ids text[]`, `tokens_used`, `source_references text[]`, `created_at` |
+
+**Sicurezza — `chats` torna a `owner_id` diretto, non a join**: a differenza di `notes`/`tasks`,
+una Chat può esistere senza Workspace (Domain Model — Chat privata), quindi non può isolarsi solo
+tramite `EXISTS` su un Workspace che potrebbe non esserci. Le policy RLS confrontano `owner_id =
+auth.uid()`, stesso pattern di `workspaces`. `messages` invece non ha una colonna proprietario: le
+policy verificano l'appartenenza tramite `EXISTS` sulla Chat referenziata (`c.owner_id =
+auth.uid()`), pattern identico a `notes`/`tasks` verso `workspaces`.
+
+**Trigger `touch_chat_last_message()`**: `after insert on messages`, `security invoker`,
+aggiorna `chats.last_message_at` — evita un secondo round-trip dal client solo per quello.
+Verificato manualmente su Postgres locale.
+
+**Verificato manualmente**: insert di un messaggio su una Chat di un altro utente bloccato da
+RLS; il trigger aggiorna correttamente `last_message_at`; un secondo utente non vede i messaggi
+del primo.
+
+### Edge Function `ai-chat`
+
+L'AI Engine (Architectural Principles: "mai il frontend collegato direttamente a un provider
+LLM") vive come Supabase Edge Function, non come servizio separato —
+`infrastructure/supabase/functions/ai-chat/index.ts`. Il client Supabase creato dentro la function
+inoltra il JWT di chi chiama (mai la service role key): le stesse policy RLS di
+`chats`/`messages`/`notes`/`tasks`/`documents` si applicano anche lì, stesso principio
+`security invoker` già usato per `search_workspace_content` — la function non ha modo di leggere
+dati di un Workspace che l'utente non possiede.
+
+Costruisce il contesto per euristica (per recency, non ricerca semantica): fino a 5 tra
+Note/Task/Documenti più recenti del Workspace, più lo storico degli ultimi 20 messaggi della
+Chat. Chiama `https://api.anthropic.com/v1/messages` (chiave in `ANTHROPIC_API_KEY`, secret
+Supabase — mai nel codice, vedi `infrastructure/supabase/README.md`). La risposta viene inserita
+come riga `messages` (`role: 'ai'`) con `source_references` valorizzato dagli id delle
+Note/Task/Documenti effettivamente incluse nel contesto (trasparenza richiesta da
+`docs/product/21-ai-constitution.md`, Principio 3).
+
+**Non verificabile in questa sessione**: nessuna chiamata reale a `api.anthropic.com` (nessuna
+chiave disponibile) né alla Edge Function stessa tramite Supabase Functions runtime (richiede
+`supabase start` con Docker o un progetto remoto). Verificato invece quello che è realmente
+verificabile: il codice TypeScript con `deno check`/`deno lint`/`deno fmt --check` (Deno
+installato in sessione), tutti puliti.
+
 ## Fasi successive
 
-Chat, Message, Memory, Agent, Calendar Event, Timeline Event sono già modellate in
-`packages/domain` ma non hanno ancora una migrazione: arriveranno con le rispettive feature
-(Fase 2 — prossime slice, Fase 3 — AI Layer; `docs/product/26-execution-blueprint.md`).
+Memory, Agent, Calendar Event, Timeline Event sono già modellate in `packages/domain` ma non
+hanno ancora una migrazione: arriveranno con le rispettive feature (`docs/product/26-execution-blueprint.md`).
 
 Note tecniche aperte dal Domain Model, da risolvere prima di quelle migrazioni:
 

@@ -3,6 +3,8 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 import '../features/auth/data/supabase_auth_repository.dart';
+import '../features/chat/data/supabase_chat_repository.dart';
+import '../features/chat/data/supabase_message_repository.dart';
 import '../features/document/data/supabase_document_repository.dart';
 import '../features/note/data/supabase_note_repository.dart';
 import '../features/search/data/supabase_search_repository.dart';
@@ -37,4 +39,12 @@ final documentRepositoryProvider = Provider<DocumentRepository>((ref) {
 
 final searchRepositoryProvider = Provider<SearchRepository>((ref) {
   return SupabaseSearchRepository(ref.watch(supabaseClientProvider));
+});
+
+final chatRepositoryProvider = Provider<ChatRepository>((ref) {
+  return SupabaseChatRepository(ref.watch(supabaseClientProvider));
+});
+
+final messageRepositoryProvider = Provider<MessageRepository>((ref) {
+  return SupabaseMessageRepository(ref.watch(supabaseClientProvider));
 });
