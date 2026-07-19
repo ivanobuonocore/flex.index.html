@@ -62,9 +62,36 @@ manualmente: select/insert/update/delete cross-Workspace tutti bloccati (vedi
 esistono ancora (arrivano con Documenti e Chat, prossime slice di Fase 2 e Fase 3); i campi
 restano come riferimenti applicativi finché le tabelle corrispondenti non vengono create.
 
+## Fase 2 (slice 2) — Documenti
+
+### `public.documents`
+
+Persistenza dell'entità Document (`docs/product/12-domain-model.md`): `workspace_id`, `name`,
+`mime_type`, `size_bytes`, `storage_path` (univoco), `hash` (SHA-256, deduplicazione), `chat_id`,
+`uploaded_at`, `deleted_at`. Stesso pattern RLS a join di `notes`/`tasks`.
+
+**Prima migrazione che tocca Supabase Storage**, non solo Postgres: bucket `documents` (privato —
+l'accesso passa sempre da signed URL, mai da un URL pubblico diretto) e tre policy su
+`storage.objects` che replicano lo stesso controllo di appartenenza al Workspace, applicato al
+primo segmento del path dell'oggetto (`storage.foldername(objects.name)[1]`, convenzione di path
+`{workspace_id}/{timestamp}_{filename}` scelta in `SupabaseDocumentRepository`).
+
+**Bug trovato e corretto durante la verifica manuale**: la prima versione della policy usava
+`storage.foldername(name)` senza qualificare `name` — dentro la subquery `EXISTS`, `name` è
+ambiguo tra la colonna dell'oggetto Storage (quella intesa) e `workspaces.name` (la tabella
+referenziata ha anch'essa una colonna `name`), e Postgres lo risolveva verso quest'ultima.
+Risultato: la policy negava anche gli upload legittimi. Corretto qualificando esplicitamente
+`objects.name`. Verificato su un Postgres locale con uno schema `storage` fittizio
+(`storage.objects`, `storage.foldername()`) creato per l'occasione — non è Supabase Storage
+reale, ma la stessa logica SQL, ed è quanto basta per aver individuato il bug.
+
+**Non verificabile in locale**: il comportamento completo di Supabase Storage (upload reale,
+generazione di signed URL) richiede `supabase start` (Docker) o un progetto remoto — non
+disponibili in questa sessione.
+
 ## Fasi successive
 
-Chat, Message, Document, Memory, Agent, Calendar Event, Timeline Event sono già modellate in
+Chat, Message, Memory, Agent, Calendar Event, Timeline Event sono già modellate in
 `packages/domain` ma non hanno ancora una migrazione: arriveranno con le rispettive feature
 (Fase 2 — prossime slice, Fase 3 — AI Layer; `docs/product/26-execution-blueprint.md`).
 
