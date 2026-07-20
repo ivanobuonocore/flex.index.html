@@ -239,7 +239,7 @@ class _WorkspaceDetailBody extends ConsumerWidget {
                 },
               ),
               const SizedBox(height: AppSpacing.lg),
-              const Text('Prossimamente', style: AppTypography.heading3),
+              Text('Prossimamente', style: AppTypography.heading3),
               const SizedBox(height: AppSpacing.sm),
               Card(
                 child: Column(

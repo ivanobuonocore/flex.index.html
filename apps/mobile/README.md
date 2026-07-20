@@ -77,6 +77,15 @@ Implementate, con dati reali via Supabase:
   provenienza. `TransactionRepository.watchTransactions` accetta ora un `workspaceId` nullable
   (`null` = tutti i Workspace), stesso pattern di `ChatRepository.watchChats`.
 
+- **redesign estetico** (richiesta esplicita dell'utente: "rendi più estetica l'interfaccia con
+  icone colorate e utilizzando un font dedicato... inserisci la Chat al centro... in un cerchio...
+  con i colori di Siri quando si attiva") — font Manrope via `google_fonts` in tutta l'app
+  (`packages/design-system`); Bottom Navigation riordinata: Workspace, Bilancio, **Chat al
+  centro** (cerchio con gradiente ispirato al "glow" di Siri, sollevato sopra la barra), Ricerca,
+  Profilo (`AppShell`); icone colorate — le 4 voci laterali della barra quando selezionate, le
+  categorie di Transazione (badge colorato in ogni riga del Bilancio), Note/Attività/Documenti
+  nelle rispettive liste.
+
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
 
@@ -118,6 +127,19 @@ Non ancora presenti: memory, settings, billing.
   recapitata — non è verificabile senza un browser reale: su iPhone funziona solo dopo aver
   aggiunto il sito alla schermata Home (icona Condividi → Aggiungi a Home, richiede iOS 16.4+),
   mai da una scheda Safari normale.
+- **Nessuna migrazione/Edge Function di questo progetto è mai stata applicata a un progetto
+  Supabase reale da questa sessione**: serve un token di accesso Supabase (`supabase login`) che
+  non è mai stato disponibile qui. Ogni `infrastructure/supabase/migrations/*.sql` scritto va
+  eseguito manualmente (`npx supabase link` + `npx supabase db push`, vedi
+  `infrastructure/supabase/README.md`) contro il progetto reale prima che il codice che lo
+  presuppone funzioni in produzione — un gap tra "scritto nel repo" e "applicato al database" ha
+  già causato un fallimento reale in produzione (salvataggio di una Transazione dopo la slice 7C,
+  prima che la colonna `category` fosse effettivamente pushata).
+- `google_fonts` (Manrope, redesign estetico) scarica il font a runtime da fonts.gstatic.com: in
+  `flutter test` questo viene evitato del tutto (`isRunningInFlutterTest`, in
+  `packages/design-system/lib/src/testing/`) perché in questa sandbox quel dominio non è
+  raggiungibile — non accade in produzione (web o mobile), dove il fetch avviene nel browser/app
+  dell'utente finale con rete normale, non nell'ambiente di sviluppo.
 
 ## Setup locale
 

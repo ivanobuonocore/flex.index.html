@@ -321,17 +321,17 @@ class _TypingIndicator extends ConsumerWidget {
     final isSending = ref.watch(messageFormControllerProvider).isLoading;
     if (!isSending) return const SizedBox.shrink();
 
-    return const Padding(
-      padding: EdgeInsets.symmetric(
+    return Padding(
+      padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md, vertical: AppSpacing.xs),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          SizedBox(
+          const SizedBox(
               height: 14,
               width: 14,
               child: CircularProgressIndicator(strokeWidth: 2)),
-          SizedBox(width: AppSpacing.sm),
+          const SizedBox(width: AppSpacing.sm),
           Text('L\'assistente sta scrivendo…', style: AppTypography.caption),
         ],
       ),

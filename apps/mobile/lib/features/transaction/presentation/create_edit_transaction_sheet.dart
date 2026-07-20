@@ -183,7 +183,7 @@ class _CreateEditTransactionSheetState
               onTap: _pickDate,
             ),
             const SizedBox(height: AppSpacing.md),
-            const Align(
+            Align(
               alignment: Alignment.centerLeft,
               child: Text('Categoria', style: AppTypography.caption),
             ),
@@ -194,7 +194,7 @@ class _CreateEditTransactionSheetState
               children: TransactionCategory.values.map((category) {
                 final meta = TransactionCategoryMeta.of(category);
                 return ChoiceChip(
-                  avatar: Icon(meta.icon, size: 18),
+                  avatar: Icon(meta.icon, size: 18, color: meta.color),
                   label: Text(meta.label),
                   selected: category == _category,
                   onSelected: (_) => setState(() => _category = category),

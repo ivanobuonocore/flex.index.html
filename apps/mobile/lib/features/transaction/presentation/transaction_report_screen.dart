@@ -111,14 +111,13 @@ class TransactionReportScreen extends ConsumerWidget {
               ),
               if (pending.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
-                const Text('In attesa di conferma',
-                    style: AppTypography.heading3),
+                Text('In attesa di conferma', style: AppTypography.heading3),
                 const SizedBox(height: AppSpacing.sm),
                 ...pending.map((transaction) =>
                     _PendingTransactionTile(transaction: transaction)),
               ],
               const SizedBox(height: AppSpacing.lg),
-              const Text('Transazioni', style: AppTypography.heading3),
+              Text('Transazioni', style: AppTypography.heading3),
               const SizedBox(height: AppSpacing.sm),
               if (confirmed.isEmpty)
                 const Padding(
@@ -139,9 +138,12 @@ class TransactionReportScreen extends ConsumerWidget {
                       ),
                       title: Text(transaction.description,
                           maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(
-                        '${_formatDate(transaction.occurredAt)} · '
-                        '${TransactionCategoryMeta.of(transaction.category).label}',
+                      subtitle: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('${_formatDate(transaction.occurredAt)} · '),
+                          _CategoryBadge(category: transaction.category),
+                        ],
                       ),
                       trailing: Text(_formatAmount(transaction.amountCents)),
                       onTap: () => showCreateEditTransactionSheet(
@@ -176,9 +178,14 @@ class _PendingTransactionTile extends ConsumerWidget {
         ),
         title: Text(transaction.description,
             maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(
-            '${_formatDate(transaction.occurredAt)} · ${_formatAmount(transaction.amountCents)} · '
-            '${TransactionCategoryMeta.of(transaction.category).label}'),
+        subtitle: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+                '${_formatDate(transaction.occurredAt)} · ${_formatAmount(transaction.amountCents)} · '),
+            _CategoryBadge(category: transaction.category),
+          ],
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -199,6 +206,28 @@ class _PendingTransactionTile extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Icona colorata + etichetta di una categoria (redesign estetico —
+/// richiesta esplicita dell'utente: "icone colorate"), riusata ovunque il
+/// Bilancio elenca una transazione.
+class _CategoryBadge extends StatelessWidget {
+  const _CategoryBadge({required this.category});
+
+  final TransactionCategory category;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = TransactionCategoryMeta.of(category);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(meta.icon, size: 14, color: meta.color),
+        const SizedBox(width: 2),
+        Text(meta.label),
+      ],
     );
   }
 }

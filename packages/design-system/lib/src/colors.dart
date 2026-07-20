@@ -32,4 +32,21 @@ abstract final class AppColors {
   static const Color categoryAppuntamenti = Color(0xFF2563EB);
   static const Color categoryAttivita = Color(0xFFF97316);
   static const Color categoryDocumenti = Color(0xFF0D9488);
+
+  // Accenti per Note/Documenti nelle liste "semplici" (non sezioni fisse):
+  // stesso principio di categoryAttivita/categoryDocumenti, comune a light e
+  // dark mode (redesign estetico — richiesta esplicita dell'utente: "icone
+  // colorate" in tutta l'interfaccia, non solo nelle sezioni fisse).
+  static const Color accentNote = Color(0xFFCA8A04);
+
+  // Gradiente ispirato al "glow" di Siri quando si attiva (redesign
+  // estetico — richiesta esplicita dell'utente), usato per il pulsante Chat
+  // al centro della barra di navigazione. Comune a light e dark mode: è
+  // pensato per risaltare su entrambi gli sfondi, non per adattarsi a essi.
+  static const List<Color> siriGlow = [
+    Color(0xFF4F7BFF), // blu
+    Color(0xFFB24CFF), // viola
+    Color(0xFFFF5DA2), // rosa
+    Color(0xFF39E1FF), // ciano
+  ];
 }

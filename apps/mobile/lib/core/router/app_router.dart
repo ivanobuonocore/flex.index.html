@@ -47,15 +47,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
             AppShell(navigationShell: navigationShell),
+        // Ordine della barra di navigazione (redesign estetico — richiesta
+        // esplicita dell'utente): Workspace, Bilancio, [Chat al centro, in
+        // risalto], Ricerca, Profilo. L'ordine dei branch deve corrispondere
+        // 1:1 a quello delle destinazioni in `AppShell` (indice per indice).
         branches: [
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/chat',
-                builder: (context, state) => const ChatHomeScreen(),
-              ),
-            ],
-          ),
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -101,15 +97,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                  path: '/search',
-                  builder: (context, state) => const SearchScreen()),
+                  path: '/balance',
+                  builder: (context, state) => const BalanceOverviewScreen()),
             ],
           ),
           StatefulShellBranch(
             routes: [
               GoRoute(
-                  path: '/balance',
-                  builder: (context, state) => const BalanceOverviewScreen()),
+                path: '/chat',
+                builder: (context, state) => const ChatHomeScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                  path: '/search',
+                  builder: (context, state) => const SearchScreen()),
             ],
           ),
           StatefulShellBranch(

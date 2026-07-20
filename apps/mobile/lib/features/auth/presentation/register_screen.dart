@@ -67,8 +67,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('Crea il tuo account',
-                        style: AppTypography.heading1),
+                    Text('Crea il tuo account', style: AppTypography.heading1),
                     const SizedBox(height: AppSpacing.xl),
                     TextFormField(
                       controller: _nameController,

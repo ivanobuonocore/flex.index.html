@@ -95,7 +95,7 @@ class _EditWorkspaceSheetState extends ConsumerState<_EditWorkspaceSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Rinomina Workspace', style: AppTypography.heading2),
+            Text('Rinomina Workspace', style: AppTypography.heading2),
             const SizedBox(height: AppSpacing.lg),
             TextFormField(
               controller: _nameController,

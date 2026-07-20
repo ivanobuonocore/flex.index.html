@@ -151,6 +151,23 @@ automaticamente le transazioni che estrae dalla Chat (es. "barbiere" → Svago) 
 classificazione mancante o non riconosciuta ricade su "Altro" invece di far scartare l'intera
 transazione, così un errore dell'AI sulla categoria non fa perdere una spesa reale.
 
+**Redesign estetico**: richiesta esplicita dell'utente ("rendi più estetica l'interfaccia con
+icone colorate e utilizzando un font dedicato... inserisci la Chat al centro... in un cerchio...
+con i colori di Siri quando si attiva"). Font Manrope (via `google_fonts`) in tutta l'app; Bottom
+Navigation riordinata con la Chat al centro in un cerchio dal gradiente ispirato al "glow" di Siri,
+sollevato sopra la barra; icone colorate nelle voci di navigazione, nelle categorie di
+Transazione, e nelle liste Note/Attività/Documenti. Durante il lavoro è stato scoperto e corretto
+un rischio reale per l'affidabilità dei test: `google_fonts` scarica il font a runtime, il che
+avrebbe reso ogni test che costruisce il tema dell'app dipendente dalla rete — ora i test lo
+evitano rilevando l'esecuzione sotto `flutter test`.
+
+**Nota operativa importante**: questa sessione non ha mai avuto un token di accesso al progetto
+Supabase reale, quindi nessuna migrazione o Edge Function scritta in questo repository (in
+nessuna slice) è mai stata applicata/deployata dall'assistente — serve eseguire manualmente `npx
+supabase db push` e `npx supabase functions deploy` dopo ogni slice che tocca `infrastructure/
+supabase/` (vedi `infrastructure/supabase/README.md`). Un ritardo in questo passaggio ha causato
+un fallimento reale in produzione dopo la slice "Bilancio con categorie".
+
 Memoria resta nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.

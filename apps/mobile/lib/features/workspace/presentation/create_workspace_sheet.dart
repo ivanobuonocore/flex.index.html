@@ -87,7 +87,7 @@ class _CreateWorkspaceSheetState extends ConsumerState<_CreateWorkspaceSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Nuovo Workspace', style: AppTypography.heading2),
+            Text('Nuovo Workspace', style: AppTypography.heading2),
             const SizedBox(height: AppSpacing.lg),
             TextFormField(
               controller: _nameController,

@@ -98,8 +98,7 @@ class BalanceOverviewScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Saldo del mese',
-                          style: AppTypography.caption),
+                      Text('Saldo del mese', style: AppTypography.caption),
                       const SizedBox(height: AppSpacing.xs),
                       Text(_formatSignedAmount(balance),
                           style: AppTypography.heading1),
@@ -121,8 +120,7 @@ class BalanceOverviewScreen extends ConsumerWidget {
               ),
               if (pending.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
-                const Text('In attesa di conferma',
-                    style: AppTypography.heading3),
+                Text('In attesa di conferma', style: AppTypography.heading3),
                 const SizedBox(height: AppSpacing.sm),
                 for (final transaction in pending) ...[
                   _PendingTransactionTile(
@@ -134,8 +132,7 @@ class BalanceOverviewScreen extends ConsumerWidget {
                 ],
               ],
               const SizedBox(height: AppSpacing.lg),
-              const Text('Transazioni confermate',
-                  style: AppTypography.heading3),
+              Text('Transazioni confermate', style: AppTypography.heading3),
               const SizedBox(height: AppSpacing.sm),
               if (confirmed.isEmpty)
                 const Padding(
@@ -156,10 +153,15 @@ class BalanceOverviewScreen extends ConsumerWidget {
                       ),
                       title: Text(transaction.description,
                           maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(
-                        '${workspaceNames[transaction.workspaceId] ?? "Workspace"} · '
-                        '${_formatDate(transaction.occurredAt)} · '
-                        '${TransactionCategoryMeta.of(transaction.category).label}',
+                      subtitle: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${workspaceNames[transaction.workspaceId] ?? "Workspace"} · '
+                            '${_formatDate(transaction.occurredAt)} · ',
+                          ),
+                          _CategoryBadge(category: transaction.category),
+                        ],
                       ),
                       trailing: Text(_formatAmount(transaction.amountCents)),
                     ),
@@ -274,10 +276,15 @@ class _PendingTransactionTile extends ConsumerWidget {
         ),
         title: Text(transaction.description,
             maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(
-          '$workspaceName · ${_formatDate(transaction.occurredAt)} · '
-          '${_formatAmount(transaction.amountCents)} · '
-          '${TransactionCategoryMeta.of(transaction.category).label}',
+        subtitle: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$workspaceName · ${_formatDate(transaction.occurredAt)} · '
+              '${_formatAmount(transaction.amountCents)} · ',
+            ),
+            _CategoryBadge(category: transaction.category),
+          ],
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -299,6 +306,28 @@ class _PendingTransactionTile extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Icona colorata + etichetta di una categoria (redesign estetico —
+/// richiesta esplicita dell'utente: "icone colorate"), riusata ovunque il
+/// Bilancio elenca una transazione.
+class _CategoryBadge extends StatelessWidget {
+  const _CategoryBadge({required this.category});
+
+  final TransactionCategory category;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = TransactionCategoryMeta.of(category);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(meta.icon, size: 14, color: meta.color),
+        const SizedBox(width: 2),
+        Text(meta.label),
+      ],
     );
   }
 }

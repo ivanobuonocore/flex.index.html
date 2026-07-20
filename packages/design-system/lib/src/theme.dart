@@ -27,7 +27,7 @@ abstract final class AppTheme {
           isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
     );
 
-    final textTheme = const TextTheme(
+    final textTheme = TextTheme(
       displayLarge: AppTypography.display,
       headlineLarge: AppTypography.heading1,
       headlineMedium: AppTypography.heading2,
@@ -47,7 +47,6 @@ abstract final class AppTheme {
       scaffoldBackgroundColor:
           isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       textTheme: textTheme,
-      fontFamily: appFontFamily,
       cardTheme: CardTheme(
         color: colorScheme.surface,
         elevation: 0,
