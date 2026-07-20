@@ -27,6 +27,7 @@ class TransactionFormController extends AutoDisposeAsyncNotifier<void> {
     required String description,
     required int amountCents,
     required DateTime occurredAt,
+    TransactionCategory category = TransactionCategory.altro,
   }) async {
     state = const AsyncLoading();
     final result =
@@ -36,6 +37,7 @@ class TransactionFormController extends AutoDisposeAsyncNotifier<void> {
               description: description,
               amountCents: amountCents,
               occurredAt: occurredAt,
+              category: category,
             );
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);

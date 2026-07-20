@@ -142,6 +142,15 @@ Durante il lavoro, un test ha scoperto un overflow verticale preesistente in `Wo
 quando un'anteprima viva è più lunga di una riga in una card stretta: corretto (`maxLines` +
 `overflow: ellipsis` su nome e sottotitolo).
 
+**Fase 3 (slice 7C)**: Bilancio con categorie — richiesta esplicita dell'utente: una spesa come
+"barbiere" va classificata, non solo registrata. `TransactionCategory` (10 categorie fisse:
+Alimentari/Trasporti/Casa/Bollette/Salute/Svago/Shopping/Istruzione/Stipendio/Altro, non
+estensibile dall'utente) su ogni Transazione, con un picker nella creazione/modifica manuale e la
+categoria visibile in ogni riga del Bilancio. L'Edge Function `ai-chat` ora classifica
+automaticamente le transazioni che estrae dalla Chat (es. "barbiere" → Svago) — una
+classificazione mancante o non riconosciuta ricade su "Altro" invece di far scartare l'intera
+transazione, così un errore dell'AI sulla categoria non fa perdere una spesa reale.
+
 Memoria resta nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.

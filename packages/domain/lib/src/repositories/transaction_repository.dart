@@ -23,6 +23,7 @@ abstract interface class TransactionRepository {
     required int amountCents,
     String currency = 'EUR',
     required DateTime occurredAt,
+    TransactionCategory category = TransactionCategory.altro,
   });
 
   Future<Result<Transaction>> updateTransaction(Transaction transaction);

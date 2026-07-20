@@ -330,6 +330,42 @@ fisse non espongono questa azione in UI (strutturali, non eliminabili — solo r
 delle slice precedenti) — l'indice non è stato eseguito contro un database reale, solo scritto e
 riletto per correttezza sintattica.
 
+## Fase 3 (slice 7C) — Bilancio con categorie
+
+Richiesta esplicita dell'utente: una spesa come "barbiere" va classificata, non solo registrata.
+Colonna aggiuntiva su `public.transactions` (non una nuova tabella — stesso pattern di
+`workspaces.category`, Fase 3 slice 7A):
+
+```sql
+alter table public.transactions
+  add column if not exists category text not null default 'altro'
+    check (category in (
+      'alimentari', 'trasporti', 'casa', 'bollette', 'salute',
+      'svago', 'shopping', 'istruzione', 'stipendio', 'altro'
+    ));
+```
+
+Set fisso di 10 categorie (`TransactionCategory` in `packages/domain`), non estensibile
+dall'utente — coerente con le sezioni fisse: l'obiettivo è capire a colpo d'occhio dove va il
+denaro, non costruire una tassonomia personalizzata. Default `'altro'` sia per le transazioni
+esistenti (create prima di questa slice, quindi senza una categoria) sia per quelle nuove senza
+una categoria più specifica.
+
+**Estrazione lato Edge Function `ai-chat`**: lo schema JSON di `extract_transactions` guadagna un
+campo `category` obbligatorio (stesso set di 10 valori, duplicato in TypeScript — nessuna
+condivisione di tipi tra Dart e la Edge Function in questo progetto); il system prompt istruisce
+il modello a classificare ogni transazione (es. "barbiere" → `svago`, "supermercato" →
+`alimentari`, uno stipendio → `stipendio`). A differenza degli altri campi dello strumento, una
+categoria mancante o non riconosciuta **non invalida** la transazione: `sanitizeTransaction`
+ricade su `'altro'` invece di scartarla — un valore di classificazione imperfetto non deve far
+perdere una spesa reale che l'utente ha effettivamente descritto.
+
+**Non verificabile qui**: nessun runtime Deno disponibile in questa sessione (il download
+dell'installer è bloccato dal proxy di rete, diversamente dalle slice precedenti dove `deno
+check`/`deno lint`/`deno fmt --check` erano stati eseguibili) — le modifiche alla Edge Function
+sono state rilette manualmente per correttezza sintattica e di tipo, non verificate con il
+compilatore TypeScript.
+
 ### Mobile — interop col browser
 
 `apps/mobile/lib/features/notifications/`: `PushNotificationService` (interfaccia) con due

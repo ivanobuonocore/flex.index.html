@@ -50,6 +50,14 @@ Implementate, con dati reali via Supabase:
   lo stipendio di 1500€") ma che l'utente non ha ancora confermato — nessuna transazione
   suggerita dall'AI conta nel saldo finché non viene confermata esplicitamente (AI Constitution,
   Principio 1).
+- **transaction (categorie)** (Fase 3 slice 7C, "Bilancio con categorie" — richiesta esplicita
+  dell'utente) — `TransactionCategory` (10 valori fissi: Alimentari/Trasporti/Casa/Bollette/
+  Salute/Svago/Shopping/Istruzione/Stipendio/Altro, non estensibile dall'utente). Picker nella
+  creazione/modifica manuale (`create_edit_transaction_sheet.dart`); ogni riga del Bilancio (per
+  Workspace e globale) mostra la categoria. L'Edge Function `ai-chat` classifica automaticamente
+  ogni transazione che estrae dalla Chat (es. "barbiere" → Svago, "supermercato" → Alimentari) —
+  una categoria mancante o non riconosciuta ricade su "Altro" invece di far scartare la
+  transazione: un errore di classificazione non deve far perdere una spesa reale.
 - **notifications** (Fase 3 slice 4, aggiunta oltre allo scaffold originale — richiesta reale
   dell'utente, che ha esplicitamente rifiutato l'alternativa "elenco promemoria solo in app" per
   volere notifiche di sistema vere) — prima slice: attivazione (permesso + iscrizione Web Push) e

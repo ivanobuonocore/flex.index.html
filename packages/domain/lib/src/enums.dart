@@ -36,3 +36,24 @@ enum TransactionStatus { pending, confirmed }
 /// Entrata o uscita (Domain Model, entità Transaction). `amountCents` resta
 /// sempre positivo: è questo campo a determinare il segno nel bilancio.
 enum TransactionType { income, expense }
+
+/// Categoria di una Transazione (Domain Model, entità Transaction — Fase 3,
+/// slice 7C, "Bilancio con categorie": richiesta esplicita dell'utente che
+/// una spesa come "barbiere" venga classificata, non solo registrata).
+/// Un set fisso e piccolo, non estensibile dall'utente: coerente con le
+/// sezioni fisse, l'obiettivo è capire a colpo d'occhio dove va il denaro,
+/// non costruire una tassonomia personalizzata. [altro] è il fallback quando
+/// l'AI non riconosce una categoria più specifica o per le voci create prima
+/// di questa slice.
+enum TransactionCategory {
+  alimentari,
+  trasporti,
+  casa,
+  bollette,
+  salute,
+  svago,
+  shopping,
+  istruzione,
+  stipendio,
+  altro,
+}

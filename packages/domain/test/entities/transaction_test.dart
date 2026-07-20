@@ -15,6 +15,7 @@ void main() {
         status: TransactionStatus.pending,
         createdByAi: true,
         createdAt: DateTime.utc(2026, 6, 15),
+        category: TransactionCategory.svago,
       );
 
       final confirmed =
@@ -28,6 +29,27 @@ void main() {
       expect(confirmed.workspaceId, transaction.workspaceId);
       expect(confirmed.chatId, transaction.chatId);
       expect(confirmed.createdByAi, transaction.createdByAi);
+      expect(confirmed.category, transaction.category);
+
+      final recategorized =
+          transaction.copyWith(category: TransactionCategory.altro);
+      expect(recategorized.category, TransactionCategory.altro);
+      expect(recategorized.status, transaction.status);
+    });
+
+    test('category ha come default TransactionCategory.altro', () {
+      final transaction = Transaction(
+        id: 't1',
+        workspaceId: 'w1',
+        type: TransactionType.expense,
+        description: 'Varie',
+        amountCents: 500,
+        occurredAt: DateTime.utc(2026, 6, 15),
+        status: TransactionStatus.confirmed,
+        createdAt: DateTime.utc(2026, 6, 15),
+      );
+
+      expect(transaction.category, TransactionCategory.altro);
     });
 
     test('due Transaction con stessi campi sono uguali per valore', () {

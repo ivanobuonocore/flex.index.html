@@ -15,6 +15,7 @@ class FakeTransactionRepository implements TransactionRepository {
   Transaction? lastUpdated;
   String? lastConfirmedId;
   String? lastDeletedId;
+  TransactionCategory? lastCreatedCategory;
 
   void emit(List<Transaction> transactions) => _controller.add(transactions);
 
@@ -30,7 +31,9 @@ class FakeTransactionRepository implements TransactionRepository {
     required int amountCents,
     String currency = 'EUR',
     required DateTime occurredAt,
+    TransactionCategory category = TransactionCategory.altro,
   }) async {
+    lastCreatedCategory = category;
     final result = createResult ??
         const Result<Transaction>.err(
             ValidationFailure('Nessun risultato configurato.'));

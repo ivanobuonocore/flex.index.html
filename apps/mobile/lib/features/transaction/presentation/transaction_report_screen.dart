@@ -6,6 +6,7 @@ import 'package:pip_domain/pip_domain.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
+import '../application/transaction_category_meta.dart';
 import '../application/transaction_controller.dart';
 import 'create_edit_transaction_sheet.dart';
 
@@ -138,7 +139,10 @@ class TransactionReportScreen extends ConsumerWidget {
                       ),
                       title: Text(transaction.description,
                           maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(_formatDate(transaction.occurredAt)),
+                      subtitle: Text(
+                        '${_formatDate(transaction.occurredAt)} · '
+                        '${TransactionCategoryMeta.of(transaction.category).label}',
+                      ),
                       trailing: Text(_formatAmount(transaction.amountCents)),
                       onTap: () => showCreateEditTransactionSheet(
                         context,
@@ -173,7 +177,8 @@ class _PendingTransactionTile extends ConsumerWidget {
         title: Text(transaction.description,
             maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: Text(
-            '${_formatDate(transaction.occurredAt)} · ${_formatAmount(transaction.amountCents)}'),
+            '${_formatDate(transaction.occurredAt)} · ${_formatAmount(transaction.amountCents)} · '
+            '${TransactionCategoryMeta.of(transaction.category).label}'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

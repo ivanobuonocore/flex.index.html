@@ -8,6 +8,7 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../../workspace/application/workspace_controller.dart';
+import '../application/transaction_category_meta.dart';
 import '../application/transaction_controller.dart';
 
 const _italianMonths = [
@@ -157,7 +158,8 @@ class BalanceOverviewScreen extends ConsumerWidget {
                           maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(
                         '${workspaceNames[transaction.workspaceId] ?? "Workspace"} · '
-                        '${_formatDate(transaction.occurredAt)}',
+                        '${_formatDate(transaction.occurredAt)} · '
+                        '${TransactionCategoryMeta.of(transaction.category).label}',
                       ),
                       trailing: Text(_formatAmount(transaction.amountCents)),
                     ),
@@ -274,7 +276,8 @@ class _PendingTransactionTile extends ConsumerWidget {
             maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: Text(
           '$workspaceName · ${_formatDate(transaction.occurredAt)} · '
-          '${_formatAmount(transaction.amountCents)}',
+          '${_formatAmount(transaction.amountCents)} · '
+          '${TransactionCategoryMeta.of(transaction.category).label}',
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
