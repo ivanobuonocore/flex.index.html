@@ -17,7 +17,8 @@ void main() {
         createdAt: DateTime.utc(2026, 6, 15),
       );
 
-      final confirmed = transaction.copyWith(status: TransactionStatus.confirmed);
+      final confirmed =
+          transaction.copyWith(status: TransactionStatus.confirmed);
 
       expect(confirmed.status, TransactionStatus.confirmed);
       expect(confirmed.description, transaction.description);
@@ -67,7 +68,9 @@ void main() {
             createdAt: DateTime.utc(2026, 6, 1),
           );
 
-      expect(withType(TransactionType.expense) == withType(TransactionType.income), isFalse);
+      expect(
+          withType(TransactionType.expense) == withType(TransactionType.income),
+          isFalse);
     });
   });
 }
