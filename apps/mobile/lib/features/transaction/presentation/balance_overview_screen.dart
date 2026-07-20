@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
@@ -34,6 +35,13 @@ const _italianMonths = [
 /// scritte in Chat (in qualsiasi Workspace, o privatamente) confluiscono in
 /// un prospetto unico. Stesso principio "l'AI suggerisce, l'utente decide":
 /// nessuna transazione pending conta nel saldo o nel grafico.
+///
+/// Esclude i Bilanci condivisi ([sharedBalanceCategory]) — Fase 3, "Bilancio
+/// condiviso": richiesta esplicita dell'utente di **due** Bilanci separati,
+/// uno personale e uno condiviso, non un unico totale che li confonda. Senza
+/// questo filtro, le transazioni di un Bilancio condiviso (proprio o di cui
+/// si è membri) finirebbero comunque qui sotto RLS, dato che
+/// `watchTransactions(null)` non filtra per Workspace lato applicazione.
 class BalanceOverviewScreen extends ConsumerWidget {
   const BalanceOverviewScreen({super.key});
 
@@ -43,15 +51,32 @@ class BalanceOverviewScreen extends ConsumerWidget {
     final workspacesAsync = ref.watch(workspacesProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Bilancio')),
+      appBar: AppBar(
+        title: const Text('Bilancio'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.people_outline),
+            tooltip: 'Bilancio condiviso',
+            onPressed: () => context.push('/balance/shared'),
+          ),
+        ],
+      ),
       body: transactionsAsync.when(
         loading: () => const LoadingView(),
         error: (error, stackTrace) => ErrorView(
           message: 'Non è stato possibile caricare il bilancio.',
           onRetry: () => ref.invalidate(transactionsProvider(null)),
         ),
-        data: (transactions) {
+        data: (allTransactions) {
           final now = DateTime.now();
+          final workspaces = workspacesAsync.value ?? const [];
+          final personalWorkspaceIds = workspaces
+              .where((w) => w.category != sharedBalanceCategory)
+              .map((w) => w.id)
+              .toSet();
+          final transactions = allTransactions
+              .where((t) => personalWorkspaceIds.contains(t.workspaceId))
+              .toList(growable: false);
           final confirmed = confirmedThisMonth(transactions, now: now);
           final pending = pendingTransactions(transactions);
 
@@ -65,7 +90,6 @@ class BalanceOverviewScreen extends ConsumerWidget {
             );
           }
 
-          final workspaces = workspacesAsync.value ?? const [];
           final workspaceNames = <String, String>{
             for (final workspace in workspaces) workspace.id: workspace.name,
           };

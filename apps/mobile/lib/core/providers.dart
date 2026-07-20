@@ -12,6 +12,7 @@ import '../features/search/data/supabase_search_repository.dart';
 import '../features/task/data/supabase_task_repository.dart';
 import '../features/transaction/data/supabase_transaction_repository.dart';
 import '../features/workspace/data/supabase_workspace_repository.dart';
+import '../features/workspace/data/supabase_workspace_sharing_repository.dart';
 import 'supabase/supabase_bootstrap.dart';
 
 /// Confini concreti (Supabase) dietro le interfacce di dominio, unico punto
@@ -25,6 +26,11 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 
 final workspaceRepositoryProvider = Provider<WorkspaceRepository>((ref) {
   return SupabaseWorkspaceRepository(ref.watch(supabaseClientProvider));
+});
+
+final workspaceSharingRepositoryProvider =
+    Provider<WorkspaceSharingRepository>((ref) {
+  return SupabaseWorkspaceSharingRepository(ref.watch(supabaseClientProvider));
 });
 
 final noteRepositoryProvider = Provider<NoteRepository>((ref) {

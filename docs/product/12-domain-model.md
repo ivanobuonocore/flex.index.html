@@ -53,6 +53,15 @@ transazioni estratte dall'AI nascono "in attesa di conferma" e diventano definit
 saldo del Workspace, solo su conferma esplicita dell'utente (AI Constitution, Principio 1); l'AI
 classifica anche la categoria, ma un errore di classificazione non impedisce la registrazione.
 
+### WorkspaceMember / WorkspaceInvite
+Aggiunte oltre allo scaffold originale (Fase 3, slice "Bilancio condiviso" — richiesta reale
+dell'utente: condividere il Bilancio con un'altra persona, mantenendo ciascuno il proprio Bilancio
+personale separato). Un Bilancio condiviso è un Workspace libero (categoria
+`sharedBalanceCategory`, non una sezione fissa) a cui un secondo utente viene ammesso tramite
+[WorkspaceInvite] (codice a uso singolo, con scadenza) → [WorkspaceMember] (appartenenza). Scope
+volutamente ridotto: la condivisione riguarda solo le Transazioni di quel Workspace, non
+Note/Attività/Documenti, che restano visibili solo al proprietario.
+
 ### Agent
 Campi: id, nome, descrizione, prompt di sistema, strumenti disponibili, modello AI preferito.
 Relazioni: associato a uno o più Workspace, utilizza Memoria, accede alla Knowledge Base autorizzata.

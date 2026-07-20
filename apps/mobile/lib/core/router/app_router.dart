@@ -13,6 +13,7 @@ import '../../features/search/presentation/search_screen.dart';
 import '../../features/task/presentation/task_list_screen.dart';
 import '../../features/transaction/presentation/balance_overview_screen.dart';
 import '../../features/transaction/presentation/transaction_report_screen.dart';
+import '../../features/workspace/presentation/shared_balance_screen.dart';
 import '../../features/workspace/presentation/workspace_detail_screen.dart';
 import '../../features/workspace/presentation/workspace_list_screen.dart';
 import 'app_shell.dart';
@@ -97,8 +98,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                  path: '/balance',
-                  builder: (context, state) => const BalanceOverviewScreen()),
+                path: '/balance',
+                builder: (context, state) => const BalanceOverviewScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'shared',
+                    builder: (context, state) => const SharedBalanceScreen(),
+                  ),
+                ],
+              ),
             ],
           ),
           StatefulShellBranch(

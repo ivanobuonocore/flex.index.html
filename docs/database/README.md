@@ -402,6 +402,67 @@ runtime in un browser reale (richiesta del permesso, sottoscrizione effettiva, n
 recapitata) — nessun browser disponibile in questo ambiente. Verifica manuale richiesta all'utente
 (vedi `apps/mobile/README.md`, "Limiti noti").
 
+## Fase 3 (slice 8) — Bilancio condiviso
+
+Richiesta esplicita dell'utente: condividere il Bilancio con un'altra persona (account separato),
+con la possibilità che ciascuno mantenga anche un proprio Bilancio personale. Un Bilancio condiviso
+è semplicemente un Workspace "libero" (non una sezione fissa, non lo stesso Workspace personale) a
+cui un secondo utente viene ammesso tramite invito — non introduce Workspace condivisi in generale.
+
+### `public.workspace_members` / `public.workspace_invites`
+
+| Tabella              | Colonne                                                                    |
+|-----------------------|-----------------------------------------------------------------------------|
+| `workspace_members`   | `workspace_id`, `user_id`, `joined_at`, univoco su `(workspace_id, user_id)` |
+| `workspace_invites`   | `workspace_id`, `code` (univoco, 8 esadecimali maiuscoli), `created_by`, `expires_at` (default +7 giorni), `used_at`, `used_by` |
+
+**Scope volutamente ridotto (risposta esplicita dell'utente, "Solo il Bilancio")**: le policy RLS
+aggiuntive di questa migrazione toccano solo `workspaces` (select) e `transactions` (select/insert/
+update/delete). Le policy di `notes`/`tasks`/`documents` non vengono toccate: restano visibili solo
+al proprietario, anche per un Workspace di cui qualcun altro è membro.
+
+**Additivo, non una riscrittura**: le nuove policy (`workspaces_select_member`,
+`transactions_*_member`) sono policy permissive separate — Postgres le combina in OR con quelle
+esistenti (`workspaces_select_own`, `transactions_*_own_workspace`), mai toccate. Esattamente come
+anticipato dal commento nella prima migrazione Fase 1.
+
+### `public.redeem_workspace_invite(code text) returns uuid`
+
+SECURITY DEFINER (non invoker): un invitato non ha — e non deve avere — una policy `select` su
+`workspace_invites` per trovare la riga tramite il codice; questa funzione è l'unico modo per
+farlo, con validazione esplicita dentro la funzione (non un passthrough di privilegi). Verifica:
+codice esistente, non scaduto, non già usato, non creato dallo stesso utente che lo sta redimendo.
+Ritorna solo l'id del Workspace: il client legge poi il Workspace completo tramite la normale
+`watchWorkspaces()`, ora visibile grazie a `workspaces_select_member`.
+
+**Due bug reali trovati e corretti verificando su Postgres locale con due utenti simulati**:
+
+1. **Ricorsione infinita tra le RLS di `workspaces` e `workspace_members`**: `workspaces_select_member`
+   interroga `workspace_members`; la prima versione delle policy di `workspace_members` interrogava a
+   sua volta `workspaces` per verificare la proprietà — Postgres valutava le due RLS a catena
+   all'infinito (`infinite recursion detected in policy for relation workspaces`). Corretto con una
+   funzione `is_workspace_owner(workspace_id)` SECURITY DEFINER: gira con i privilegi di chi l'ha
+   creata (proprietaria anche di `workspaces`), bypassando la RLS su quella tabella e rompendo il
+   ciclo.
+2. **Colonna ambigua in `redeem_workspace_invite`**: la funzione dichiarava `returns table
+   (workspace_id uuid, workspace_name text)` — Postgres espone i nomi delle colonne di ritorno come
+   variabili PL/pgSQL implicite nel corpo della funzione, in conflitto con la colonna omonima usata in
+   `on conflict (workspace_id, user_id)` (`column reference "workspace_id" is ambiguous`). Risolto
+   semplificando la funzione a `returns uuid` (solo l'id, il nome si legge da `watchWorkspaces()`).
+
+**Verificato manualmente su Postgres locale, due utenti simulati (A proprietario, B invitato)**:
+isolamento completo prima dell'invito (0 righe visibili a B su workspace/transazioni/note);
+`redeem_workspace_invite` rifiuta un codice scaduto, un codice già usato, un codice inesistente, e
+il proprietario che prova a unirsi al proprio invito; dopo il redeem B vede il Workspace e le
+transazioni (comprese quelle inserite da A prima della condivisione — non c'è "storico" da
+proteggere in un Workspace appena creato per essere condiviso) e può inserirne di nuove, ma
+l'inserimento di una nota da parte di B viene bloccato dalla RLS esistente (invariata); dopo che A
+rimuove B dai membri, B perde di nuovo ogni accesso.
+
+**Non verificabile qui**: nessuna chiamata reale a `redeem_workspace_invite` tramite Supabase RPC
+(richiede un progetto remoto) — verificato lo stesso comportamento SQL su Postgres locale, non il
+trasporto RPC in sé.
+
 ## Fasi successive
 
 Memory, Agent, Calendar Event, Timeline Event sono già modellate in `packages/domain` ma non

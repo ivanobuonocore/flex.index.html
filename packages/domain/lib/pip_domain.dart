@@ -6,6 +6,7 @@
 library pip_domain;
 
 export 'src/enums.dart';
+export 'src/shared_balance_category.dart';
 export 'src/system_workspace_category.dart';
 
 export 'src/entities/agent.dart';
@@ -21,6 +22,8 @@ export 'src/entities/timeline_event.dart';
 export 'src/entities/transaction.dart';
 export 'src/entities/user.dart';
 export 'src/entities/workspace.dart';
+export 'src/entities/workspace_invite.dart';
+export 'src/entities/workspace_member.dart';
 
 export 'src/repositories/auth_repository.dart';
 export 'src/repositories/chat_repository.dart';
@@ -32,3 +35,4 @@ export 'src/repositories/search_repository.dart';
 export 'src/repositories/task_repository.dart';
 export 'src/repositories/transaction_repository.dart';
 export 'src/repositories/workspace_repository.dart';
+export 'src/repositories/workspace_sharing_repository.dart';

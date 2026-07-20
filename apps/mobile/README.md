@@ -97,6 +97,21 @@ Implementate, con dati reali via Supabase:
   categorie di Transazione (badge colorato in ogni riga del Bilancio), Note/Attività/Documenti
   nelle rispettive liste.
 
+- **transaction (Bilancio condiviso)** (Fase 3, "Bilancio condiviso" — richiesta esplicita
+  dell'utente: condividere il Bilancio con un'altra persona che ha un proprio account, mantenendo
+  ciascuno il proprio Bilancio personale separato) — nuova schermata `SharedBalanceScreen`
+  (`/balance/shared`, raggiungibile da un'icona nell'AppBar del Bilancio globale): crea un Bilancio
+  condiviso (un Workspace libero, categoria `sharedBalanceCategory`) e mostra subito un codice
+  d'invito da condividere, oppure unisciti a uno con un codice ricevuto. La condivisione riguarda
+  **solo le Transazioni** — Note/Attività/Documenti restano visibili solo al proprietario, anche
+  per un Workspace di cui qualcun altro è membro. Il Bilancio globale (`/balance`) esclude i
+  Bilanci condivisi dal totale aggregato: restano due Bilanci separati, mai mescolati. Nuove tabelle
+  `workspace_members`/`workspace_invites` e funzione `redeem_workspace_invite` (SECURITY DEFINER) —
+  vedi `docs/database/README.md` per il dettaglio delle RLS (additive, non una riscrittura di
+  quelle esistenti) e due bug reali trovati e corretti verificando su Postgres locale con due
+  utenti simulati (ricorsione infinita tra le RLS di `workspaces`/`workspace_members`, colonna
+  ambigua nella funzione di redeem).
+
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
 
@@ -146,6 +161,12 @@ Non ancora presenti: memory, settings, billing.
   presuppone funzioni in produzione — un gap tra "scritto nel repo" e "applicato al database" ha
   già causato un fallimento reale in produzione (salvataggio di una Transazione dopo la slice 7C,
   prima che la colonna `category` fosse effettivamente pushata).
+- **Bilancio condiviso**: il codice d'invito va condiviso manualmente dall'utente (messaggio,
+  chiamata, ecc.) — nessuna infrastruttura email/deep-link in questa slice. La migrazione
+  `20260721160000_workspace_sharing.sql` (tabelle `workspace_members`/`workspace_invites`, RLS
+  aggiuntive, funzione `redeem_workspace_invite`) va applicata manualmente al progetto Supabase
+  reale come tutte le altre (vedi il punto sopra): senza di essa, creare un Bilancio condiviso o
+  redimere un codice fallirà con un errore lato Supabase (tabella/funzione inesistente).
 - `google_fonts` (Manrope, redesign estetico) scarica il font a runtime da fonts.gstatic.com: in
   `flutter test` questo viene evitato del tutto (`isRunningInFlutterTest`, in
   `packages/design-system/lib/src/testing/`) perché in questa sandbox quel dominio non è
