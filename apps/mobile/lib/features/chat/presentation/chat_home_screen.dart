@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -224,9 +226,24 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
   final _scrollController = ScrollController();
   bool _scrolledInitially = false;
 
+  // Non deriva più direttamente da `messageFormControllerProvider.isLoading`:
+  // misurando lo scroll frame per frame (vedi scroll_diagnostic_test.dart) si
+  // vede che la risposta HTTP di sendMessage (che fa scattare isLoading a
+  // false) arriva tipicamente PRIMA della notifica Realtime dell'insert del
+  // messaggio dell'assistente (due canali indipendenti, con latenze
+  // indipendenti). Nascondere la bolla "sta scrivendo" a isLoading=false
+  // toglieva contenuto dalla lista mentre lo scroll era ancorato in fondo:
+  // Flutter corregge la posizione istantaneamente, senza animazione — lo
+  // scatto "sale e poi scende" segnalato dall'utente. Resta visibile finché
+  // non arriva davvero l'ultimo messaggio dell'assistente, con un timeout di
+  // sicurezza in caso di errore (nessun messaggio in arrivo).
+  bool _waitingForReply = false;
+  Timer? _waitingForReplyTimeout;
+
   @override
   void dispose() {
     _scrollController.dispose();
+    _waitingForReplyTimeout?.cancel();
     super.dispose();
   }
 
@@ -248,25 +265,39 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(messagesProvider(widget.chatId), (_, __) {
+    ref.listen(messagesProvider(widget.chatId), (_, next) {
       final optimisticNotifier =
           ref.read(optimisticMessageProvider(widget.chatId).notifier);
       if (optimisticNotifier.state != null) optimisticNotifier.state = null;
+      final messages = next.value;
+      if (_waitingForReply &&
+          messages != null &&
+          messages.isNotEmpty &&
+          messages.last.role == MessageRole.ai) {
+        _waitingForReplyTimeout?.cancel();
+        setState(() => _waitingForReply = false);
+      }
       _scrollToBottom();
     });
-    // Solo quando l'invio INIZIA (per rivelare la bolla "sta scrivendo…"):
-    // quando l'invio finisce, il nuovo messaggio dell'assistente arriva quasi
-    // in contemporanea via Realtime e il listener sopra già scorre in fondo —
-    // due animazioni di scroll indipendenti avviate nello stesso istante
-    // erano la causa dello "scatto" segnalato dall'utente.
     ref.listen(
       messageFormControllerProvider.select((state) => state.isLoading),
       (previous, isLoading) {
-        if (isLoading) _scrollToBottom();
+        if (isLoading) {
+          setState(() => _waitingForReply = true);
+          _scrollToBottom();
+          return;
+        }
+        // Non nasconde subito la bolla: aspetta il messaggio reale (vedi
+        // sopra) o, se non arriva mai (es. errore), il timeout di sicurezza.
+        _waitingForReplyTimeout?.cancel();
+        _waitingForReplyTimeout = Timer(const Duration(seconds: 5), () {
+          if (mounted && _waitingForReply) {
+            setState(() => _waitingForReply = false);
+          }
+        });
       },
     );
     final messagesAsync = ref.watch(messagesProvider(widget.chatId));
-    final isSending = ref.watch(messageFormControllerProvider).isLoading;
     final optimisticMessage =
         ref.watch(optimisticMessageProvider(widget.chatId));
 
@@ -281,7 +312,7 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
           ...messages,
           if (optimisticMessage != null) optimisticMessage,
         ];
-        if (displayMessages.isEmpty && !isSending) {
+        if (displayMessages.isEmpty && !_waitingForReply) {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(AppSpacing.xl),
@@ -297,7 +328,7 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
           _scrolledInitially = true;
           _scrollToBottom(animate: false);
         }
-        final itemCount = displayMessages.length + (isSending ? 1 : 0);
+        final itemCount = displayMessages.length + (_waitingForReply ? 1 : 0);
         return ListView.builder(
           controller: _scrollController,
           padding: const EdgeInsets.all(AppSpacing.md),

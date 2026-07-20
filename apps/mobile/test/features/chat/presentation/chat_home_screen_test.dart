@@ -334,4 +334,160 @@ void main() {
     expect(find.text('Ciao subito'), findsOneWidget);
     expect(find.textContaining('sta scrivendo'), findsNothing);
   });
+
+  testWidgets(
+      'lo scroll non torna mai indietro se il messaggio dell\'assistente '
+      'arriva dopo che isLoading è già tornato false', (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    // Una conversazione lunga: senza contenuto sufficiente non ci sarebbe
+    // nulla da "far saltare" nello scroll.
+    final messages = [
+      for (var i = 0; i < 30; i++)
+        Message(
+          id: 'm$i',
+          chatId: 'c1',
+          role: i.isEven ? MessageRole.user : MessageRole.ai,
+          content: 'Messaggio numero $i, abbastanza lungo da occupare più '
+              'di una riga nella bolla della chat.',
+          timestamp: DateTime.utc(2026, 1, 1).add(Duration(minutes: i)),
+        ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(const []);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit(messages);
+    await tester.pumpAndSettle();
+
+    double offsetOf() =>
+        tester.widget<ListView>(find.byType(ListView)).controller!.offset;
+
+    final offsets = <double>[offsetOf()];
+
+    final pendingSend = Completer<void>();
+    fakeMessage.pendingSend = pendingSend;
+
+    await tester.enterText(find.byType(TextField), 'Nuovo messaggio di test');
+    await tester.tap(find.byIcon(Icons.send));
+
+    // Campiona l'offset ad ogni frame, senza pumpAndSettle (che
+    // nasconderebbe proprio il tipo di salto verificato qui): prima
+    // l'animazione di scroll per l'eco locale + bolla "sta scrivendo".
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      offsets.add(offsetOf());
+    }
+
+    // L'eco reale del messaggio utente arriva via Realtime.
+    fakeMessage.emit([
+      ...messages,
+      Message(
+        id: 'm-new',
+        chatId: 'c1',
+        role: MessageRole.user,
+        content: 'Nuovo messaggio di test',
+        timestamp: DateTime.utc(2026, 1, 1, 1),
+      ),
+    ]);
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      offsets.add(offsetOf());
+    }
+
+    // L'invio HTTP termina (isLoading -> false) PRIMA che il messaggio
+    // dell'assistente sia arrivato via Realtime — la sequenza temporale che
+    // causava lo scatto: la bolla "sta scrivendo" non deve sparire ancora.
+    pendingSend.complete();
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      offsets.add(offsetOf());
+    }
+    expect(find.textContaining('sta scrivendo'), findsOneWidget);
+
+    // Solo ora arriva la risposta reale dell'assistente.
+    fakeMessage.emit([
+      ...messages,
+      Message(
+        id: 'm-new',
+        chatId: 'c1',
+        role: MessageRole.user,
+        content: 'Nuovo messaggio di test',
+        timestamp: DateTime.utc(2026, 1, 1, 1),
+      ),
+      Message(
+        id: 'm-ai-reply',
+        chatId: 'c1',
+        role: MessageRole.ai,
+        content: 'Risposta dell\'assistente.',
+        timestamp: DateTime.utc(2026, 1, 1, 1, 1),
+      ),
+    ]);
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      offsets.add(offsetOf());
+    }
+
+    // Il cuore della verifica: lo scroll non deve mai tornare indietro in
+    // modo brusco (la bolla "sta scrivendo" che sparisce prima che arrivi il
+    // messaggio reale causava un salto istantaneo, senza animazione, verso
+    // l'alto). Una piccola tolleranza copre solo l'arrotondamento in virgola
+    // mobile tra un frame e l'altro, non un vero e proprio salto indietro.
+    for (var i = 1; i < offsets.length; i++) {
+      expect(
+        offsets[i],
+        greaterThanOrEqualTo(offsets[i - 1] - 0.5),
+        reason: 'Salto indietro dello scroll tra il frame ${i - 1} '
+            '(${offsets[i - 1]}) e il frame $i (${offsets[i]})',
+      );
+    }
+
+    await tester.pumpAndSettle();
+    expect(find.textContaining('sta scrivendo'), findsNothing);
+  });
 }
