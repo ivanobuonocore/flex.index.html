@@ -490,4 +490,95 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('sta scrivendo'), findsNothing);
   });
+
+  testWidgets(
+      'un timeout di sicurezza rimasto da un invio precedente non nasconde '
+      'la bolla di un invio successivo ancora in corso', (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(const []);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit(const []);
+    await tester.pumpAndSettle();
+
+    // Primo invio: finisce rapidamente senza che arrivi mai una risposta
+    // dell'assistente (come un fallimento silenzioso) — a isLoading->false
+    // pianifica il timeout di sicurezza di 5s, che a questo punto non ha
+    // ancora nulla da ripulire (nessuna bolla in corso più avanti).
+    final firstPending = Completer<void>();
+    fakeMessage.pendingSend = firstPending;
+    await tester.enterText(find.byType(TextField), 'Primo');
+    await tester.tap(find.byIcon(Icons.send));
+    await tester.pump();
+    firstPending.complete();
+    await tester.pump();
+
+    // Prima che quel timeout scada, arriva un secondo invio, che deve
+    // restare "in corso" più a lungo.
+    await tester.pump(const Duration(seconds: 2));
+    final secondPending = Completer<void>();
+    fakeMessage.pendingSend = secondPending;
+    await tester.enterText(find.byType(TextField), 'Secondo');
+    await tester.tap(find.byIcon(Icons.send));
+    await tester.pump();
+
+    expect(find.textContaining('sta scrivendo'), findsOneWidget);
+
+    // Oltrepassa i 5s dal PRIMO isLoading->false: il timeout "orfano"
+    // scatterebbe qui se non fosse stato annullato all'inizio del secondo
+    // invio — la bolla del secondo invio deve restare visibile.
+    await tester.pump(const Duration(seconds: 4));
+    expect(find.textContaining('sta scrivendo'), findsOneWidget);
+
+    secondPending.complete();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('sta scrivendo'), findsNothing);
+  });
 }

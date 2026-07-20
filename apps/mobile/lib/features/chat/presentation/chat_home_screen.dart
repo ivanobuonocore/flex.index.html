@@ -283,6 +283,15 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
       messageFormControllerProvider.select((state) => state.isLoading),
       (previous, isLoading) {
         if (isLoading) {
+          // Annulla un eventuale timeout di sicurezza rimasto da un
+          // isLoading->false precedente e NON collegato a questo invio (es.
+          // quello innocuo generato dalla stessa inizializzazione del
+          // provider all'apertura della chat, coperto anche da un test
+          // dedicato): senza questa cancellazione, quel timer può scattare
+          // a metà di un invio successivo e nascondere la bolla troppo
+          // presto — bug osservato riproducendo la sequenza in un browser
+          // reale con log di diagnostica.
+          _waitingForReplyTimeout?.cancel();
           setState(() => _waitingForReply = true);
           _scrollToBottom();
           return;
