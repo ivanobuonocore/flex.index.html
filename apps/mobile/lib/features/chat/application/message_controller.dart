@@ -10,6 +10,20 @@ final messagesProvider =
   return ref.watch(messageRepositoryProvider).watchMessages(chatId);
 });
 
+/// Eco locale del messaggio dell'utente appena inviato, mostrata subito senza
+/// aspettare il giro di andata/ritorno di Realtime — senza, la bolla "sta
+/// scrivendo" (mostrata a `isLoading == true`, prima ancora che il messaggio
+/// reale sia stato scritto su `messages`) appariva come ultimo elemento della
+/// lista sopra un messaggio dell'utente non ancora visibile: quando il
+/// messaggio reale arrivava (spostando in basso la bolla "sta scrivendo"), lo
+/// scatto risultante è quello segnalato dall'utente ad ogni invio, non solo
+/// quando l'assistente risponde. Ripulita non appena arriva un aggiornamento
+/// reale di `messagesProvider` (che, per come `sendMessage` inserisce prima
+/// la riga utente e solo dopo chiama l'AI Engine, è sempre l'eco del
+/// messaggio appena inviato) o al termine di `send()`, qualunque sia l'esito.
+final optimisticMessageProvider =
+    StateProvider.autoDispose.family<Message?, String>((ref, chatId) => null);
+
 final messageFormControllerProvider =
     AsyncNotifierProvider.autoDispose<MessageFormController, void>(
         MessageFormController.new);

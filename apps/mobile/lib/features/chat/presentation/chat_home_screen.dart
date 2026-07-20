@@ -248,7 +248,12 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(messagesProvider(widget.chatId), (_, __) => _scrollToBottom());
+    ref.listen(messagesProvider(widget.chatId), (_, __) {
+      final optimisticNotifier =
+          ref.read(optimisticMessageProvider(widget.chatId).notifier);
+      if (optimisticNotifier.state != null) optimisticNotifier.state = null;
+      _scrollToBottom();
+    });
     // Solo quando l'invio INIZIA (per rivelare la bolla "sta scrivendo…"):
     // quando l'invio finisce, il nuovo messaggio dell'assistente arriva quasi
     // in contemporanea via Realtime e il listener sopra già scorre in fondo —
@@ -262,6 +267,8 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
     );
     final messagesAsync = ref.watch(messagesProvider(widget.chatId));
     final isSending = ref.watch(messageFormControllerProvider).isLoading;
+    final optimisticMessage =
+        ref.watch(optimisticMessageProvider(widget.chatId));
 
     return messagesAsync.when(
       loading: () => const LoadingView(),
@@ -270,7 +277,11 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
         onRetry: () => ref.invalidate(messagesProvider(widget.chatId)),
       ),
       data: (messages) {
-        if (messages.isEmpty && !isSending) {
+        final displayMessages = [
+          ...messages,
+          if (optimisticMessage != null) optimisticMessage,
+        ];
+        if (displayMessages.isEmpty && !isSending) {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(AppSpacing.xl),
@@ -286,14 +297,14 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
           _scrolledInitially = true;
           _scrollToBottom(animate: false);
         }
-        final itemCount = messages.length + (isSending ? 1 : 0);
+        final itemCount = displayMessages.length + (isSending ? 1 : 0);
         return ListView.builder(
           controller: _scrollController,
           padding: const EdgeInsets.all(AppSpacing.md),
           itemCount: itemCount,
           itemBuilder: (context, index) {
-            if (index == messages.length) return const _TypingBubble();
-            return _MessageBubble(message: messages[index]);
+            if (index == displayMessages.length) return const _TypingBubble();
+            return _MessageBubble(message: displayMessages[index]);
           },
         );
       },
@@ -537,6 +548,14 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
   }
 
   Future<void> _submit() async {
+    // Al posto di `TextField(enabled: !isSending)`: disabilitare un campo che
+    // ha il focus gli fa perdere il focus (e chiude la tastiera) ad ogni
+    // invio, un secondo scatto indipendente da quello dello scroll. La
+    // protezione da doppio invio resta, solo senza toccare il focus.
+    if (ref.read(messageFormControllerProvider).isLoading ||
+        _isUploadingPhoto) {
+      return;
+    }
     final content = _controller.text;
     if (content.trim().isEmpty) return;
 
@@ -567,6 +586,18 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     _controller.clear();
     setState(() => _pendingPhoto = null);
 
+    // Eco locale immediata: mostra subito la bolla dell'utente, senza
+    // aspettare il giro di andata/ritorno di Realtime (vedi
+    // optimisticMessageProvider in message_controller.dart).
+    ref.read(optimisticMessageProvider(widget.chatId).notifier).state = Message(
+      id: 'optimistic-${DateTime.now().microsecondsSinceEpoch}',
+      chatId: widget.chatId,
+      role: MessageRole.user,
+      content: content.trim(),
+      timestamp: DateTime.now(),
+      attachmentIds: attachmentIds,
+    );
+
     final failure = await ref.read(messageFormControllerProvider.notifier).send(
           chatId: widget.chatId,
           workspaceId: widget.transactionsWorkspaceId,
@@ -575,6 +606,10 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
         );
 
     if (!mounted) return;
+    // Se il messaggio reale non è ancora arrivato via Realtime a questo
+    // punto (es. `send` fallito prima ancora di scrivere la riga utente),
+    // non deve restare un'eco fantasma in lista.
+    ref.read(optimisticMessageProvider(widget.chatId).notifier).state = null;
     if (failure != null) {
       setState(() => _errorMessage = failure.message);
     }
@@ -667,7 +702,6 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                     controller: _controller,
                     minLines: 1,
                     maxLines: 4,
-                    enabled: !isSending,
                     decoration:
                         const InputDecoration(hintText: 'Scrivi un messaggio…'),
                     onSubmitted: (_) => _submit(),

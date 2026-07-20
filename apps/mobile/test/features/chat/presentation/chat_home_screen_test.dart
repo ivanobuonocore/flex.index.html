@@ -243,4 +243,95 @@ void main() {
 
     expect(find.textContaining('sta scrivendo'), findsNothing);
   });
+
+  testWidgets(
+      'il messaggio dell\'utente appare subito, senza aspettare Realtime, '
+      'e non si duplica quando arriva quello reale', (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(const []);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit(const []);
+    await tester.pumpAndSettle();
+
+    final pendingSend = Completer<void>();
+    fakeMessage.pendingSend = pendingSend;
+
+    await tester.enterText(find.byType(TextField), 'Ciao subito');
+    await tester.tap(find.byIcon(Icons.send));
+    await tester.pump();
+
+    // Compare subito, prima che il repository fittizio abbia anche solo
+    // risolto sendMessage (pendingSend non è ancora completato): non aspetta
+    // il giro di andata/ritorno di Realtime.
+    expect(find.text('Ciao subito'), findsOneWidget);
+
+    // Il messaggio reale arriva via Realtime (come farebbe la sottoscrizione
+    // Postgres) mentre l'eco locale è ancora visibile: non deve duplicarsi.
+    fakeMessage.emit([
+      Message(
+        id: 'm1',
+        chatId: 'c1',
+        role: MessageRole.user,
+        content: 'Ciao subito',
+        timestamp: DateTime.now(),
+      ),
+    ]);
+    await tester.pump();
+
+    expect(find.text('Ciao subito'), findsOneWidget);
+
+    pendingSend.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ciao subito'), findsOneWidget);
+    expect(find.textContaining('sta scrivendo'), findsNothing);
+  });
 }
