@@ -229,17 +229,27 @@ Deno.serve(async (req) => {
       return jsonError("Chat non trovata.", 404);
     }
 
-    const { data: historyRows, error: historyError } = await supabase
+    // Ordine decrescente + limite, poi si ripristina l'ordine cronologico
+    // sotto: `ascending + limit` prenderebbe i primi N messaggi della chat
+    // (i più vecchi), non gli ultimi — con una conversazione più lunga di
+    // MAX_HISTORY_MESSAGES, quella finestra "congelata" nel passato può
+    // finire su una riga dell'assistente, e Anthropic rifiuta una richiesta
+    // la cui cronologia non termina con un messaggio dell'utente (errore
+    // "invalid_request_error": "This model does not support assistant
+    // message prefill").
+    const { data: historyRowsDesc, error: historyError } = await supabase
       .from("messages")
       .select("role, content, attachment_ids")
       .eq("chat_id", body.chatId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(MAX_HISTORY_MESSAGES);
 
     if (historyError) {
       console.error("ai-chat: errore lettura messages", historyError);
       return jsonError("Non è stato possibile leggere la conversazione.", 500);
     }
+
+    const historyRows = (historyRowsDesc ?? []).slice().reverse();
 
     const { systemPrompt, sourceReferences, transactionToolEnabled } =
       await buildSystemPrompt(
@@ -249,7 +259,7 @@ Deno.serve(async (req) => {
 
     const anthropicMessages = await buildAnthropicMessages(
       supabase,
-      historyRows ?? [],
+      historyRows,
     );
 
     if (anthropicMessages.length === 0) {
