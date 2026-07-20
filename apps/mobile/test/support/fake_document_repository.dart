@@ -5,7 +5,8 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
 
 class FakeDocumentRepository implements DocumentRepository {
-  FakeDocumentRepository({this.uploadResult, this.downloadUrlResult, this.getDocumentResult});
+  FakeDocumentRepository(
+      {this.uploadResult, this.downloadUrlResult, this.getDocumentResult});
 
   final _controller = StreamController<List<Document>>.broadcast();
   Result<Document>? uploadResult;

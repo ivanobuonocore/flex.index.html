@@ -40,7 +40,8 @@ class TransactionReportScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Bilancio')),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => showCreateEditTransactionSheet(context, workspaceId: workspaceId),
+        onPressed: () =>
+            showCreateEditTransactionSheet(context, workspaceId: workspaceId),
         child: const Icon(Icons.add),
       ),
       body: transactionsAsync.when(
@@ -60,8 +61,8 @@ class TransactionReportScreen extends ConsumerWidget {
               title: 'Nessuna transazione ancora',
               message: 'Aggiungi entrate o uscite, oppure scrivile in Chat.',
               action: FilledButton(
-                onPressed: () =>
-                    showCreateEditTransactionSheet(context, workspaceId: workspaceId),
+                onPressed: () => showCreateEditTransactionSheet(context,
+                    workspaceId: workspaceId),
                 child: const Text('Aggiungi la prima transazione'),
               ),
             );
@@ -85,17 +86,20 @@ class TransactionReportScreen extends ConsumerWidget {
                         style: AppTypography.caption,
                       ),
                       const SizedBox(height: AppSpacing.xs),
-                      Text(_formatSignedAmount(balance), style: AppTypography.heading1),
+                      Text(_formatSignedAmount(balance),
+                          style: AppTypography.heading1),
                       const SizedBox(height: AppSpacing.sm),
                       Row(
                         children: [
                           Icon(Icons.add_circle_outline,
-                              size: 16, color: Theme.of(context).colorScheme.primary),
+                              size: 16,
+                              color: Theme.of(context).colorScheme.primary),
                           const SizedBox(width: AppSpacing.xs),
                           Text('Entrate: ${_formatAmount(income)}'),
                           const SizedBox(width: AppSpacing.md),
                           Icon(Icons.remove_circle_outline,
-                              size: 16, color: Theme.of(context).colorScheme.error),
+                              size: 16,
+                              color: Theme.of(context).colorScheme.error),
                           const SizedBox(width: AppSpacing.xs),
                           Text('Uscite: ${_formatAmount(expense)}'),
                         ],
@@ -106,9 +110,11 @@ class TransactionReportScreen extends ConsumerWidget {
               ),
               if (pending.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
-                const Text('In attesa di conferma', style: AppTypography.heading3),
+                const Text('In attesa di conferma',
+                    style: AppTypography.heading3),
                 const SizedBox(height: AppSpacing.sm),
-                ...pending.map((transaction) => _PendingTransactionTile(transaction: transaction)),
+                ...pending.map((transaction) =>
+                    _PendingTransactionTile(transaction: transaction)),
               ],
               const SizedBox(height: AppSpacing.lg),
               const Text('Transazioni', style: AppTypography.heading3),
@@ -164,22 +170,26 @@ class _PendingTransactionTile extends ConsumerWidget {
               ? Icons.add_circle_outline
               : Icons.remove_circle_outline,
         ),
-        title: Text(transaction.description, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text('${_formatDate(transaction.occurredAt)} · ${_formatAmount(transaction.amountCents)}'),
+        title: Text(transaction.description,
+            maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(
+            '${_formatDate(transaction.occurredAt)} · ${_formatAmount(transaction.amountCents)}'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
               icon: const Icon(Icons.check_circle_outline),
               tooltip: 'Conferma',
-              onPressed: () =>
-                  ref.read(transactionFormControllerProvider.notifier).confirm(transaction.id),
+              onPressed: () => ref
+                  .read(transactionFormControllerProvider.notifier)
+                  .confirm(transaction.id),
             ),
             IconButton(
               icon: const Icon(Icons.close),
               tooltip: 'Scarta',
-              onPressed: () =>
-                  ref.read(transactionFormControllerProvider.notifier).delete(transaction.id),
+              onPressed: () => ref
+                  .read(transactionFormControllerProvider.notifier)
+                  .delete(transaction.id),
             ),
           ],
         ),

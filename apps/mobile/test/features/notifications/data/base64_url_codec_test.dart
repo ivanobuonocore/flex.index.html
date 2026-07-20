@@ -12,7 +12,8 @@ void main() {
     expect(decodeBase64Url(encoded), bytes);
   });
 
-  test('decodeBase64Url decodifica una vera chiave pubblica VAPID (65 byte, '
+  test(
+      'decodeBase64Url decodifica una vera chiave pubblica VAPID (65 byte, '
       'punto EC non compresso)', () {
     // Generata con `npx web-push generate-vapid-keys` per la verifica di
     // questa slice (docs/database/README.md, "Notifiche push vere").

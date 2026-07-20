@@ -25,7 +25,8 @@ class SupabaseChatRepository implements ChatRepository {
     if (_client.auth.currentUser?.id == null) return Stream.value(const []);
 
     final query = _client.from(_table).stream(primaryKey: ['id']);
-    final scoped = workspaceId == null ? query : query.eq('workspace_id', workspaceId);
+    final scoped =
+        workspaceId == null ? query : query.eq('workspace_id', workspaceId);
 
     return scoped
         .order('created_at', ascending: false)
@@ -39,10 +40,12 @@ class SupabaseChatRepository implements ChatRepository {
   }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) {
-      return const Result.err(AuthFailure('Devi accedere per creare una chat.'));
+      return const Result.err(
+          AuthFailure('Devi accedere per creare una chat.'));
     }
     if (title.trim().isEmpty) {
-      return const Result.err(ValidationFailure('Il titolo della chat è obbligatorio.'));
+      return const Result.err(
+          ValidationFailure('Il titolo della chat è obbligatorio.'));
     }
 
     try {
@@ -59,7 +62,8 @@ class SupabaseChatRepository implements ChatRepository {
           .single();
       return Result.ok(_toDomain(row));
     } catch (e) {
-      return Result.err(UnexpectedFailure('Non è stato possibile creare la chat.', cause: e));
+      return Result.err(
+          UnexpectedFailure('Non è stato possibile creare la chat.', cause: e));
     }
   }
 
@@ -68,12 +72,12 @@ class SupabaseChatRepository implements ChatRepository {
     try {
       await _client
           .from(_table)
-          .update({'status': ChatStatus.archived.name})
-          .eq('id', chatId);
+          .update({'status': ChatStatus.archived.name}).eq('id', chatId);
       return const Result.ok(unit);
     } catch (e) {
       return Result.err(
-        UnexpectedFailure('Non è stato possibile archiviare la chat.', cause: e),
+        UnexpectedFailure('Non è stato possibile archiviare la chat.',
+            cause: e),
       );
     }
   }
@@ -87,8 +91,9 @@ class SupabaseChatRepository implements ChatRepository {
       aiModel: row['ai_model'] as String,
       status: ChatStatus.values.byName(row['status'] as String),
       createdAt: DateTime.parse(row['created_at'] as String),
-      lastMessageAt:
-          row['last_message_at'] != null ? DateTime.parse(row['last_message_at'] as String) : null,
+      lastMessageAt: row['last_message_at'] != null
+          ? DateTime.parse(row['last_message_at'] as String)
+          : null,
     );
   }
 }

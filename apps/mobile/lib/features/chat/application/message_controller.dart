@@ -5,12 +5,14 @@ import 'package:pip_shared/pip_shared.dart';
 import '../../../core/providers.dart';
 
 /// Messaggi di una Chat, in tempo reale.
-final messagesProvider = StreamProvider.autoDispose.family<List<Message>, String>((ref, chatId) {
+final messagesProvider =
+    StreamProvider.autoDispose.family<List<Message>, String>((ref, chatId) {
   return ref.watch(messageRepositoryProvider).watchMessages(chatId);
 });
 
 final messageFormControllerProvider =
-    AsyncNotifierProvider.autoDispose<MessageFormController, void>(MessageFormController.new);
+    AsyncNotifierProvider.autoDispose<MessageFormController, void>(
+        MessageFormController.new);
 
 class MessageFormController extends AutoDisposeAsyncNotifier<void> {
   @override

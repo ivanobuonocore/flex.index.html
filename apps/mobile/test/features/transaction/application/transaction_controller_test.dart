@@ -26,14 +26,18 @@ void main() {
   setUp(() {
     fakeRepository = FakeTransactionRepository();
     container = ProviderContainer(
-      overrides: [transactionRepositoryProvider.overrideWithValue(fakeRepository)],
+      overrides: [
+        transactionRepositoryProvider.overrideWithValue(fakeRepository)
+      ],
     );
     addTearDown(container.dispose);
     addTearDown(fakeRepository.dispose);
   });
 
-  test('transactionsProvider riflette lo stream del repository per workspace', () async {
-    final subscription = container.listen(transactionsProvider(workspaceId), (_, __) {});
+  test('transactionsProvider riflette lo stream del repository per workspace',
+      () async {
+    final subscription =
+        container.listen(transactionsProvider(workspaceId), (_, __) {});
     addTearDown(subscription.close);
 
     fakeRepository.emit([expense]);
@@ -45,36 +49,40 @@ void main() {
   test('create con successo non ritorna errore', () async {
     fakeRepository.createResult = Result.ok(expense);
 
-    final failure = await container.read(transactionFormControllerProvider.notifier).create(
-          workspaceId: workspaceId,
-          type: TransactionType.expense,
-          description: 'Barbiere',
-          amountCents: 2300,
-          occurredAt: DateTime.utc(2026, 6, 15),
-        );
+    final failure =
+        await container.read(transactionFormControllerProvider.notifier).create(
+              workspaceId: workspaceId,
+              type: TransactionType.expense,
+              description: 'Barbiere',
+              amountCents: 2300,
+              occurredAt: DateTime.utc(2026, 6, 15),
+            );
 
     expect(failure, isNull);
     expect(fakeRepository.lastCreated, expense);
   });
 
   test('create con importo non valido ritorna un ValidationFailure', () async {
-    fakeRepository.createResult =
-        const Result.err(ValidationFailure('L\'importo deve essere maggiore di zero.'));
+    fakeRepository.createResult = const Result.err(
+        ValidationFailure('L\'importo deve essere maggiore di zero.'));
 
-    final failure = await container.read(transactionFormControllerProvider.notifier).create(
-          workspaceId: workspaceId,
-          type: TransactionType.expense,
-          description: 'Barbiere',
-          amountCents: 0,
-          occurredAt: DateTime.utc(2026, 6, 15),
-        );
+    final failure =
+        await container.read(transactionFormControllerProvider.notifier).create(
+              workspaceId: workspaceId,
+              type: TransactionType.expense,
+              description: 'Barbiere',
+              amountCents: 0,
+              occurredAt: DateTime.utc(2026, 6, 15),
+            );
 
     expect(failure, isA<ValidationFailure>());
   });
 
   test('confirm e delete delegano al repository con l\'id giusto', () async {
-    fakeRepository.confirmResult = Result.ok(expense.copyWith(status: TransactionStatus.confirmed));
-    final controller = container.read(transactionFormControllerProvider.notifier);
+    fakeRepository.confirmResult =
+        Result.ok(expense.copyWith(status: TransactionStatus.confirmed));
+    final controller =
+        container.read(transactionFormControllerProvider.notifier);
 
     await controller.confirm(expense.id);
     expect(fakeRepository.lastConfirmedId, expense.id);
@@ -84,7 +92,8 @@ void main() {
   });
 
   test('updateTransaction delega al repository', () async {
-    final controller = container.read(transactionFormControllerProvider.notifier);
+    final controller =
+        container.read(transactionFormControllerProvider.notifier);
 
     await controller.updateTransaction(expense);
     expect(fakeRepository.lastUpdated, expense);
@@ -94,7 +103,8 @@ void main() {
     test('include solo le transazioni confermate del mese di riferimento', () {
       final now = DateTime.utc(2026, 6, 20);
       final inMonth = expense.copyWith();
-      final lastDayPreviousMonth = expense.copyWith(occurredAt: DateTime.utc(2026, 5, 31));
+      final lastDayPreviousMonth =
+          expense.copyWith(occurredAt: DateTime.utc(2026, 5, 31));
       final pendingInMonth = Transaction(
         id: 'e2',
         workspaceId: workspaceId,

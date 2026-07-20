@@ -29,21 +29,23 @@ class TransactionFormController extends AutoDisposeAsyncNotifier<void> {
     required DateTime occurredAt,
   }) async {
     state = const AsyncLoading();
-    final result = await ref.read(transactionRepositoryProvider).createTransaction(
-          workspaceId: workspaceId,
-          type: type,
-          description: description,
-          amountCents: amountCents,
-          occurredAt: occurredAt,
-        );
+    final result =
+        await ref.read(transactionRepositoryProvider).createTransaction(
+              workspaceId: workspaceId,
+              type: type,
+              description: description,
+              amountCents: amountCents,
+              occurredAt: occurredAt,
+            );
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);
   }
 
   Future<Failure?> updateTransaction(Transaction transaction) async {
     state = const AsyncLoading();
-    final result =
-        await ref.read(transactionRepositoryProvider).updateTransaction(transaction);
+    final result = await ref
+        .read(transactionRepositoryProvider)
+        .updateTransaction(transaction);
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);
   }
@@ -52,8 +54,9 @@ class TransactionFormController extends AutoDisposeAsyncNotifier<void> {
   /// transazione suggerita dall'AI inizia a contare nel saldo.
   Future<Failure?> confirm(String transactionId) async {
     state = const AsyncLoading();
-    final result =
-        await ref.read(transactionRepositoryProvider).confirmTransaction(transactionId);
+    final result = await ref
+        .read(transactionRepositoryProvider)
+        .confirmTransaction(transactionId);
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);
   }
@@ -62,8 +65,9 @@ class TransactionFormController extends AutoDisposeAsyncNotifier<void> {
   /// (transazione confermata) — stessa operazione, label diversa in UI.
   Future<Failure?> delete(String transactionId) async {
     state = const AsyncLoading();
-    final result =
-        await ref.read(transactionRepositoryProvider).deleteTransaction(transactionId);
+    final result = await ref
+        .read(transactionRepositoryProvider)
+        .deleteTransaction(transactionId);
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);
   }
@@ -71,7 +75,8 @@ class TransactionFormController extends AutoDisposeAsyncNotifier<void> {
 
 /// Transazioni confermate che ricadono nel mese di [now] (default: oggi).
 /// Pure, testabile senza Riverpod.
-List<Transaction> confirmedThisMonth(List<Transaction> transactions, {DateTime? now}) {
+List<Transaction> confirmedThisMonth(List<Transaction> transactions,
+    {DateTime? now}) {
   final reference = now ?? DateTime.now();
   return transactions
       .where((t) =>

@@ -121,14 +121,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           children: [
                             Icon(
                               Icons.mark_email_read_outlined,
-                              color: Theme.of(context).colorScheme.onPrimaryContainer,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onPrimaryContainer,
                             ),
                             const SizedBox(width: AppSpacing.sm),
                             Expanded(
                               child: Text(
                                 _infoMessage!,
                                 style: AppTypography.body.copyWith(
-                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onPrimaryContainer,
                                 ),
                               ),
                             ),

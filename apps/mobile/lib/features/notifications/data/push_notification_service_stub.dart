@@ -13,6 +13,5 @@ class _StubPushNotificationService implements PushNotificationService {
       PushSupportStatus.unsupported;
 
   @override
-  Future<PushSubscriptionKeys?> subscribe(String vapidPublicKey) async =>
-      null;
+  Future<PushSubscriptionKeys?> subscribe(String vapidPublicKey) async => null;
 }

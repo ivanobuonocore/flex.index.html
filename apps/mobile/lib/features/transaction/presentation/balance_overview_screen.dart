@@ -84,7 +84,8 @@ class BalanceOverviewScreen extends ConsumerWidget {
               Text(
                 'Tutti i Workspace',
                 style: AppTypography.caption.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  color:
+                      Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -96,9 +97,11 @@ class BalanceOverviewScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Saldo del mese', style: AppTypography.caption),
+                      const Text('Saldo del mese',
+                          style: AppTypography.caption),
                       const SizedBox(height: AppSpacing.xs),
-                      Text(_formatSignedAmount(balance), style: AppTypography.heading1),
+                      Text(_formatSignedAmount(balance),
+                          style: AppTypography.heading1),
                       const SizedBox(height: AppSpacing.sm),
                       _LegendRow(
                         color: AppColors.success,
@@ -117,18 +120,21 @@ class BalanceOverviewScreen extends ConsumerWidget {
               ),
               if (pending.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
-                const Text('In attesa di conferma', style: AppTypography.heading3),
+                const Text('In attesa di conferma',
+                    style: AppTypography.heading3),
                 const SizedBox(height: AppSpacing.sm),
                 for (final transaction in pending) ...[
                   _PendingTransactionTile(
                     transaction: transaction,
-                    workspaceName: workspaceNames[transaction.workspaceId] ?? 'Workspace',
+                    workspaceName:
+                        workspaceNames[transaction.workspaceId] ?? 'Workspace',
                   ),
                   const SizedBox(height: AppSpacing.xs),
                 ],
               ],
               const SizedBox(height: AppSpacing.lg),
-              const Text('Transazioni confermate', style: AppTypography.heading3),
+              const Text('Transazioni confermate',
+                  style: AppTypography.heading3),
               const SizedBox(height: AppSpacing.sm),
               if (confirmed.isEmpty)
                 const Padding(
@@ -165,7 +171,8 @@ class BalanceOverviewScreen extends ConsumerWidget {
 }
 
 class _BalancePieChart extends StatelessWidget {
-  const _BalancePieChart({required this.incomeCents, required this.expenseCents});
+  const _BalancePieChart(
+      {required this.incomeCents, required this.expenseCents});
 
   final int incomeCents;
   final int expenseCents;
@@ -221,7 +228,8 @@ class _BalancePieChart extends StatelessWidget {
 }
 
 class _LegendRow extends StatelessWidget {
-  const _LegendRow({required this.color, required this.label, required this.amountCents});
+  const _LegendRow(
+      {required this.color, required this.label, required this.amountCents});
 
   final Color color;
   final String label;
@@ -239,14 +247,16 @@ class _LegendRow extends StatelessWidget {
         const SizedBox(width: AppSpacing.xs),
         Text(label),
         const Spacer(),
-        Text(_formatAmount(amountCents), style: AppTypography.body.copyWith(color: color)),
+        Text(_formatAmount(amountCents),
+            style: AppTypography.body.copyWith(color: color)),
       ],
     );
   }
 }
 
 class _PendingTransactionTile extends ConsumerWidget {
-  const _PendingTransactionTile({required this.transaction, required this.workspaceName});
+  const _PendingTransactionTile(
+      {required this.transaction, required this.workspaceName});
 
   final Transaction transaction;
   final String workspaceName;
@@ -260,7 +270,8 @@ class _PendingTransactionTile extends ConsumerWidget {
               ? Icons.add_circle_outline
               : Icons.remove_circle_outline,
         ),
-        title: Text(transaction.description, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(transaction.description,
+            maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: Text(
           '$workspaceName · ${_formatDate(transaction.occurredAt)} · '
           '${_formatAmount(transaction.amountCents)}',
@@ -271,14 +282,16 @@ class _PendingTransactionTile extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.check_circle_outline),
               tooltip: 'Conferma',
-              onPressed: () =>
-                  ref.read(transactionFormControllerProvider.notifier).confirm(transaction.id),
+              onPressed: () => ref
+                  .read(transactionFormControllerProvider.notifier)
+                  .confirm(transaction.id),
             ),
             IconButton(
               icon: const Icon(Icons.close),
               tooltip: 'Scarta',
-              onPressed: () =>
-                  ref.read(transactionFormControllerProvider.notifier).delete(transaction.id),
+              onPressed: () => ref
+                  .read(transactionFormControllerProvider.notifier)
+                  .delete(transaction.id),
             ),
           ],
         ),

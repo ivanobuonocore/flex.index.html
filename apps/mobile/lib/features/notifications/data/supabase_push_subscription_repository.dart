@@ -21,7 +21,8 @@ class SupabasePushSubscriptionRepository implements PushSubscriptionRepository {
   }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) {
-      return const Result.err(AuthFailure('Devi accedere per attivare le notifiche.'));
+      return const Result.err(
+          AuthFailure('Devi accedere per attivare le notifiche.'));
     }
 
     try {
@@ -37,7 +38,8 @@ class SupabasePushSubscriptionRepository implements PushSubscriptionRepository {
       return const Result.ok(unit);
     } catch (e) {
       return Result.err(
-        UnexpectedFailure('Non è stato possibile attivare le notifiche.', cause: e),
+        UnexpectedFailure('Non è stato possibile attivare le notifiche.',
+            cause: e),
       );
     }
   }
@@ -48,13 +50,15 @@ class SupabasePushSubscriptionRepository implements PushSubscriptionRepository {
       final response = await _client.functions.invoke(_sendTestPushFunction);
       if (response.status != 200) {
         return const Result.err(
-          UnexpectedFailure('Non è stato possibile inviare la notifica di prova.'),
+          UnexpectedFailure(
+              'Non è stato possibile inviare la notifica di prova.'),
         );
       }
       return const Result.ok(unit);
     } catch (e) {
       return Result.err(
-        UnexpectedFailure('Non è stato possibile inviare la notifica di prova.', cause: e),
+        UnexpectedFailure('Non è stato possibile inviare la notifica di prova.',
+            cause: e),
       );
     }
   }

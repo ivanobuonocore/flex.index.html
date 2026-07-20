@@ -4,7 +4,8 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
 
 class FakeTransactionRepository implements TransactionRepository {
-  FakeTransactionRepository({this.createResult, this.confirmResult, this.updateResult});
+  FakeTransactionRepository(
+      {this.createResult, this.confirmResult, this.updateResult});
 
   final _controller = StreamController<List<Transaction>>.broadcast();
   Result<Transaction>? createResult;
@@ -18,7 +19,8 @@ class FakeTransactionRepository implements TransactionRepository {
   void emit(List<Transaction> transactions) => _controller.add(transactions);
 
   @override
-  Stream<List<Transaction>> watchTransactions(String? workspaceId) => _controller.stream;
+  Stream<List<Transaction>> watchTransactions(String? workspaceId) =>
+      _controller.stream;
 
   @override
   Future<Result<Transaction>> createTransaction({
@@ -30,7 +32,8 @@ class FakeTransactionRepository implements TransactionRepository {
     required DateTime occurredAt,
   }) async {
     final result = createResult ??
-        const Result<Transaction>.err(ValidationFailure('Nessun risultato configurato.'));
+        const Result<Transaction>.err(
+            ValidationFailure('Nessun risultato configurato.'));
     if (result.isOk) {
       lastCreated = (result as Ok<Transaction>).value;
     }
@@ -47,7 +50,8 @@ class FakeTransactionRepository implements TransactionRepository {
   Future<Result<Transaction>> confirmTransaction(String transactionId) async {
     lastConfirmedId = transactionId;
     return confirmResult ??
-        const Result<Transaction>.err(ValidationFailure('Nessun risultato configurato.'));
+        const Result<Transaction>.err(
+            ValidationFailure('Nessun risultato configurato.'));
   }
 
   @override

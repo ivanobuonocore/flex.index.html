@@ -41,7 +41,8 @@ class WorkspaceChatListScreen extends ConsumerWidget {
               title: 'Nessuna chat ancora',
               message: 'Crea la prima chat di questo Workspace.',
               action: FilledButton(
-                onPressed: () => showCreateChatSheet(context, workspaceId: workspaceId),
+                onPressed: () =>
+                    showCreateChatSheet(context, workspaceId: workspaceId),
                 child: const Text('Crea la prima chat'),
               ),
             );
@@ -56,7 +57,8 @@ class WorkspaceChatListScreen extends ConsumerWidget {
               return Card(
                 child: ListTile(
                   leading: const Icon(Icons.chat_bubble_outline),
-                  title: Text(chat.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  title: Text(chat.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                   onTap: () => context.push(
                     '/workspace/$workspaceId/chat/${chat.id}',
                   ),

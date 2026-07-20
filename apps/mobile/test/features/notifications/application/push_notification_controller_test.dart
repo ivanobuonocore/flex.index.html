@@ -33,7 +33,8 @@ void main() {
     expect(status, PushSupportStatus.subscribed);
   });
 
-  test('subscribe con permesso concesso salva le credenziali e non ritorna errore',
+  test(
+      'subscribe con permesso concesso salva le credenziali e non ritorna errore',
       () async {
     fakeService.subscribeResult = const PushSubscriptionKeys(
       endpoint: 'https://push.example/abc',
@@ -53,7 +54,8 @@ void main() {
     expect(fakeRepository.lastAuthKey, 'auth-value');
   });
 
-  test('subscribe con permesso negato (service ritorna null) ritorna un Failure',
+  test(
+      'subscribe con permesso negato (service ritorna null) ritorna un Failure',
       () async {
     fakeService.subscribeResult = null;
 

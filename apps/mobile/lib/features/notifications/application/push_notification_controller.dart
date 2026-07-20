@@ -8,7 +8,8 @@ import '../data/push_notification_service_provider.dart';
 /// Interop col browser (Web Push, Service Worker) — mai chiamato
 /// direttamente dalla UI, sempre tramite [PushNotificationController]
 /// (Dependency Inversion, stesso principio dei repository di dominio).
-final pushNotificationServiceProvider = Provider<PushNotificationService>((ref) {
+final pushNotificationServiceProvider =
+    Provider<PushNotificationService>((ref) {
   return createPushNotificationService();
 });
 
@@ -36,8 +37,9 @@ class PushNotificationController extends AutoDisposeAsyncNotifier<void> {
   /// rotto.
   Future<Failure?> subscribe(String vapidPublicKey) async {
     state = const AsyncLoading();
-    final keys =
-        await ref.read(pushNotificationServiceProvider).subscribe(vapidPublicKey);
+    final keys = await ref
+        .read(pushNotificationServiceProvider)
+        .subscribe(vapidPublicKey);
     if (keys == null) {
       state = const AsyncData(null);
       return const UnexpectedFailure(
@@ -64,8 +66,9 @@ class PushNotificationController extends AutoDisposeAsyncNotifier<void> {
 
   Future<Failure?> sendTestNotification() async {
     state = const AsyncLoading();
-    final result =
-        await ref.read(pushSubscriptionRepositoryProvider).sendTestNotification();
+    final result = await ref
+        .read(pushSubscriptionRepositoryProvider)
+        .sendTestNotification();
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);
   }

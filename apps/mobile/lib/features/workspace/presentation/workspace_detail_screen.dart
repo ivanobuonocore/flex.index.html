@@ -222,7 +222,8 @@ class _WorkspaceDetailBody extends ConsumerWidget {
                             .take(3)
                             .map((chat) => Card(
                                   child: ListTile(
-                                    leading: const Icon(Icons.chat_bubble_outline),
+                                    leading:
+                                        const Icon(Icons.chat_bubble_outline),
                                     title: Text(
                                       chat.title,
                                       maxLines: 1,
@@ -238,7 +239,8 @@ class _WorkspaceDetailBody extends ConsumerWidget {
               const SizedBox(height: AppSpacing.lg),
               _SectionHeader(
                 title: 'Bilancio',
-                onSeeAll: () => context.push('/workspace/${workspace.id}/transactions'),
+                onSeeAll: () =>
+                    context.push('/workspace/${workspace.id}/transactions'),
               ),
               const SizedBox(height: AppSpacing.sm),
               transactionsAsync.when(
@@ -263,12 +265,14 @@ class _WorkspaceDetailBody extends ConsumerWidget {
                       '$sign${(balance.abs() / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
                   return Card(
                     child: ListTile(
-                      leading: const Icon(Icons.account_balance_wallet_outlined),
+                      leading:
+                          const Icon(Icons.account_balance_wallet_outlined),
                       title: Text('Saldo questo mese: $balanceLabel'),
                       subtitle: pending.isNotEmpty
                           ? Text('${pending.length} in attesa di conferma')
                           : null,
-                      onTap: () => context.push('/workspace/${workspace.id}/transactions'),
+                      onTap: () => context
+                          .push('/workspace/${workspace.id}/transactions'),
                     ),
                   );
                 },

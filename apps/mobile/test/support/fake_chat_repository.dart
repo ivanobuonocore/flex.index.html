@@ -25,8 +25,9 @@ class FakeChatRepository implements ChatRepository {
     required String? workspaceId,
     required String title,
   }) async {
-    final result =
-        createResult ?? const Result<Chat>.err(ValidationFailure('Nessun risultato configurato.'));
+    final result = createResult ??
+        const Result<Chat>.err(
+            ValidationFailure('Nessun risultato configurato.'));
     if (result.isOk) {
       lastCreated = (result as Ok<Chat>).value;
     }

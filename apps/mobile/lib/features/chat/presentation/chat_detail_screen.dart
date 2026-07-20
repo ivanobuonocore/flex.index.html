@@ -93,7 +93,8 @@ class ChatDetailScreen extends ConsumerWidget {
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.cardPremium)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadii.cardPremium)),
       ),
       builder: (sheetContext) => SafeArea(
         child: Column(
@@ -101,7 +102,8 @@ class ChatDetailScreen extends ConsumerWidget {
           children: [
             const Padding(
               padding: EdgeInsets.all(AppSpacing.md),
-              child: Text('Cartelle del Workspace', style: AppTypography.heading3),
+              child:
+                  Text('Cartelle del Workspace', style: AppTypography.heading3),
             ),
             _FolderTile(
               icon: Icons.note_outlined,
@@ -144,7 +146,8 @@ class ChatDetailScreen extends ConsumerWidget {
 }
 
 class _FolderTile extends StatelessWidget {
-  const _FolderTile({required this.icon, required this.label, required this.onTap});
+  const _FolderTile(
+      {required this.icon, required this.label, required this.onTap});
 
   final IconData icon;
   final String label;
@@ -169,8 +172,9 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isUser = message.role == MessageRole.user;
-    final bubbleColor =
-        isUser ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest;
+    final bubbleColor = isUser
+        ? theme.colorScheme.primary
+        : theme.colorScheme.surfaceContainerHighest;
     final textColor =
         isUser ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface;
 
@@ -186,7 +190,8 @@ class _MessageBubble extends StatelessWidget {
     );
 
     final bubble = Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
+      constraints:
+          BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
         vertical: AppSpacing.sm,
@@ -204,13 +209,15 @@ class _MessageBubble extends StatelessWidget {
             _AttachmentImage(documentId: attachmentId),
             const SizedBox(height: AppSpacing.xs),
           ],
-          Text(message.content, style: AppTypography.body.copyWith(color: textColor)),
+          Text(message.content,
+              style: AppTypography.body.copyWith(color: textColor)),
           const SizedBox(height: AppSpacing.xs),
           Align(
             alignment: Alignment.centerRight,
             child: Text(
               _formatTime(message.timestamp),
-              style: AppTypography.caption.copyWith(color: textColor.withOpacity(0.7)),
+              style: AppTypography.caption
+                  .copyWith(color: textColor.withOpacity(0.7)),
             ),
           ),
         ],
@@ -220,7 +227,8 @@ class _MessageBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment:
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isUser) ...[
@@ -313,7 +321,8 @@ class _TypingIndicator extends ConsumerWidget {
     if (!isSending) return const SizedBox.shrink();
 
     return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+      padding: EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.xs),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
@@ -377,17 +386,19 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     final photo = _pendingPhoto;
     if (photo != null) {
       setState(() => _isUploadingPhoto = true);
-      final uploadResult = await ref.read(documentRepositoryProvider).uploadDocument(
-            workspaceId: widget.workspaceId!,
-            fileName: photo.name,
-            mimeType: _guessImageMimeType(photo.extension),
-            bytes: photo.bytes!,
-            chatId: widget.chatId,
-          );
+      final uploadResult =
+          await ref.read(documentRepositoryProvider).uploadDocument(
+                workspaceId: widget.workspaceId!,
+                fileName: photo.name,
+                mimeType: _guessImageMimeType(photo.extension),
+                bytes: photo.bytes!,
+                chatId: widget.chatId,
+              );
       if (!mounted) return;
       setState(() => _isUploadingPhoto = false);
       if (uploadResult.isErr) {
-        setState(() => _errorMessage = (uploadResult as Err<Document>).failure.message);
+        setState(() =>
+            _errorMessage = (uploadResult as Err<Document>).failure.message);
         return;
       }
       attachmentIds = [(uploadResult as Ok<Document>).value.id];
@@ -443,7 +454,8 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
 
   @override
   Widget build(BuildContext context) {
-    final isSending = ref.watch(messageFormControllerProvider).isLoading || _isUploadingPhoto;
+    final isSending =
+        ref.watch(messageFormControllerProvider).isLoading || _isUploadingPhoto;
 
     return SafeArea(
       top: false,
@@ -455,8 +467,11 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
             if (_pendingPhoto != null) ...[
               Chip(
                 avatar: const Icon(Icons.image_outlined, size: 18),
-                label: Text(_pendingPhoto!.name, overflow: TextOverflow.ellipsis),
-                onDeleted: isSending ? null : () => setState(() => _pendingPhoto = null),
+                label:
+                    Text(_pendingPhoto!.name, overflow: TextOverflow.ellipsis),
+                onDeleted: isSending
+                    ? null
+                    : () => setState(() => _pendingPhoto = null),
               ),
               const SizedBox(height: AppSpacing.sm),
             ],
@@ -473,7 +488,8 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                   tooltip: 'Emoji',
                   onPressed: isSending
                       ? null
-                      : () => setState(() => _showEmojiPicker = !_showEmojiPicker),
+                      : () =>
+                          setState(() => _showEmojiPicker = !_showEmojiPicker),
                   icon: Icon(
                     _showEmojiPicker
                         ? Icons.keyboard_outlined
@@ -484,7 +500,8 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                   tooltip: _canAttachPhoto
                       ? 'Allega una foto'
                       : 'Le chat private non possono allegare foto',
-                  onPressed: (isSending || !_canAttachPhoto) ? null : _pickPhoto,
+                  onPressed:
+                      (isSending || !_canAttachPhoto) ? null : _pickPhoto,
                   icon: const Icon(Icons.add_photo_alternate_outlined),
                 ),
                 Expanded(
@@ -493,7 +510,8 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                     minLines: 1,
                     maxLines: 4,
                     enabled: !isSending,
-                    decoration: const InputDecoration(hintText: 'Scrivi un messaggio…'),
+                    decoration:
+                        const InputDecoration(hintText: 'Scrivi un messaggio…'),
                     onSubmitted: (_) => _submit(),
                   ),
                 ),
@@ -526,11 +544,46 @@ class _EmojiPicker extends StatelessWidget {
   final ValueChanged<String> onSelected;
 
   static const _emojis = [
-    '😀', '😂', '🥰', '😍', '😊', '😉', '😎', '🤔',
-    '😅', '😭', '😢', '😡', '🥳', '😴', '🤗', '🙄',
-    '👍', '👎', '👏', '🙏', '💪', '🤝', '👋', '✌️',
-    '❤️', '🔥', '✨', '🎉', '👌', '💯', '⭐', '✅',
-    '☕', '🍕', '🎂', '🚀', '📌', '📅', '💰', '🏠',
+    '😀',
+    '😂',
+    '🥰',
+    '😍',
+    '😊',
+    '😉',
+    '😎',
+    '🤔',
+    '😅',
+    '😭',
+    '😢',
+    '😡',
+    '🥳',
+    '😴',
+    '🤗',
+    '🙄',
+    '👍',
+    '👎',
+    '👏',
+    '🙏',
+    '💪',
+    '🤝',
+    '👋',
+    '✌️',
+    '❤️',
+    '🔥',
+    '✨',
+    '🎉',
+    '👌',
+    '💯',
+    '⭐',
+    '✅',
+    '☕',
+    '🍕',
+    '🎂',
+    '🚀',
+    '📌',
+    '📅',
+    '💰',
+    '🏠',
   ];
 
   @override

@@ -19,7 +19,8 @@ Future<void> showCreateChatSheet(BuildContext context, {String? workspaceId}) {
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.cardPremium)),
+      borderRadius:
+          BorderRadius.vertical(top: Radius.circular(AppRadii.cardPremium)),
     ),
     builder: (context) => _CreateChatSheet(
       workspaceId: workspaceId,
@@ -29,7 +30,8 @@ Future<void> showCreateChatSheet(BuildContext context, {String? workspaceId}) {
 }
 
 class _CreateChatSheet extends ConsumerStatefulWidget {
-  const _CreateChatSheet({required this.workspaceId, required this.lockWorkspace});
+  const _CreateChatSheet(
+      {required this.workspaceId, required this.lockWorkspace});
 
   final String? workspaceId;
   final bool lockWorkspace;
@@ -103,8 +105,9 @@ class _CreateChatSheetState extends ConsumerState<_CreateChatSheet> {
               controller: _titleController,
               autofocus: true,
               decoration: const InputDecoration(labelText: 'Titolo'),
-              validator: (value) =>
-                  (value == null || value.trim().isEmpty) ? 'Il titolo è obbligatorio' : null,
+              validator: (value) => (value == null || value.trim().isEmpty)
+                  ? 'Il titolo è obbligatorio'
+                  : null,
               onFieldSubmitted: (_) => _submit(),
             ),
             if (!widget.lockWorkspace) ...[
@@ -130,7 +133,8 @@ class _CreateChatSheetState extends ConsumerState<_CreateChatSheet> {
             ],
             if (_errorMessage != null) ...[
               const SizedBox(height: AppSpacing.md),
-              Text(_errorMessage!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              Text(_errorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ],
             const SizedBox(height: AppSpacing.lg),
             ElevatedButton(

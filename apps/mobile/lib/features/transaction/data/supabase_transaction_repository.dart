@@ -16,7 +16,8 @@ class SupabaseTransactionRepository implements TransactionRepository {
   @override
   Stream<List<Transaction>> watchTransactions(String? workspaceId) {
     final query = _client.from(_table).stream(primaryKey: ['id']);
-    final scoped = workspaceId == null ? query : query.eq('workspace_id', workspaceId);
+    final scoped =
+        workspaceId == null ? query : query.eq('workspace_id', workspaceId);
     return scoped.order('occurred_at', ascending: false).map(
           (rows) => rows
               .where((row) => row['deleted_at'] == null)
@@ -35,8 +36,8 @@ class SupabaseTransactionRepository implements TransactionRepository {
     required DateTime occurredAt,
   }) async {
     if (description.trim().isEmpty) {
-      return const Result.err(
-          ValidationFailure('La descrizione della transazione è obbligatoria.'));
+      return const Result.err(ValidationFailure(
+          'La descrizione della transazione è obbligatoria.'));
     }
     if (amountCents <= 0) {
       return const Result.err(
@@ -60,16 +61,17 @@ class SupabaseTransactionRepository implements TransactionRepository {
           .single();
       return Result.ok(_toDomain(row));
     } catch (e) {
-      return Result.err(
-          UnexpectedFailure('Non è stato possibile creare la transazione.', cause: e));
+      return Result.err(UnexpectedFailure(
+          'Non è stato possibile creare la transazione.',
+          cause: e));
     }
   }
 
   @override
   Future<Result<Transaction>> updateTransaction(Transaction transaction) async {
     if (transaction.description.trim().isEmpty) {
-      return const Result.err(
-          ValidationFailure('La descrizione della transazione è obbligatoria.'));
+      return const Result.err(ValidationFailure(
+          'La descrizione della transazione è obbligatoria.'));
     }
     if (transaction.amountCents <= 0) {
       return const Result.err(
@@ -119,8 +121,8 @@ class SupabaseTransactionRepository implements TransactionRepository {
     try {
       await _client
           .from(_table)
-          .update({'deleted_at': DateTime.now().toIso8601String()})
-          .eq('id', transactionId);
+          .update({'deleted_at': DateTime.now().toIso8601String()}).eq(
+              'id', transactionId);
       return const Result.ok(unit);
     } catch (e) {
       return Result.err(

@@ -21,15 +21,17 @@ Future<void> showCreateEditTransactionSheet(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.cardPremium)),
+      borderRadius:
+          BorderRadius.vertical(top: Radius.circular(AppRadii.cardPremium)),
     ),
-    builder: (context) =>
-        _CreateEditTransactionSheet(workspaceId: workspaceId, transaction: transaction),
+    builder: (context) => _CreateEditTransactionSheet(
+        workspaceId: workspaceId, transaction: transaction),
   );
 }
 
 class _CreateEditTransactionSheet extends ConsumerStatefulWidget {
-  const _CreateEditTransactionSheet({required this.workspaceId, this.transaction});
+  const _CreateEditTransactionSheet(
+      {required this.workspaceId, this.transaction});
 
   final String workspaceId;
   final Transaction? transaction;
@@ -39,16 +41,19 @@ class _CreateEditTransactionSheet extends ConsumerStatefulWidget {
       _CreateEditTransactionSheetState();
 }
 
-class _CreateEditTransactionSheetState extends ConsumerState<_CreateEditTransactionSheet> {
+class _CreateEditTransactionSheetState
+    extends ConsumerState<_CreateEditTransactionSheet> {
   final _formKey = GlobalKey<FormState>();
   late final _descriptionController =
       TextEditingController(text: widget.transaction?.description);
   late final _amountController = TextEditingController(
-    text:
-        widget.transaction != null ? _formatAmountForInput(widget.transaction!.amountCents) : null,
+    text: widget.transaction != null
+        ? _formatAmountForInput(widget.transaction!.amountCents)
+        : null,
   );
   late DateTime _occurredAt = widget.transaction?.occurredAt ?? DateTime.now();
-  late TransactionType _type = widget.transaction?.type ?? TransactionType.expense;
+  late TransactionType _type =
+      widget.transaction?.type ?? TransactionType.expense;
   String? _errorMessage;
 
   bool get _isEditing => widget.transaction != null;
@@ -141,7 +146,8 @@ class _CreateEditTransactionSheetState extends ConsumerState<_CreateEditTransact
                   ),
                 ],
                 selected: {_type},
-                onSelectionChanged: (selection) => setState(() => _type = selection.first),
+                onSelectionChanged: (selection) =>
+                    setState(() => _type = selection.first),
               ),
               const SizedBox(height: AppSpacing.md),
             ],
@@ -149,16 +155,19 @@ class _CreateEditTransactionSheetState extends ConsumerState<_CreateEditTransact
               controller: _descriptionController,
               autofocus: !_isEditing,
               decoration: const InputDecoration(labelText: 'Descrizione'),
-              validator: (value) =>
-                  (value == null || value.trim().isEmpty) ? 'La descrizione è obbligatoria' : null,
+              validator: (value) => (value == null || value.trim().isEmpty)
+                  ? 'La descrizione è obbligatoria'
+                  : null,
             ),
             const SizedBox(height: AppSpacing.md),
             TextFormField(
               controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(labelText: 'Importo (€)'),
-              validator: (value) =>
-                  _parseAmountToCents(value ?? '') == null ? 'Importo non valido' : null,
+              validator: (value) => _parseAmountToCents(value ?? '') == null
+                  ? 'Importo non valido'
+                  : null,
             ),
             const SizedBox(height: AppSpacing.md),
             ListTile(
@@ -170,7 +179,8 @@ class _CreateEditTransactionSheetState extends ConsumerState<_CreateEditTransact
             ),
             if (_errorMessage != null) ...[
               const SizedBox(height: AppSpacing.md),
-              Text(_errorMessage!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              Text(_errorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ],
             const SizedBox(height: AppSpacing.lg),
             ElevatedButton(
@@ -200,7 +210,8 @@ int? _parseAmountToCents(String input) {
   return (value * 100).round();
 }
 
-String _formatAmountForInput(int amountCents) => (amountCents / 100).toStringAsFixed(2);
+String _formatAmountForInput(int amountCents) =>
+    (amountCents / 100).toStringAsFixed(2);
 
 String _formatDate(DateTime date) =>
     '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
