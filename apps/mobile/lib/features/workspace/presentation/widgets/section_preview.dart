@@ -28,12 +28,7 @@ class SectionPreview extends StatelessWidget {
       SystemWorkspaceCategory.documenti =>
         _DocumentiPreview(workspaceId: workspaceId),
       // Appuntamenti: nessuna entità/repository ancora costruita (prossima slice).
-      _ => Text(
-          'Presto disponibile',
-          style: AppTypography.caption.copyWith(
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-          ),
-        ),
+      _ => const _PreviewText('Presto disponibile'),
     };
   }
 }

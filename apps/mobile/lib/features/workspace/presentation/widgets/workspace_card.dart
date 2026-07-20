@@ -55,7 +55,12 @@ class WorkspaceCard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(workspace.name, style: theme.textTheme.headlineSmall),
+                    Text(
+                      workspace.name,
+                      style: theme.textTheme.headlineSmall,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 2),
                     subtitle ??
                         (workspace.description != null &&

@@ -86,4 +86,30 @@ void main() {
     expect(failure, isNull);
     expect(fakeRepository.lastArchivedId, chat.id);
   });
+
+  test('singleChatProvider riusa la Chat più recente se esiste già', () async {
+    final subscription = container.listen(chatsProvider(null), (_, __) {});
+    addTearDown(subscription.close);
+    fakeRepository.emit([chat]);
+    await Future<void>.delayed(Duration.zero);
+
+    final result = await container.read(singleChatProvider.future);
+
+    expect(result, chat);
+    expect(fakeRepository.lastCreated, isNull); // non ne crea una seconda
+  });
+
+  test('singleChatProvider ne crea una privata solo se non esiste nessuna',
+      () async {
+    fakeRepository.createResult = Result.ok(chat);
+    final subscription = container.listen(chatsProvider(null), (_, __) {});
+    addTearDown(subscription.close);
+    fakeRepository.emit(const []);
+    await Future<void>.delayed(Duration.zero);
+
+    final result = await container.read(singleChatProvider.future);
+
+    expect(result, chat);
+    expect(fakeRepository.lastCreated, chat);
+  });
 }

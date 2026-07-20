@@ -130,6 +130,18 @@ già esistenti); le prossime slice collegheranno l'estrazione AI in Chat diretta
 sezioni (categorizzazione delle spese, tool `create_calendar_event`/`manage_tasks`), unificheranno
 la Chat in una sola conversazione, e rimuoveranno la sezione Note.
 
+**Fase 3 (slice 7B)**: Chat unica — richiesta esplicita dell'utente ("la chat deve essere unica...
+non deve fare più chat... la logica è gestire in unico posto tutte le attività"). Rimossa la
+creazione di nuove chat e le chat per-Workspace: `/chat` è ora sia la Home sia l'unica
+conversazione dell'utente, creata automaticamente al primo accesso (riusa quella più recente se
+esistevano già chat da prima di questa slice — non ne crea mai una seconda). La striscia "Sezioni"
+(slice 7A) resta sempre visibile in testa, sopra i messaggi. Le transazioni riconosciute in Chat
+vanno sempre nella sezione Bilancio, le foto sempre in Documenti — instradate tramite gli id delle
+sezioni fisse, non più tramite il Workspace "di quella chat" (che non esiste più come concetto).
+Durante il lavoro, un test ha scoperto un overflow verticale preesistente in `WorkspaceCard`
+quando un'anteprima viva è più lunga di una riga in una card stretta: corretto (`maxLines` +
+`overflow: ellipsis` su nome e sottotitolo).
+
 Memoria resta nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.

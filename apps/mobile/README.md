@@ -27,18 +27,21 @@ Implementate, con dati reali via Supabase:
   (`/workspace/:id/documents`), Supabase Storage con signed URL, realtime.
 - **search** (Fase 2 slice 3) — Ricerca Universale cross-tabella (Workspace/Note/Task/
   Documenti) via full-text search Postgres, debounce lato UI.
-- **chat** (Fase 3 slice 1, foto in slice 3, **Home dell'app da slice 4** — richiesta esplicita
-  dell'utente) — `/chat` è ora la prima schermata dopo il login: saluto, Workspace recenti, e
-  tutte le Chat dell'utente (private o di un Workspace), con creazione diretta da qui (scelta del
-  Workspace o chat privata). Da una Chat di Workspace, un pulsante "cartelle" nell'AppBar apre
-  Note/Attività/Documenti/Bilancio di quel Workspace senza passare dalla tab Workspace. Resta
-  anche l'accesso da dentro un Workspace (`/workspace/:id/chat`). Invio messaggio + risposta AI in
-  tempo reale (realtime, non streaming token-by-token), indicatore "l'assistente sta scrivendo".
-  Il frontend non chiama mai direttamente Anthropic: ogni messaggio passa dall'Edge Function
-  `ai-chat` (`infrastructure/supabase/functions/ai-chat`), l'unico punto in cui l'app tocca un
-  provider AI. Si può allegare una foto a un messaggio (solo dentro un Workspace, non in Chat
-  private): la foto viene caricata come `Document` (stesso bucket/sezione di Documenti, riusati —
-  nessuna nuova infrastruttura) e l'assistente la "vede" tramite il supporto immagini di Claude.
+- **chat** (Fase 3 slice 1, foto in slice 3, Home dell'app da slice 4, **Chat unica da slice
+  7B** — richiesta esplicita dell'utente: "la chat deve essere unica... in un unico posto tutte
+  le attività") — `/chat` (`ChatHomeScreen`) è ora sia la prima schermata dopo il login sia
+  l'unica conversazione dell'utente: niente più elenco di chat da scegliere, niente più chat
+  per-Workspace. `singleChatProvider` la crea al primo accesso (idempotente: riusa la più recente
+  se esistono già chat da prima di questa slice) — nessuna scelta esposta all'utente. In testa,
+  sempre visibile, la striscia "Sezioni" (Fase 3 slice 7A) con anteprima viva. Invio messaggio +
+  risposta AI in tempo reale (realtime, non streaming token-by-token), indicatore "l'assistente
+  sta scrivendo". Il frontend non chiama mai direttamente Anthropic: ogni messaggio passa
+  dall'Edge Function `ai-chat` (`infrastructure/supabase/functions/ai-chat`), l'unico punto in cui
+  l'app tocca un provider AI — le transazioni riconosciute nel messaggio vanno sempre nella
+  sezione Bilancio (il suo Workspace id è passato come contesto all'Edge Function, al posto del
+  vecchio `workspaceId` della Chat). Si può allegare una foto a un messaggio: va sempre nella
+  sezione Documenti (`Document` con `chat_id`, stesso bucket riusato — nessuna nuova
+  infrastruttura) e l'assistente la "vede" tramite il supporto immagini di Claude.
 - **transaction** (Fase 3 slice 2, aggiunta oltre allo scaffold originale — richiesta reale
   dell'utente, ispirata all'app Planito) — Bilancio per Workspace (`/workspace/:id/transactions`):
   saldo del mese corrente (entrate meno uscite confermate) + lista con totali separati, aggiunta

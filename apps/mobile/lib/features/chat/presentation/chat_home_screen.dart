@@ -1,7 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
@@ -9,157 +8,164 @@ import 'package:pip_shared/pip_shared.dart';
 import '../../../core/providers.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
+import '../../auth/application/session_controller.dart';
 import '../../document/application/document_controller.dart';
+import '../../workspace/application/workspace_controller.dart';
+import '../../workspace/presentation/widgets/section_preview.dart';
+import '../../workspace/presentation/widgets/workspace_card.dart';
+import '../application/chat_controller.dart';
 import '../application/message_controller.dart';
 
-/// Dettaglio di una Chat: storico messaggi (realtime) + campo di invio
-/// (docs/product/06-information-architecture.md, "Chat").
-/// [workspaceId] è passato all'Edge Function per costruire il contesto
-/// (`null` per una Chat privata, non collegata a nessun Workspace).
-class ChatDetailScreen extends ConsumerWidget {
-  const ChatDetailScreen({
-    super.key,
-    required this.chatId,
-    required this.workspaceId,
-  });
+/// Home dell'app **e** unica Chat (Fase 3, "Chat unica" — richiesta esplicita
+/// dell'utente: "la chat deve essere unica... in un unico posto tutte le
+/// attività"). Sostituisce sia la vecchia Home Chat (elenco di conversazioni)
+/// sia il dettaglio di una singola Chat: non esiste più una scelta da fare,
+/// c'è una sola conversazione (`singleChatProvider`, creata al primo
+/// accesso). In testa, la striscia "Sezioni" (Fase 3, slice 7A) resta sempre
+/// visibile — non scorre via con i messaggi — così le informazioni che la
+/// Chat ha già raccolto (saldo, attività aperte, documenti) sono sempre a un
+/// tocco di distanza.
+class ChatHomeScreen extends ConsumerWidget {
+  const ChatHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(sessionControllerProvider).value;
+    // Idempotente: crea solo le sezioni fisse mancanti (Fase 3, slice 7A).
+    ref.watch(workspaceBootstrapProvider);
+    final chatAsync = ref.watch(singleChatProvider);
+
+    return Scaffold(
+      appBar: AppBar(title: Text(_greeting(user?.name))),
+      body: chatAsync.when(
+        loading: () => const LoadingView(),
+        error: (error, stackTrace) => ErrorView(
+          message: 'Non è stato possibile aprire la Chat.',
+          onRetry: () => ref.invalidate(singleChatProvider),
+        ),
+        data: (chat) => _ChatHomeBody(chatId: chat.id),
+      ),
+    );
+  }
+
+  String _greeting(String? name) {
+    final hour = DateTime.now().hour;
+    final moment = hour < 12
+        ? 'Buongiorno'
+        : (hour < 18 ? 'Buon pomeriggio' : 'Buonasera');
+    return name == null || name.isEmpty ? moment : '$moment, $name';
+  }
+}
+
+class _ChatHomeBody extends ConsumerWidget {
+  const _ChatHomeBody({required this.chatId});
 
   final String chatId;
-  final String? workspaceId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final messagesAsync = ref.watch(messagesProvider(chatId));
+    final workspaces = ref.watch(workspacesProvider).value ?? const [];
+    final sections = <Workspace>[
+      for (final category in SystemWorkspaceCategory.all)
+        ...workspaces.where((w) => w.category == category),
+    ];
+    // Le transazioni scritte in Chat vanno sempre nella sezione Bilancio, le
+    // foto sempre in Documenti — indipendentemente da dove si trovano nella
+    // lista (Fase 3, slice 7A ha già reso questi id stabili e unici per
+    // categoria). `null` finché il bootstrap non ha ancora creato le sezioni.
+    final bilancioId =
+        _idForCategory(workspaces, SystemWorkspaceCategory.bilancio);
+    final documentiId =
+        _idForCategory(workspaces, SystemWorkspaceCategory.documenti);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chat'),
-        actions: [
-          if (workspaceId != null)
-            IconButton(
-              tooltip: 'Cartelle del Workspace',
-              icon: const Icon(Icons.folder_open_outlined),
-              onPressed: () => _showFoldersSheet(context, workspaceId!),
+    return Column(
+      children: [
+        if (sections.isNotEmpty)
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              boxShadow: AppShadows.card(
+                isDark: Theme.of(context).brightness == Brightness.dark,
+              ),
             ),
-        ],
-      ),
-      body: Container(
-        // Colori dello sfondo chat ispirati a WhatsApp (chiaro/scuro): fanno
-        // risaltare le bolle molto più di un semplice sfondo bianco/nero.
-        color: Theme.of(context).brightness == Brightness.light
-            ? const Color(0xFFECE5DD)
-            : const Color(0xFF0B141A),
-        child: Column(
-          children: [
-            Expanded(
-              child: messagesAsync.when(
-                loading: () => const LoadingView(),
-                error: (error, stackTrace) => ErrorView(
-                  message: 'Non è stato possibile caricare i messaggi.',
-                  onRetry: () => ref.invalidate(messagesProvider(chatId)),
-                ),
-                data: (messages) {
-                  if (messages.isEmpty) {
-                    return const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(AppSpacing.xl),
-                        child: Text(
-                          'Scrivi il primo messaggio per iniziare la conversazione.',
-                          textAlign: TextAlign.center,
-                        ),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            child: SizedBox(
+              height: 128,
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                scrollDirection: Axis.horizontal,
+                itemCount: sections.length,
+                separatorBuilder: (_, __) =>
+                    const SizedBox(width: AppSpacing.sm),
+                itemBuilder: (context, index) {
+                  final section = sections[index];
+                  return SizedBox(
+                    width: 240,
+                    child: WorkspaceCard(
+                      workspace: section,
+                      subtitle: SectionPreview(
+                        category: section.category!,
+                        workspaceId: section.id,
                       ),
-                    );
-                  }
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    itemCount: messages.length,
-                    itemBuilder: (context, index) =>
-                        _MessageBubble(message: messages[index]),
+                    ),
                   );
                 },
               ),
             ),
-            _TypingIndicator(chatId: chatId),
-            _MessageInput(chatId: chatId, workspaceId: workspaceId),
-          ],
+          ),
+        Expanded(
+          child: Container(
+            // Colori dello sfondo chat ispirati a WhatsApp (chiaro/scuro):
+            // fanno risaltare le bolle molto più di un semplice sfondo
+            // bianco/nero.
+            color: Theme.of(context).brightness == Brightness.light
+                ? const Color(0xFFECE5DD)
+                : const Color(0xFF0B141A),
+            child: messagesAsync.when(
+              loading: () => const LoadingView(),
+              error: (error, stackTrace) => ErrorView(
+                message: 'Non è stato possibile caricare i messaggi.',
+                onRetry: () => ref.invalidate(messagesProvider(chatId)),
+              ),
+              data: (messages) {
+                if (messages.isEmpty) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(AppSpacing.xl),
+                      child: Text(
+                        'Scrivi il primo messaggio per iniziare: puoi raccontare '
+                        'una spesa, un appuntamento, o quello che vuoi organizzare.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) =>
+                      _MessageBubble(message: messages[index]),
+                );
+              },
+            ),
+          ),
         ),
-      ),
+        _TypingIndicator(chatId: chatId),
+        _MessageInput(
+          chatId: chatId,
+          transactionsWorkspaceId: bilancioId,
+          documentsWorkspaceId: documentiId,
+        ),
+      ],
     );
   }
 
-  /// "Le informazioni della Chat devono riportare a delle cartelle" —
-  /// richiesta esplicita dell'utente: da qui si raggiungono in un tocco le
-  /// sezioni del Workspace già esistenti, senza passare dalla tab Workspace.
-  void _showFoldersSheet(BuildContext context, String workspaceId) {
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadii.cardPremium)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(AppSpacing.md),
-              child:
-                  Text('Cartelle del Workspace', style: AppTypography.heading3),
-            ),
-            _FolderTile(
-              icon: Icons.note_outlined,
-              label: 'Note',
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                context.push('/workspace/$workspaceId/notes');
-              },
-            ),
-            _FolderTile(
-              icon: Icons.check_circle_outline,
-              label: 'Attività',
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                context.push('/workspace/$workspaceId/tasks');
-              },
-            ),
-            _FolderTile(
-              icon: Icons.folder_outlined,
-              label: 'Documenti',
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                context.push('/workspace/$workspaceId/documents');
-              },
-            ),
-            _FolderTile(
-              icon: Icons.account_balance_wallet_outlined,
-              label: 'Bilancio',
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                context.push('/workspace/$workspaceId/transactions');
-              },
-            ),
-            const SizedBox(height: AppSpacing.sm),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FolderTile extends StatelessWidget {
-  const _FolderTile(
-      {required this.icon, required this.label, required this.onTap});
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(label),
-      onTap: onTap,
-    );
+  String? _idForCategory(List<Workspace> workspaces, String category) {
+    for (final workspace in workspaces) {
+      if (workspace.category == category) return workspace.id;
+    }
+    return null;
   }
 }
 
@@ -193,9 +199,7 @@ class _MessageBubble extends StatelessWidget {
       constraints:
           BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
         color: bubbleColor,
         borderRadius: bubbleRadius,
@@ -261,11 +265,8 @@ class _AssistantAvatar extends StatelessWidget {
     return CircleAvatar(
       radius: 14,
       backgroundColor: theme.colorScheme.secondaryContainer,
-      child: Icon(
-        Icons.auto_awesome,
-        size: 16,
-        color: theme.colorScheme.onSecondaryContainer,
-      ),
+      child: Icon(Icons.auto_awesome,
+          size: 16, color: theme.colorScheme.onSecondaryContainer),
     );
   }
 }
@@ -327,10 +328,9 @@ class _TypingIndicator extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
           SizedBox(
-            height: 14,
-            width: 14,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
+              height: 14,
+              width: 14,
+              child: CircularProgressIndicator(strokeWidth: 2)),
           SizedBox(width: AppSpacing.sm),
           Text('L\'assistente sta scrivendo…', style: AppTypography.caption),
         ],
@@ -340,10 +340,22 @@ class _TypingIndicator extends ConsumerWidget {
 }
 
 class _MessageInput extends ConsumerStatefulWidget {
-  const _MessageInput({required this.chatId, required this.workspaceId});
+  const _MessageInput({
+    required this.chatId,
+    required this.transactionsWorkspaceId,
+    required this.documentsWorkspaceId,
+  });
 
   final String chatId;
-  final String? workspaceId;
+
+  /// Sezione Bilancio dell'utente: passata come contesto all'Edge Function
+  /// `ai-chat` per abilitare `extract_transactions` (Fase 3, slice 2) — le
+  /// transazioni riconosciute in Chat vanno sempre lì.
+  final String? transactionsWorkspaceId;
+
+  /// Sezione Documenti dell'utente: dove finisce una foto allegata (diverso
+  /// da [transactionsWorkspaceId] — sono due sezioni fisse distinte).
+  final String? documentsWorkspaceId;
 
   @override
   ConsumerState<_MessageInput> createState() => _MessageInputState();
@@ -356,9 +368,7 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
   bool _isUploadingPhoto = false;
   bool _showEmojiPicker = false;
 
-  /// Una Chat privata (senza Workspace) non ha dove allegare la foto — stesso
-  /// limite già applicato alle Transazioni estratte dall'AI Engine.
-  bool get _canAttachPhoto => widget.workspaceId != null;
+  bool get _canAttachPhoto => widget.documentsWorkspaceId != null;
 
   @override
   void dispose() {
@@ -367,10 +377,8 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
   }
 
   Future<void> _pickPhoto() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      withData: true,
-    );
+    final result = await FilePicker.platform
+        .pickFiles(type: FileType.image, withData: true);
     final file = result?.files.single;
     if (file == null || file.bytes == null) return;
     setState(() => _pendingPhoto = file);
@@ -388,7 +396,7 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
       setState(() => _isUploadingPhoto = true);
       final uploadResult =
           await ref.read(documentRepositoryProvider).uploadDocument(
-                workspaceId: widget.workspaceId!,
+                workspaceId: widget.documentsWorkspaceId!,
                 fileName: photo.name,
                 mimeType: _guessImageMimeType(photo.extension),
                 bytes: photo.bytes!,
@@ -409,7 +417,7 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
 
     final failure = await ref.read(messageFormControllerProvider.notifier).send(
           chatId: widget.chatId,
-          workspaceId: widget.workspaceId,
+          workspaceId: widget.transactionsWorkspaceId,
           content: content,
           attachmentIds: attachmentIds,
         );
@@ -476,10 +484,8 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
               const SizedBox(height: AppSpacing.sm),
             ],
             if (_errorMessage != null) ...[
-              Text(
-                _errorMessage!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+              Text(_errorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
               const SizedBox(height: AppSpacing.sm),
             ],
             Row(
@@ -499,7 +505,7 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                 IconButton(
                   tooltip: _canAttachPhoto
                       ? 'Allega una foto'
-                      : 'Le chat private non possono allegare foto',
+                      : 'La sezione Documenti non è ancora pronta',
                   onPressed:
                       (isSending || !_canAttachPhoto) ? null : _pickPhoto,
                   icon: const Icon(Icons.add_photo_alternate_outlined),
@@ -591,9 +597,8 @@ class _EmojiPicker extends StatelessWidget {
     return SizedBox(
       height: 160,
       child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 8,
-        ),
+        gridDelegate:
+            const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 8),
         itemCount: _emojis.length,
         itemBuilder: (context, index) {
           final emoji = _emojis[index];
@@ -601,8 +606,7 @@ class _EmojiPicker extends StatelessWidget {
             borderRadius: AppRadii.buttonRadius,
             onTap: () => onSelected(emoji),
             child: Center(
-              child: Text(emoji, style: const TextStyle(fontSize: 22)),
-            ),
+                child: Text(emoji, style: const TextStyle(fontSize: 22))),
           );
         },
       ),

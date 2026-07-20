@@ -11,6 +11,23 @@ final chatsProvider =
   return ref.watch(chatRepositoryProvider).watchChats(workspaceId);
 });
 
+/// Garantisce un'unica Chat per l'utente (Fase 3, "Chat unica" — richiesta
+/// esplicita dell'utente: "la chat deve essere unica... non deve fare più
+/// chat", per non "mandare in confusione l'utente finale"). Se esistono già
+/// una o più Chat (dati precedenti a questa slice, o una corsa concorrente),
+/// riusa la più recente — mai crearne una seconda. Sempre privata
+/// (`workspaceId: null`): non appartiene a nessun Workspace specifico, è il
+/// solo punto da cui l'utente parla con l'assistente.
+final singleChatProvider = FutureProvider.autoDispose<Chat>((ref) async {
+  final chats = await ref.watch(chatsProvider(null).future);
+  if (chats.isNotEmpty) return chats.first;
+
+  final result = await ref
+      .read(chatRepositoryProvider)
+      .createChat(workspaceId: null, title: 'Assistente');
+  return result.fold((chat) => chat, (failure) => throw failure);
+});
+
 final chatFormControllerProvider =
     AsyncNotifierProvider.autoDispose<ChatFormController, void>(
         ChatFormController.new);

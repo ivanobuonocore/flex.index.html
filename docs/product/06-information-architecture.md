@@ -11,7 +11,7 @@ essere raggiungibile in pochi tocchi. L'intera applicazione è costruita attorno
 **Aggiornato** (richiesta esplicita dell'utente — "la funzione principale deve essere la chat"):
 cinque aree principali, sempre accessibili dalla barra inferiore: **Chat** (Home), Workspace,
 Ricerca, **Bilancio**, Profilo. "Today" non è più un'area separata: il suo contenuto (saluto,
-Workspace recenti) confluisce in testa alla Home Chat, che diventa così il vero punto di ingresso
+Sezioni fisse) confluisce in testa alla Home Chat, che diventa così il vero punto di ingresso
 dell'app — coerente con "Struttura generale... Workspace + AI", dove l'AI si esprime
 concretamente attraverso la conversazione. "Bilancio" è una quinta voce aggiunta oltre alla
 roadmap originale (richiesta esplicita dell'utente: un "prospetto di entrate e di uscite" con un
@@ -20,12 +20,15 @@ Bilancio per Workspace già presente nelle "cartelle" di una Chat.
 
 ## Chat (Home)
 
-Prima schermata dopo il login. Mostra: saluto personalizzato, Workspace recenti, e tutte le
-conversazioni dell'utente (private o collegate a un Workspace) — punto di ingresso reale, non
-un elenco di sola consultazione. Da una conversazione collegata a un Workspace, un pulsante
-"cartelle" apre Note/Attività/Documenti/Bilancio di quel Workspace senza dover passare dalla tab
-Workspace. Ogni conversazione può essere: privata, collegata a un Workspace, condivisa (versione
-Business). Contiene: messaggi, file, cronologia, memoria, allegati, voice chat.
+**Aggiornato** (richiesta esplicita dell'utente — "la chat deve essere unica... la logica è
+gestire in unico posto tutte le attività"): non più un elenco di conversazioni da scegliere, ma
+**l'unica Chat** dell'utente — creata automaticamente al primo accesso, sempre la stessa. Prima
+schermata dopo il login. In testa, sempre visibile (non scorre via con i messaggi), la striscia
+"Sezioni": le 4 sezioni fisse (Bilancio/Appuntamenti/Attività/Documenti) con un'anteprima viva,
+un tocco per aprirle — sostituisce sia il vecchio saluto+Workspace-recenti sia il pulsante
+"cartelle" di una singola conversazione (non più necessario: non c'è più "la conversazione di
+questo Workspace", c'è una sola conversazione che parla con tutti). Contiene: messaggi, foto
+(finiscono nella sezione Documenti), cronologia, memoria, voice chat.
 
 ## Workspace
 
