@@ -8,18 +8,24 @@ essere raggiungibile in pochi tocchi. L'intera applicazione è costruita attorno
 
 ## Struttura generale
 
-Cinque aree principali, sempre accessibili dalla barra inferiore: Today, Chat, Workspace, Ricerca, Profilo.
+**Aggiornato** (richiesta esplicita dell'utente — "la funzione principale deve essere la chat"):
+cinque aree principali, sempre accessibili dalla barra inferiore: **Chat** (Home), Workspace,
+Ricerca, **Bilancio**, Profilo. "Today" non è più un'area separata: il suo contenuto (saluto,
+Workspace recenti) confluisce in testa alla Home Chat, che diventa così il vero punto di ingresso
+dell'app — coerente con "Struttura generale... Workspace + AI", dove l'AI si esprime
+concretamente attraverso la conversazione. "Bilancio" è una quinta voce aggiunta oltre alla
+roadmap originale (richiesta esplicita dell'utente: un "prospetto di entrate e di uscite" con un
+grafico a torta): aggrega le transazioni confermate di tutti i Workspace, a differenza del
+Bilancio per Workspace già presente nelle "cartelle" di una Chat.
 
-## Today
+## Chat (Home)
 
-Non mostra semplicemente le chat: mostra ciò che conta oggi. Contiene: saluto personalizzato, ricerca
-globale, attività del giorno, workspace recenti, chat recenti, documenti recenti, promemoria,
-suggerimenti AI, accesso rapido a nuova chat / nuovo Workspace.
-
-## Chat
-
-Area dedicata esclusivamente alle conversazioni. Ogni conversazione può essere: privata, collegata a un
-Workspace, condivisa (versione Business). Contiene: messaggi, file, cronologia, memoria, allegati, voice chat.
+Prima schermata dopo il login. Mostra: saluto personalizzato, Workspace recenti, e tutte le
+conversazioni dell'utente (private o collegate a un Workspace) — punto di ingresso reale, non
+un elenco di sola consultazione. Da una conversazione collegata a un Workspace, un pulsante
+"cartelle" apre Note/Attività/Documenti/Bilancio di quel Workspace senza dover passare dalla tab
+Workspace. Ogni conversazione può essere: privata, collegata a un Workspace, condivisa (versione
+Business). Contiene: messaggi, file, cronologia, memoria, allegati, voice chat.
 
 ## Workspace
 

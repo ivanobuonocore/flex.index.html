@@ -3,17 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 
-import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
+import '../../auth/application/session_controller.dart';
 import '../../workspace/application/workspace_controller.dart';
+import '../../workspace/presentation/widgets/workspace_card.dart';
 import '../application/chat_controller.dart';
+import 'create_chat_sheet.dart';
 
-/// Tab globale "Chat" (docs/product/06-information-architecture.md, "Chat"):
-/// tutte le Chat dell'utente, indipendentemente dal Workspace. La creazione
-/// avviene sempre dentro un Workspace (richiederebbe altrimenti un
-/// selettore di Workspace, fuori scope di questa slice) — qui si può solo
-/// aprire una Chat esistente.
+/// Home dell'app (docs/product/06-information-architecture.md aggiornato —
+/// richiesta esplicita dell'utente: "la funzione principale deve essere la
+/// chat"). Sostituisce la vecchia coppia Today+Chat: saluto e Workspace
+/// recenti (ex Today) restano in testa, seguiti da tutte le conversazioni
+/// dell'utente, indipendentemente dal Workspace — punto di ingresso reale,
+/// non solo un elenco di sola lettura come prima.
 class ChatListScreen extends ConsumerWidget {
   const ChatListScreen({super.key});
 
@@ -21,9 +24,14 @@ class ChatListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final chatsAsync = ref.watch(chatsProvider(null));
     final workspacesAsync = ref.watch(workspacesProvider);
+    final user = ref.watch(sessionControllerProvider).value;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Chat')),
+      appBar: AppBar(title: Text(_greeting(user?.name))),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => showCreateChatSheet(context),
+        child: const Icon(Icons.add),
+      ),
       body: chatsAsync.when(
         loading: () => const LoadingView(),
         error: (error, stackTrace) => ErrorView(
@@ -31,43 +39,101 @@ class ChatListScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(chatsProvider(null)),
         ),
         data: (chats) {
-          if (chats.isEmpty) {
-            return const EmptyState(
-              icon: Icons.chat_bubble_outline,
-              title: 'Nessuna chat ancora',
-              message: 'Apri un Workspace per iniziare la tua prima chat.',
-            );
-          }
-
+          final workspaces = workspacesAsync.value ?? const [];
           final workspaceNames = <String, String>{
-            for (final workspace in workspacesAsync.value ?? const [])
-              workspace.id: workspace.name,
+            for (final workspace in workspaces) workspace.id: workspace.name,
           };
 
-          return ListView.separated(
+          return ListView(
             padding: const EdgeInsets.all(AppSpacing.md),
-            itemCount: chats.length,
-            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-            itemBuilder: (context, index) {
-              final chat = chats[index];
-              final workspaceId = chat.workspaceId;
-              final subtitle = workspaceId == null
-                  ? 'Chat privata'
-                  : workspaceNames[workspaceId] ?? 'Workspace';
-
-              return Card(
-                child: ListTile(
-                  leading: const Icon(Icons.chat_bubble_outline),
-                  title: Text(chat.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(subtitle),
-                  onTap: workspaceId == null
-                      ? null
-                      : () => context.push('/workspace/$workspaceId/chat/${chat.id}'),
+            children: [
+              if (workspaces.isNotEmpty) ...[
+                const Text('Workspace recenti', style: AppTypography.heading3),
+                const SizedBox(height: AppSpacing.sm),
+                SizedBox(
+                  height: 112,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: workspaces.take(5).length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(width: AppSpacing.sm),
+                    itemBuilder: (context, index) => SizedBox(
+                      width: 240,
+                      child: WorkspaceCard(
+                        workspace: workspaces[index],
+                        onTap: () =>
+                            context.push('/workspace/${workspaces[index].id}'),
+                      ),
+                    ),
+                  ),
                 ),
-              );
-            },
+                const SizedBox(height: AppSpacing.lg),
+              ],
+              const Text('Chat', style: AppTypography.heading3),
+              const SizedBox(height: AppSpacing.sm),
+              if (chats.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                  child: Text(
+                    'Nessuna chat ancora. Tocca + per iniziarne una.',
+                    style: AppTypography.body.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.6),
+                    ),
+                  ),
+                )
+              else
+                for (final chat in chats) ...[
+                  _ChatTile(
+                    title: chat.title,
+                    subtitle: chat.workspaceId == null
+                        ? 'Chat privata'
+                        : workspaceNames[chat.workspaceId] ?? 'Workspace',
+                    onTap: () => context.push(
+                      chat.workspaceId == null
+                          ? '/chat/${chat.id}'
+                          : '/workspace/${chat.workspaceId}/chat/${chat.id}',
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
+            ],
           );
         },
+      ),
+    );
+  }
+
+  String _greeting(String? name) {
+    final hour = DateTime.now().hour;
+    final moment = hour < 12
+        ? 'Buongiorno'
+        : (hour < 18 ? 'Buon pomeriggio' : 'Buonasera');
+    return name == null || name.isEmpty ? moment : '$moment, $name';
+  }
+}
+
+class _ChatTile extends StatelessWidget {
+  const _ChatTile({
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.chat_bubble_outline),
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(subtitle),
+        onTap: onTap,
       ),
     );
   }

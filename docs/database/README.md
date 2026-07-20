@@ -89,6 +89,12 @@ reale, ma la stessa logica SQL, ed è quanto basta per aver individuato il bug.
 generazione di signed URL) richiede `supabase start` (Docker) o un progetto remoto — non
 disponibili in questa sessione.
 
+**`chat_id` (Fase 3 slice 2)**: colonna presente fin dallo scaffold originale ma popolata solo a
+partire dalla feature "foto nei messaggi di Chat" — un documento con `chat_id` valorizzato è una
+foto allegata a un messaggio (`Message.attachmentIds`), non un documento della sezione Documenti
+del Workspace. Stessa tabella, stesso bucket, nessuna nuova migrazione: solo un nuovo modo di
+popolare una colonna già esistente.
+
 ## Fase 2 (slice 3) — Ricerca Universale
 
 ### `public.search_workspace_content(query text)`
@@ -163,6 +169,155 @@ chiave disponibile) né alla Edge Function stessa tramite Supabase Functions run
 `supabase start` con Docker o un progetto remoto). Verificato invece quello che è realmente
 verificabile: il codice TypeScript con `deno check`/`deno lint`/`deno fmt --check` (Deno
 installato in sessione), tutti puliti.
+
+## Fase 3 (slice 2) — Bilancio (entrate e uscite)
+
+Aggiunta oltre allo scaffold originale: richiesta reale dell'utente ("scrivo le spese in chat,
+voglio vedere il totale", poi estesa a "rendi l'app simile a Planito" — un assistente su WhatsApp
+con contabilità in linguaggio naturale), non descritta in `docs/product/26-execution-blueprint.md`.
+Non viola i principi architetturali (Workspace resta il confine, l'AI Engine resta l'unico punto
+di contatto col provider) — vedi anche `docs/product/12-domain-model.md`, entità `Transaction`.
+Generalizza la prima versione, che copriva solo le uscite, in un'unica tabella con un campo
+`type` invece di un'entità separata per le entrate — evita di duplicare schema/RLS/repository per
+una struttura dati quasi identica.
+
+### `public.transactions`
+
+| Colonna         | Note                                                                              |
+|-----------------|----------------------------------------------------------------------------------|
+| `workspace_id`  | FK cascade, obbligatorio — una transazione non esiste senza Workspace            |
+| `chat_id`       | FK set null, nullable — valorizzato solo se estratta dall'AI Engine da una Chat  |
+| `type`          | `income` / `expense` (constraint) — decide il segno nel saldo                    |
+| `description`   | non vuota (constraint)                                                           |
+| `amount_cents`  | intero, `> 0` (constraint) — sempre positivo, mai un float, per evitare errori di somma |
+| `currency`      | default `'EUR'` (solo EUR gestito in questa slice)                               |
+| `occurred_at`   | data della transazione                                                           |
+| `status`        | `pending` / `confirmed`, default `confirmed`                                     |
+| `created_by_ai` | `true` solo per le transazioni inserite dalla Edge Function `ai-chat`            |
+
+Stesso pattern RLS a join di `notes`/`tasks`/`documents` (`EXISTS` su
+`workspaces.owner_id = auth.uid()`). Indice composito `(workspace_id, occurred_at desc)` per
+l'aggregazione mensile nella schermata Bilancio (calcolata lato client su questa slice, non con
+una funzione SQL dedicata — scope volutamente ridotto).
+
+**`status` e AI Constitution, Principio 1** ("l'AI può suggerire, l'utente decide"): le
+transazioni inserite manualmente dall'utente nascono `confirmed` da subito (le ha scritte
+deliberatamente); quelle estratte dall'AI Engine nascono `pending` e contano nel saldo della
+schermata Bilancio solo dopo che l'utente le conferma esplicitamente.
+
+**Estrazione lato Edge Function `ai-chat`**: quando la Chat ha un Workspace valido (verificato
+tramite RLS, non solo per presenza del parametro), la function offre ad Anthropic uno strumento
+(`tool use`) `extract_transactions` con uno schema JSON esplicito
+(`type`, `description`, `amount_cents`, `occurred_at`); il modello decide autonomamente se e
+quando usarlo (`tool_choice: "auto"`, nessuna forzatura), riconoscendo sia spese sia entrate
+(es. "ho ricevuto lo stipendio di 1500€"). L'output dello strumento viene validato di nuovo lato
+function (`sanitizeTransaction`) prima dell'insert: lo schema JSON vincola la forma, non la
+correttezza semantica dei valori. Stesso client autenticato col JWT del chiamante usato per
+`messages` — nessun privilegio aggiuntivo.
+
+**Verificato manualmente su Postgres locale**: isolamento cross-utente su `transactions` (select,
+insert, update, delete tutti bloccati per un Workspace non proprio); constraint `type`,
+`amount_cents > 0` e descrizione non vuota tutti verificati; calcolo del saldo (entrate − uscite,
+solo `confirmed`) verificato con dati misti.
+
+**Non verificabile in questa sessione**: come per il resto di `ai-chat`, nessuna chiamata reale
+al provider Anthropic — il comportamento dello strumento `extract_transactions` (se il modello lo
+usa correttamente, se distingue bene entrate/uscite, se risolve bene le date relative) non è
+testabile senza una chiave reale. Verificato solo staticamente (`deno check`/`lint`/`fmt`).
+
+## Fase 3 (slice 3) — Foto nei messaggi di Chat
+
+Nessuna nuova tabella: riusa `public.documents` e il bucket Storage `documents` esistenti
+(vedi sopra, "`chat_id` (Fase 3 slice 2)"). Una foto allegata a un messaggio è un `Document` con
+`chat_id` valorizzato; il suo id viene referenziato in `Message.attachmentIds` (colonna già
+presente dallo scaffold originale, mai popolata fino a questa slice).
+
+**Edge Function `ai-chat`**: solo l'**ultimo messaggio dell'utente** (non l'intera cronologia, per
+contenere costo/latenza) può includere immagini nella chiamata ad Anthropic. Se ha
+`attachment_ids`, la function legge `storage_path`/`mime_type` da `documents` (stesso client
+JWT-scoped, stesse RLS/policy Storage già verificate per la sezione Documenti — nessun privilegio
+aggiuntivo), scarica i byte e li converte in un blocco immagine Anthropic (`type: "image", source:
+{type: "base64", ...}`). Massimo 3 immagini per messaggio, ciascuna scartata silenziosamente
+(turno comunque proseguito con testo + immagini valide) se supera ~5MB o non è scaricabile. La
+codifica base64 è scritta a mano nella function stessa, senza dipendenze esterne — evita lo stesso
+problema già incontrato con `jsr:` irraggiungibile nella rete di verifica di questo sandbox.
+
+**Limite noto**: Anthropic supporta ufficialmente immagini JPEG/PNG/GIF/WebP. `apps/mobile`
+permette di scegliere qualunque immagine dalla libreria (inclusi formati come HEIC, comune su
+iPhone): un'immagine in un formato non supportato non causa un crash, ma il turno può fallire con
+l'errore generico già gestito ("Il servizio AI non è disponibile al momento") — non verificabile
+senza chiave Anthropic reale.
+
+**Non verificabile in questa sessione**: come per il resto di `ai-chat`, nessuna chiamata reale al
+provider Anthropic — se il modello interpreta correttamente le immagini non è testabile senza una
+chiave reale. Verificato solo staticamente (`deno check`/`lint`/`fmt`).
+
+## Fase 3 (slice 4) — Notifiche push vere
+
+### `public.push_subscriptions`
+
+Prima slice delle notifiche push vere (CLAUDE.md — richiesta esplicita dell'utente, che ha
+rifiutato l'alternativa "elenco prossimi promemoria in app" per volere invece notifiche di sistema
+reali). Livello **account, non Workspace** — una notifica non appartiene a un singolo Workspace,
+stesso pattern `owner_id` diretto di `workspaces`/`chats`, non un join come `notes`/`tasks`.
+
+| Colonna      | Tipo          | Note                                                        |
+|--------------|---------------|---------------------------------------------------------------|
+| `id`         | `uuid`        | Chiave primaria                                                |
+| `user_id`    | `uuid`        | FK diretta `auth.users`, non nullo                              |
+| `endpoint`   | `text`        | Univoco — identifica il dispositivo/browser abbonato            |
+| `p256dh`     | `text`        | Chiave pubblica della sottoscrizione (Web Push, RFC 8291)        |
+| `auth_key`   | `text`        | Segreto di autenticazione della sottoscrizione                   |
+| `created_at` | `timestamptz` | Default `now()`                                                 |
+
+**Sicurezza**: RLS diretta su `auth.uid() = user_id`, quattro policy (select/insert/update/delete).
+Verificato manualmente su Postgres locale: isolamento cross-utente su tutte e quattro le
+operazioni, oltre ai constraint su campi non vuoti e sull'unicità di `endpoint`.
+
+**Perché solo "infrastruttura + prova" e non ancora i Promemoria**: il collegamento
+browser↔notifica (permessi, service worker, chiavi VAPID, cifratura Web Push) non era mai stato
+costruito in questo progetto ed è verificabile solo in parte da questo ambiente (nessun browser
+reale). Questa slice consegna la catena completa ma minima — un pulsante "Invia una notifica di
+prova" in Profilo — per provarla per davvero prima di costruirci sopra i Promemoria
+(`CalendarEvent`, già modellato in `packages/domain` ma non ancora implementato).
+
+### Edge Function `send-test-push`
+
+Non fa parte dell'AI Engine (nessuna chiamata ad Anthropic): legge le `push_subscriptions`
+dell'utente che chiama (stesso client JWT-scoped delle altre function, mai la service role) e
+invia una notifica di prova a ciascuna tramite `npm:web-push`. Le iscrizioni che risultano scadute
+lato browser (risposta 404/410) vengono eliminate silenziosamente, non trattate come errore.
+Richiede tre secrets aggiuntivi (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) — vedi
+`infrastructure/supabase/README.md`.
+
+**Verificato**: `deno check`/`deno lint`/`deno fmt --check`, incluso che `npm:web-push@3` risolve
+correttamente (registro npm raggiungibile in questa sessione, come già per `@supabase/supabase-js`).
+**Non verificabile qui**: nessuna chiamata HTTP reale alla function (richiederebbe un progetto
+Supabase remoto o Docker), né una notifica realmente recapitata a un browser.
+
+### Mobile — interop col browser
+
+`apps/mobile/lib/features/notifications/`: `PushNotificationService` (interfaccia) con due
+implementazioni scelte a compile time tramite import condizionale su `dart.library.js_interop`
+(`push_notification_service_web.dart` per il target web, con `dart:js_interop` + `package:web`;
+`push_notification_service_stub.dart` no-op altrove). La conversione delle chiavi Web Push
+(base64url senza padding, sia per la chiave pubblica VAPID sia per le chiavi restituite dal
+browser) è isolata in `base64_url_codec.dart` — funzioni pure, **senza** dipendenza da
+`dart:js_interop`, testate con `flutter test` (incluso un test con la chiave pubblica VAPID reale
+generata per questa slice: 65 byte, prefisso `0x04` del punto EC non compresso).
+
+`apps/mobile/web/push-worker.js`: service worker dedicato agli eventi `push`/`notificationclick`,
+file sorgente distinto da `flutter_service_worker.js` (generato da Flutter per il caching, sempre
+sovrascritto ad ogni build) — registrato in aggiunta da `push_notification_service_web.dart`, non
+da `index.html`.
+
+**Verificato**: `flutter analyze` (risoluzione reale delle API di `package:web` tramite
+l'analyzer) e un vero `flutter build web` con dart2js (compila per il target web, non solo
+un'analisi VM) — entrambi puliti, confermano che l'interop è sintatticamente e tipologicamente
+corretto contro la versione reale del pacchetto. **Non verificabile qui**: il comportamento a
+runtime in un browser reale (richiesta del permesso, sottoscrizione effettiva, notifica
+recapitata) — nessun browser disponibile in questo ambiente. Verifica manuale richiesta all'utente
+(vedi `apps/mobile/README.md`, "Limiti noti").
 
 ## Fasi successive
 

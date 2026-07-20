@@ -43,7 +43,76 @@ posto dell'utente. Se le informazioni nel contesto sono incomplete, dichiaralo e
 cosa manca invece di colmare i vuoti con supposizioni presentate come fatti.
 
 Quando la risposta si basa su Note, Attività o Documenti del Workspace elencati nel
-contesto, indicalo esplicitamente (a quale nota/attività/documento ti riferisci).`;
+contesto, indicalo esplicitamente (a quale nota/attività/documento ti riferisci).
+
+Se l'utente allega una foto, guardala e usala per rispondere (es. leggi uno scontrino, descrivi
+un documento, riconosci un oggetto) invece di ignorarla.
+
+Usa emoji pertinenti nelle tue risposte, con naturalezza (stile chat, non un'emoji per frase):
+aiutano a rendere la conversazione più calda e leggibile. Non forzarle quando il contenuto è
+serio o delicato (es. un errore, un dato finanziario critico, un argomento sensibile).`;
+
+// Addendum al system prompt, solo quando è disponibile un Workspace reale (vedi
+// `transactionToolEnabled` in buildSystemPrompt): istruisce l'uso dello strumento
+// extract_transactions e richiede sempre una risposta testuale di conferma, così
+// l'utente può controllare a colpo d'occhio l'importo estratto prima di
+// confermarlo (AI Constitution, Principio 5 — nessuna falsa certezza).
+const TRANSACTION_TOOL_INSTRUCTIONS =
+  `Quando l'utente descrive una o più spese o entrate già avvenute (es. "barbiere 23€,
+supermercato 35€" oppure "ho ricevuto lo stipendio di 1500€"), usa lo strumento
+extract_transactions per registrarle — non limitarti a scriverle in prosa. Le transazioni
+estratte restano "in attesa di conferma" finché l'utente non le conferma esplicitamente nella
+schermata Bilancio del Workspace: non contano ancora nel saldo. Includi sempre, oltre
+all'eventuale uso dello strumento, una risposta testuale breve che nomini cosa hai registrato
+(tipo, descrizione e importo di ciascuna transazione) e che è in attesa di conferma.`;
+
+// Nome e schema dello strumento Anthropic per l'estrazione strutturata di spese ed
+// entrate (Fase 3 slice 2 — vedi docs/database/README.md). Niente `currency`: questa
+// slice registra sempre in EUR. Attaccato alla richiesta solo quando esiste un
+// Workspace reale a cui collegare le transazioni (vedi `transactionToolEnabled`).
+const EXTRACT_TRANSACTIONS_TOOL = {
+  name: "extract_transactions",
+  description:
+    "Registra una o più transazioni personali (spese o entrate) che l'utente descrive " +
+    "esplicitamente come già avvenute (es. 'ho speso 23€ dal barbiere', 'ho ricevuto lo " +
+    "stipendio di 1500€'). Non usarlo per importi futuri, preventivi, stime o ipotesi.",
+  input_schema: {
+    type: "object",
+    properties: {
+      transactions: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            type: {
+              type: "string",
+              enum: ["income", "expense"],
+              description: "'income' per un'entrata, 'expense' per un'uscita.",
+            },
+            description: {
+              type: "string",
+              description: "Breve descrizione, es. 'Barbiere' o 'Stipendio'.",
+            },
+            amount_cents: {
+              type: "integer",
+              description:
+                "Importo in centesimi, sempre positivo (es. 23,00€ = 2300).",
+            },
+            occurred_at: {
+              type: "string",
+              description:
+                "Data della transazione in formato YYYY-MM-DD. Se l'utente indica solo un " +
+                "mese, usa il giorno 1 di quel mese, nell'anno corrente rispetto alla data " +
+                "odierna fornita nel contesto.",
+            },
+          },
+          required: ["type", "description", "amount_cents", "occurred_at"],
+        },
+      },
+    },
+    required: ["transactions"],
+  },
+};
 
 interface RequestBody {
   chatId: string;
@@ -54,6 +123,32 @@ interface ContextItem {
   id: string;
   label: string;
 }
+
+interface TransactionSuggestion {
+  type: "income" | "expense";
+  description: string;
+  amountCents: number;
+  occurredAt: string;
+}
+
+interface AnthropicTextBlock {
+  type: "text";
+  text: string;
+}
+
+interface AnthropicImageBlock {
+  type: "image";
+  source: { type: "base64"; media_type: string; data: string };
+}
+
+type AnthropicContentBlock = AnthropicTextBlock | AnthropicImageBlock;
+
+// Solo l'ultimo messaggio dell'utente può includere immagini (non l'intera
+// cronologia, per contenere costo/latenza — vedi buildAnthropicMessages).
+const MAX_IMAGE_ATTACHMENTS = 3;
+// Limite prudenziale per immagine, coerente con i limiti pratici di Anthropic
+// per contenuto base64 in un singolo messaggio.
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -100,7 +195,7 @@ Deno.serve(async (req) => {
 
     const { data: historyRows, error: historyError } = await supabase
       .from("messages")
-      .select("role, content")
+      .select("role, content, attachment_ids")
       .eq("chat_id", body.chatId)
       .order("created_at", { ascending: true })
       .limit(MAX_HISTORY_MESSAGES);
@@ -110,17 +205,16 @@ Deno.serve(async (req) => {
       return jsonError("Non è stato possibile leggere la conversazione.", 500);
     }
 
-    const { systemPrompt, sourceReferences } = await buildSystemPrompt(
-      supabase,
-      body.workspaceId ?? null,
-    );
+    const { systemPrompt, sourceReferences, transactionToolEnabled } =
+      await buildSystemPrompt(
+        supabase,
+        body.workspaceId ?? null,
+      );
 
-    const anthropicMessages = (historyRows ?? [])
-      .filter((row) => row.role === "user" || row.role === "ai")
-      .map((row) => ({
-        role: row.role === "ai" ? "assistant" : "user",
-        content: row.content as string,
-      }));
+    const anthropicMessages = await buildAnthropicMessages(
+      supabase,
+      historyRows ?? [],
+    );
 
     if (anthropicMessages.length === 0) {
       return jsonError("Nessun messaggio da elaborare.", 400);
@@ -138,6 +232,9 @@ Deno.serve(async (req) => {
         max_tokens: MAX_OUTPUT_TOKENS,
         system: systemPrompt,
         messages: anthropicMessages,
+        ...(transactionToolEnabled
+          ? { tools: [EXTRACT_TRANSACTIONS_TOOL] }
+          : {}),
       }),
     });
 
@@ -153,7 +250,55 @@ Deno.serve(async (req) => {
 
     const anthropicBody = await anthropicResponse.json();
     const replyText = extractText(anthropicBody);
-    if (!replyText) {
+
+    const suggestions = transactionToolEnabled
+      ? extractTransactionSuggestions(anthropicBody)
+        .map(sanitizeTransaction)
+        .filter((s): s is TransactionSuggestion => s !== null)
+      : [];
+
+    let transactionInsertFailed = false;
+    if (suggestions.length > 0) {
+      const { error: transactionInsertError } = await supabase.from(
+        "transactions",
+      )
+        .insert(
+          suggestions.map((s) => ({
+            workspace_id: body.workspaceId,
+            chat_id: body.chatId,
+            type: s.type,
+            description: s.description,
+            amount_cents: s.amountCents,
+            occurred_at: s.occurredAt,
+            status: "pending",
+            created_by_ai: true,
+          })),
+        );
+      if (transactionInsertError) {
+        console.error(
+          "ai-chat: errore insert transactions",
+          transactionInsertError,
+        );
+        transactionInsertFailed = true;
+      }
+    }
+
+    // Il testo finale non deve mai affermare un successo che non c'è stato: se
+    // l'insert delle transazioni fallisce, lo diciamo esplicitamente invece di
+    // lasciare che la risposta del modello (scritta prima di sapere se l'insert
+    // sarebbe riuscito) suggerisca il contrario.
+    let finalReplyText = replyText;
+    if (transactionInsertFailed) {
+      finalReplyText =
+        "Non sono riuscito a salvare le transazioni rilevate: riprova." +
+        (replyText ? `\n\n${replyText}` : "");
+    } else if (!finalReplyText && suggestions.length > 0) {
+      finalReplyText = `Ho registrato ${suggestions.length} ${
+        suggestions.length === 1 ? "transazione" : "transazioni"
+      } in attesa di conferma nella sezione Bilancio.`;
+    }
+
+    if (!finalReplyText) {
       console.error("ai-chat: risposta Anthropic senza testo", anthropicBody);
       return jsonError("Il servizio AI ha restituito una risposta vuota.", 502);
     }
@@ -161,7 +306,7 @@ Deno.serve(async (req) => {
     const { error: insertError } = await supabase.from("messages").insert({
       chat_id: body.chatId,
       role: "ai",
-      content: replyText,
+      content: finalReplyText,
       tokens_used: anthropicBody?.usage?.output_tokens ?? null,
       source_references: sourceReferences,
     });
@@ -189,9 +334,20 @@ async function buildSystemPrompt(
   // deno-lint-ignore no-explicit-any
   supabase: any,
   workspaceId: string | null,
-): Promise<{ systemPrompt: string; sourceReferences: string[] }> {
+): Promise<
+  {
+    systemPrompt: string;
+    sourceReferences: string[];
+    transactionToolEnabled: boolean;
+  }
+> {
   if (!workspaceId) {
-    return { systemPrompt: ASSISTANT_PERSONA, sourceReferences: [] };
+    // Una Chat senza Workspace non ha dove collegare una transazione: niente strumento.
+    return {
+      systemPrompt: ASSISTANT_PERSONA,
+      sourceReferences: [],
+      transactionToolEnabled: false,
+    };
   }
 
   const { data: workspace } = await supabase
@@ -202,8 +358,13 @@ async function buildSystemPrompt(
 
   if (!workspace) {
     // L'utente non ha accesso a questo Workspace (RLS) o non esiste più: rispondi
-    // senza contesto invece di fallire l'intero turno.
-    return { systemPrompt: ASSISTANT_PERSONA, sourceReferences: [] };
+    // senza contesto invece di fallire l'intero turno. Nessuno strumento transazioni:
+    // non c'è un Workspace verificato a cui collegarle (difesa in profondità oltre a RLS).
+    return {
+      systemPrompt: ASSISTANT_PERSONA,
+      sourceReferences: [],
+      transactionToolEnabled: false,
+    };
   }
 
   const [{ data: notes }, { data: tasks }, { data: documents }] = await Promise
@@ -247,7 +408,11 @@ async function buildSystemPrompt(
     (d: { id: string; name: string }) => ({ id: d.id, label: `- ${d.name}` }),
   );
 
+  // "Data odierna" dà al modello un riferimento affidabile per risolvere date
+  // relative ("questo mese", "il mese scorso") quando estrae le transazioni.
+  const today = new Date().toISOString().slice(0, 10);
   const sections: string[] = [
+    `Data odierna: ${today}.`,
     `Workspace attivo: "${workspace.name}"${
       workspace.description ? ` — ${workspace.description}` : ""
     }`,
@@ -266,12 +431,131 @@ async function buildSystemPrompt(
     );
   }
 
-  const systemPrompt = `${ASSISTANT_PERSONA}\n\n${sections.join("\n\n")}`;
+  const systemPrompt =
+    `${ASSISTANT_PERSONA}\n\n${TRANSACTION_TOOL_INSTRUCTIONS}\n\n${
+      sections.join("\n\n")
+    }`;
   const sourceReferences = [...noteItems, ...taskItems, ...documentItems].map((
     i,
   ) => i.id);
 
-  return { systemPrompt, sourceReferences };
+  return { systemPrompt, sourceReferences, transactionToolEnabled: true };
+}
+
+// Costruisce i messaggi nel formato Anthropic. Solo l'ultimo messaggio
+// dell'utente può portare immagini (non l'intera cronologia, per contenere
+// costo/latenza): per quella riga, se ha `attachment_ids`, il content
+// diventa un array di blocchi testo+immagini invece di una semplice stringa.
+async function buildAnthropicMessages(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  // deno-lint-ignore no-explicit-any
+  historyRows: any[],
+): Promise<{ role: string; content: string | AnthropicContentBlock[] }[]> {
+  const rows = historyRows.filter((row) =>
+    row.role === "user" || row.role === "ai"
+  );
+
+  let lastUserRowIndex = -1;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].role === "user") {
+      lastUserRowIndex = i;
+      break;
+    }
+  }
+
+  return await Promise.all(
+    rows.map(async (row, index) => {
+      const role = row.role === "ai" ? "assistant" : "user";
+      const attachmentIds: string[] = Array.isArray(row.attachment_ids)
+        ? row.attachment_ids
+        : [];
+
+      if (index !== lastUserRowIndex || attachmentIds.length === 0) {
+        return { role, content: row.content as string };
+      }
+
+      const blocks: AnthropicContentBlock[] = [
+        { type: "text", text: row.content as string },
+      ];
+      for (const documentId of attachmentIds.slice(0, MAX_IMAGE_ATTACHMENTS)) {
+        const imageBlock = await fetchImageBlock(supabase, documentId);
+        if (imageBlock) blocks.push(imageBlock);
+      }
+      return { role, content: blocks };
+    }),
+  );
+}
+
+// Scarica un allegato (righe `documents`, bucket Storage `documents` — stesso
+// bucket/tabella usati da apps/mobile per la sezione Documenti, riusati qui
+// per gli allegati di Chat) e lo converte in un blocco immagine Anthropic.
+// Nessun privilegio aggiuntivo: stesso client autenticato col JWT del
+// chiamante usato per il resto della function — le stesse RLS/policy Storage
+// già verificate per la sezione Documenti si applicano identiche qui.
+// Ritorna `null` (silenziosamente, non un errore che blocca il turno) se il
+// documento non è leggibile o l'immagine supera MAX_IMAGE_BYTES.
+async function fetchImageBlock(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  documentId: string,
+): Promise<AnthropicImageBlock | null> {
+  const { data: document } = await supabase
+    .from("documents")
+    .select("storage_path, mime_type")
+    .eq("id", documentId)
+    .maybeSingle();
+  if (!document) return null;
+
+  const { data: blob, error } = await supabase.storage
+    .from("documents")
+    .download(document.storage_path);
+  if (error || !blob) return null;
+
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  if (bytes.byteLength > MAX_IMAGE_BYTES) return null;
+
+  return {
+    type: "image",
+    source: {
+      type: "base64",
+      media_type: document.mime_type,
+      data: encodeBase64(bytes),
+    },
+  };
+}
+
+const BASE64_CHARS =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// Codifica base64 scritta a mano, nessuna dipendenza esterna: evita lo stesso
+// problema già incontrato in questa sessione con `jsr:` irraggiungibile nella
+// rete di verifica del sandbox (funzionerebbe nel runtime reale di Supabase,
+// ma qui non è verificabile — meglio non dipenderne affatto).
+function encodeBase64(bytes: Uint8Array): string {
+  let result = "";
+  let i = 0;
+  for (; i + 3 <= bytes.length; i += 3) {
+    const chunk = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+    result += BASE64_CHARS[(chunk >> 18) & 0x3f];
+    result += BASE64_CHARS[(chunk >> 12) & 0x3f];
+    result += BASE64_CHARS[(chunk >> 6) & 0x3f];
+    result += BASE64_CHARS[chunk & 0x3f];
+  }
+  const remaining = bytes.length - i;
+  if (remaining === 1) {
+    const chunk = bytes[i] << 16;
+    result += BASE64_CHARS[(chunk >> 18) & 0x3f];
+    result += BASE64_CHARS[(chunk >> 12) & 0x3f];
+    result += "==";
+  } else if (remaining === 2) {
+    const chunk = (bytes[i] << 16) | (bytes[i + 1] << 8);
+    result += BASE64_CHARS[(chunk >> 18) & 0x3f];
+    result += BASE64_CHARS[(chunk >> 12) & 0x3f];
+    result += BASE64_CHARS[(chunk >> 6) & 0x3f];
+    result += "=";
+  }
+  return result;
 }
 
 // deno-lint-ignore no-explicit-any
@@ -286,6 +570,43 @@ function extractText(anthropicBody: any): string | null {
     .join("\n")
     .trim();
   return text.length > 0 ? text : null;
+}
+
+// Estrae le chiamate allo strumento extract_transactions dalla risposta Anthropic.
+// Un turno può contenere sia un blocco `text` sia uno o più blocchi `tool_use`
+// (tool_choice di default è "auto": il modello decide se/quando usarlo).
+// deno-lint-ignore no-explicit-any
+function extractTransactionSuggestions(anthropicBody: any): unknown[] {
+  const blocks = anthropicBody?.content;
+  if (!Array.isArray(blocks)) return [];
+  return blocks
+    .filter((block: { type: string; name?: string }) =>
+      block.type === "tool_use" && block.name === "extract_transactions"
+    )
+    // deno-lint-ignore no-explicit-any
+    .flatMap((block: any) =>
+      Array.isArray(block.input?.transactions) ? block.input.transactions : []
+    );
+}
+
+// Validazione difensiva: lo schema del tool vincola la forma del JSON, non la sua
+// correttezza — un valore strutturalmente valido ma sbagliato (es. importo 0, data
+// non parsabile, tipo diverso da income/expense) va scartato qui, non solo delegato
+// al check constraint del DB.
+function sanitizeTransaction(raw: unknown): TransactionSuggestion | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const type = r.type === "income" || r.type === "expense" ? r.type : null;
+  const description = typeof r.description === "string"
+    ? r.description.trim()
+    : "";
+  const amountCents = Math.round(Number(r.amount_cents));
+  const occurredAt = typeof r.occurred_at === "string" ? r.occurred_at : "";
+  if (!type) return null;
+  if (!description) return null;
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(occurredAt)) return null;
+  return { type, description, amountCents, occurredAt };
 }
 
 function jsonError(message: string, status: number): Response {

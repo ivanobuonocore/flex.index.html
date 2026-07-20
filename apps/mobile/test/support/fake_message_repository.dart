@@ -11,6 +11,7 @@ class FakeMessageRepository implements MessageRepository {
   String? lastChatId;
   String? lastWorkspaceId;
   String? lastContent;
+  List<String>? lastAttachmentIds;
 
   void emit(List<Message> messages) => _controller.add(messages);
 
@@ -22,10 +23,12 @@ class FakeMessageRepository implements MessageRepository {
     required String chatId,
     required String? workspaceId,
     required String content,
+    List<String> attachmentIds = const [],
   }) async {
     lastChatId = chatId;
     lastWorkspaceId = workspaceId;
     lastContent = content;
+    lastAttachmentIds = attachmentIds;
     return sendResult ?? const Result.ok(unit);
   }
 

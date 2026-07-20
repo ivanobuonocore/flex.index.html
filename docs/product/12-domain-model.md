@@ -41,6 +41,15 @@ Relazioni: appartiene a un Workspace, creata manualmente o dall'AI.
 Campi: id, contenuto, livello (Globale/Workspace/Conversazione), origine (utente/AI), data aggiornamento.
 Relazioni: può appartenere a un User, a un Workspace, collegata a una Chat.
 
+### Transaction
+Aggiunta oltre allo scaffold originale (Fase 3, slice "Bilancio" — richiesta reale dell'utente,
+ispirata all'app Planito, non nel piano iniziale). Campi: id, tipo (entrata/uscita), descrizione,
+importo (centesimi, sempre positivo — il segno lo decide il tipo), valuta (EUR in questa slice),
+data, stato (in attesa di conferma/confermata), origine (manuale/AI). Relazioni: appartiene a un
+Workspace; se estratta dall'AI Engine da un messaggio di Chat, collegata a quella Chat. Le
+transazioni estratte dall'AI nascono "in attesa di conferma" e diventano definitive, contando nel
+saldo del Workspace, solo su conferma esplicita dell'utente (AI Constitution, Principio 1).
+
 ### Agent
 Campi: id, nome, descrizione, prompt di sistema, strumenti disponibili, modello AI preferito.
 Relazioni: associato a uno o più Workspace, utilizza Memoria, accede alla Knowledge Base autorizzata.

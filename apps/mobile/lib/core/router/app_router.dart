@@ -13,7 +13,8 @@ import '../../features/note/presentation/note_list_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 import '../../features/task/presentation/task_list_screen.dart';
-import '../../features/today/presentation/today_screen.dart';
+import '../../features/transaction/presentation/balance_overview_screen.dart';
+import '../../features/transaction/presentation/transaction_report_screen.dart';
 import '../../features/workspace/presentation/workspace_detail_screen.dart';
 import '../../features/workspace/presentation/workspace_list_screen.dart';
 import 'app_shell.dart';
@@ -24,7 +25,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   ref.onDispose(refreshNotifier.dispose);
 
   return GoRouter(
-    initialLocation: '/today',
+    initialLocation: '/chat',
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
       final session = ref.read(sessionControllerProvider);
@@ -37,7 +38,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           state.matchedLocation == '/register';
 
       if (!isAuthenticated && !isOnAuthRoute) return '/login';
-      if (isAuthenticated && isOnAuthRoute) return '/today';
+      if (isAuthenticated && isOnAuthRoute) return '/chat';
       return null;
     },
     routes: [
@@ -52,15 +53,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                  path: '/today',
-                  builder: (context, state) => const TodayScreen())
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                  path: '/chat',
-                  builder: (context, state) => const ChatListScreen()),
+                path: '/chat',
+                builder: (context, state) => const ChatListScreen(),
+                routes: [
+                  // Solo Chat private (senza Workspace): quelle di un
+                  // Workspace restano su /workspace/:id/chat/:chatId, già
+                  // esistente, per non duplicare la stessa schermata su due
+                  // percorsi con significati diversi.
+                  GoRoute(
+                    path: ':chatId',
+                    builder: (context, state) => ChatDetailScreen(
+                      chatId: state.pathParameters['chatId']!,
+                      workspaceId: null,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
           StatefulShellBranch(
@@ -108,6 +116,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                           ),
                         ],
                       ),
+                      GoRoute(
+                        path: 'transactions',
+                        builder: (context, state) => TransactionReportScreen(
+                          workspaceId: state.pathParameters['id']!,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -119,6 +133,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                   path: '/search',
                   builder: (context, state) => const SearchScreen()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                  path: '/balance',
+                  builder: (context, state) => const BalanceOverviewScreen()),
             ],
           ),
           StatefulShellBranch(

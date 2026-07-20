@@ -30,8 +30,7 @@ void main() {
     addTearDown(fakeRepository.dispose);
   });
 
-  test('messagesProvider riflette lo stream del repository per chat',
-      () async {
+  test('messagesProvider riflette lo stream del repository per chat', () async {
     final subscription = container.listen(messagesProvider(chatId), (_, __) {});
     addTearDown(subscription.close);
 
@@ -41,8 +40,7 @@ void main() {
     expect(container.read(messagesProvider(chatId)).value, [message]);
   });
 
-  test('send con successo non ritorna errore e inoltra i parametri',
-      () async {
+  test('send con successo non ritorna errore e inoltra i parametri', () async {
     final failure = await container
         .read(messageFormControllerProvider.notifier)
         .send(chatId: chatId, workspaceId: workspaceId, content: 'Ciao');
@@ -63,5 +61,24 @@ void main() {
         .send(chatId: chatId, workspaceId: workspaceId, content: 'Ciao');
 
     expect(failure, isA<UnexpectedFailure>());
+  });
+
+  test('send inoltra attachmentIds al repository', () async {
+    await container.read(messageFormControllerProvider.notifier).send(
+      chatId: chatId,
+      workspaceId: workspaceId,
+      content: 'Guarda questa foto',
+      attachmentIds: const ['d1'],
+    );
+
+    expect(fakeRepository.lastAttachmentIds, ['d1']);
+  });
+
+  test('send senza attachmentIds inoltra una lista vuota', () async {
+    await container
+        .read(messageFormControllerProvider.notifier)
+        .send(chatId: chatId, workspaceId: workspaceId, content: 'Ciao');
+
+    expect(fakeRepository.lastAttachmentIds, isEmpty);
   });
 }

@@ -14,6 +14,24 @@ final documentsProvider = StreamProvider.autoDispose
   return ref.watch(documentRepositoryProvider).watchDocuments(workspaceId);
 });
 
+/// URL firmato di un Document dato solo il suo id — usato per renderizzare un
+/// allegato di Chat ([Message.attachmentIds]), di cui la UI non ha già
+/// l'oggetto [Document] completo come invece accade nella lista Documenti.
+final documentDownloadUrlProvider =
+    FutureProvider.autoDispose.family<String, String>((ref, documentId) async {
+  final repository = ref.watch(documentRepositoryProvider);
+  final documentResult = await repository.getDocument(documentId);
+  if (documentResult.isErr) {
+    throw (documentResult as Err<Document>).failure;
+  }
+  final urlResult =
+      await repository.getDownloadUrl((documentResult as Ok<Document>).value);
+  if (urlResult.isErr) {
+    throw (urlResult as Err<String>).failure;
+  }
+  return (urlResult as Ok<String>).value;
+});
+
 final documentFormControllerProvider =
     AsyncNotifierProvider.autoDispose<DocumentFormController, void>(
   DocumentFormController.new,

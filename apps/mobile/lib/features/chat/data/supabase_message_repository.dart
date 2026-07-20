@@ -31,10 +31,12 @@ class SupabaseMessageRepository implements MessageRepository {
     required String chatId,
     required String? workspaceId,
     required String content,
+    List<String> attachmentIds = const [],
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty) {
-      return const Result.err(ValidationFailure('Il messaggio non può essere vuoto.'));
+      return const Result.err(
+          ValidationFailure('Il messaggio non può essere vuoto.'));
     }
 
     try {
@@ -42,10 +44,12 @@ class SupabaseMessageRepository implements MessageRepository {
         'chat_id': chatId,
         'role': MessageRole.user.name,
         'content': trimmed,
+        'attachment_ids': attachmentIds,
       });
     } catch (e) {
       return Result.err(
-        UnexpectedFailure('Non è stato possibile inviare il messaggio.', cause: e),
+        UnexpectedFailure('Non è stato possibile inviare il messaggio.',
+            cause: e),
       );
     }
 
@@ -56,13 +60,15 @@ class SupabaseMessageRepository implements MessageRepository {
       );
       if (response.status != 200) {
         return const Result.err(
-          UnexpectedFailure('L\'assistente non è riuscito a rispondere. Riprova.'),
+          UnexpectedFailure(
+              'L\'assistente non è riuscito a rispondere. Riprova.'),
         );
       }
       return const Result.ok(unit);
     } catch (e) {
       return Result.err(
-        UnexpectedFailure('L\'assistente non è riuscito a rispondere. Riprova.', cause: e),
+        UnexpectedFailure('L\'assistente non è riuscito a rispondere. Riprova.',
+            cause: e),
       );
     }
   }
@@ -76,7 +82,8 @@ class SupabaseMessageRepository implements MessageRepository {
       timestamp: DateTime.parse(row['created_at'] as String),
       attachmentIds: (row['attachment_ids'] as List<dynamic>).cast<String>(),
       tokensUsed: row['tokens_used'] as int?,
-      sourceReferences: (row['source_references'] as List<dynamic>).cast<String>(),
+      sourceReferences:
+          (row['source_references'] as List<dynamic>).cast<String>(),
     );
   }
 

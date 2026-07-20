@@ -64,6 +64,60 @@ Anthropic disponibile in questa sessione): verificata staticamente (`deno check`
 con test applicativi su repository fake — dettagli in `docs/database/README.md` e
 `apps/mobile/README.md`.
 
+**Fase 3 (slice 2)**: Bilancio (entrate e uscite) — aggiunta oltre alla roadmap originale, su
+richiesta diretta dell'utente, ispirata all'app Planito (assistente su WhatsApp con contabilità
+in linguaggio naturale). L'AI Engine riconosce spese ed entrate descritte in linguaggio naturale
+(es. "barbiere 23€, supermercato 35€" oppure "ho ricevuto lo stipendio di 1500€") tramite uno
+strumento Anthropic dedicato (`extract_transactions`) e le registra come "in attesa di conferma":
+contano nel saldo della schermata Bilancio solo dopo che l'utente le conferma esplicitamente (AI
+Constitution, Principio 1 — "l'AI suggerisce, l'utente decide"). RLS verificata su Postgres
+locale; Edge Function verificata solo staticamente, stessi limiti della slice precedente.
+
+**Fase 3 (slice 3)**: Foto nei messaggi di Chat — continuazione della richiesta "rendi l'app
+simile a Planito". Riusa la sezione Documenti esistente (nessuna nuova tabella/migrazione): una
+foto allegata a un messaggio è un `Document` con `chat_id` valorizzato, referenziato in
+`Message.attachmentIds`. L'Edge Function `ai-chat` invia l'immagine dell'ultimo messaggio a
+Claude come contenuto visivo (max 3 foto, ~5MB ciascuna). I messaggi vocali restano fuori scope:
+richiederebbero un servizio di trascrizione aggiuntivo non ancora attivato.
+
+**Fase 3 (slice 4)**: Notifiche push vere — prima slice: infrastruttura + prova. Su richiesta
+esplicita dell'utente (ha rifiutato l'alternativa "elenco promemoria solo in app" per volere
+notifiche di sistema reali), l'app è ora anche una PWA installabile ("Aggiungi a Home" su iPhone)
+con Web Push: tabella `push_subscriptions` (livello account), Edge Function `send-test-push`
+(`npm:web-push`, mai l'AI Engine), service worker dedicato (`push-worker.js`), e una card
+"Notifiche" in Profilo con attivazione e un pulsante di prova. Deliberatamente non ancora i
+Promemoria veri (`CalendarEvent`, già modellato ma non implementato): questa slice prova solo che
+l'intera catena browser↔notifica funziona, prima di costruirci sopra dei contenuti. Verificata
+staticamente (RLS su Postgres locale, `deno check`/`lint`/`fmt`, `flutter analyze` e un vero
+`flutter build web`); il recapito reale su un dispositivo non è verificabile da questo ambiente.
+
+**Fase 3 (slice 5)**: Chat come Home dell'app — richiesta esplicita dell'utente ("la funzione
+principale deve essere la chat"), dopo aver notato che nella versione precedente la Chat era
+sepolta 3-4 tocchi dentro un Workspace. La tab "Oggi" viene rimossa: il suo contenuto (saluto,
+Workspace recenti) confluisce nella nuova Home, che è ora `/chat` — la prima cosa che si vede
+dopo il login, con tutte le conversazioni dell'utente e la creazione diretta di una nuova chat
+(privata o in un Workspace). Da una Chat di Workspace, un pulsante "cartelle" apre
+Note/Attività/Documenti/Bilancio senza uscire dalla conversazione. Nessun cambio al modello dati:
+`Chat` resta collegata a un Workspace come prima (CLAUDE.md, "Chat è una feature dentro Workspace,
+non un dominio a sé stante") — cambia solo la navigazione.
+
+**Fase 3 (slice 6)**: Emoji nelle risposte AI + Bilancio globale (grafico a torta) — su richiesta
+esplicita dell'utente ("vorrei che la chat fosse più bella... che rispondesse anche con emoji" e
+"un grafico a torta... dove attualmente si trova 'ricerca', 'workspace'... con un prospetto di
+entrate e di uscite"). Due modifiche indipendenti:
+- L'assistente AI (`ai-chat`) ora usa emoji con naturalezza nelle risposte (aggiunta al system
+  prompt `ASSISTANT_PERSONA`), non solo il selettore manuale già presente nell'input della Chat
+  (restyling stile WhatsApp, stessa richiesta).
+- Nuova quinta voce di navigazione **Bilancio**, tra Ricerca e Profilo: a differenza del Bilancio
+  per Workspace (già esistente, raggiungibile dalle "cartelle" di una Chat), questa schermata
+  aggrega le transazioni confermate di **tutti** i Workspace dell'utente in un grafico a torta
+  entrate/uscite (`fl_chart`) più un prospetto testuale del saldo — le stesse transazioni che la
+  Chat riconosce e registra in linguaggio naturale, indipendentemente da quale Workspace le ha
+  generate. Richiede `TransactionRepository.watchTransactions(workspaceId)` → `(String?)`
+  (`null` = tutti i Workspace, stesso pattern già usato da `ChatRepository.watchChats`).
+  Nessuna nuova tabella o migrazione: solo un filtro applicativo in meno, con l'isolamento tra
+  utenti sempre garantito dalle RLS di `transactions`.
+
 Memoria resta nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.

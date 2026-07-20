@@ -10,6 +10,7 @@ import '../../chat/application/chat_controller.dart';
 import '../../document/application/document_controller.dart';
 import '../../note/application/note_controller.dart';
 import '../../task/application/task_controller.dart';
+import '../../transaction/application/transaction_controller.dart';
 import '../application/workspace_controller.dart';
 
 /// Home del Workspace (docs/product/06-information-architecture.md, "Home del
@@ -70,6 +71,7 @@ class _WorkspaceDetailBody extends ConsumerWidget {
     final tasksAsync = ref.watch(tasksProvider(workspace.id));
     final documentsAsync = ref.watch(documentsProvider(workspace.id));
     final chatsAsync = ref.watch(chatsProvider(workspace.id));
+    final transactionsAsync = ref.watch(transactionsProvider(workspace.id));
 
     return CustomScrollView(
       slivers: [
@@ -220,7 +222,8 @@ class _WorkspaceDetailBody extends ConsumerWidget {
                             .take(3)
                             .map((chat) => Card(
                                   child: ListTile(
-                                    leading: const Icon(Icons.chat_bubble_outline),
+                                    leading:
+                                        const Icon(Icons.chat_bubble_outline),
                                     title: Text(
                                       chat.title,
                                       maxLines: 1,
@@ -232,6 +235,47 @@ class _WorkspaceDetailBody extends ConsumerWidget {
                                 ))
                             .toList(growable: false),
                       ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              _SectionHeader(
+                title: 'Bilancio',
+                onSeeAll: () =>
+                    context.push('/workspace/${workspace.id}/transactions'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              transactionsAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (_, __) =>
+                    const Text('Non è stato possibile caricare il bilancio.'),
+                data: (transactions) {
+                  final confirmed = confirmedThisMonth(transactions);
+                  final pending = pendingTransactions(transactions);
+                  if (confirmed.isEmpty && pending.isEmpty) {
+                    return const _EmptySectionHint(
+                      message:
+                          'Nessuna transazione. Toccando "Vedi tutte" puoi aggiungerne una.',
+                    );
+                  }
+                  final balance = balanceCents(confirmed);
+                  final sign = balance > 0 ? '+' : (balance < 0 ? '-' : '');
+                  final balanceLabel =
+                      '$sign${(balance.abs() / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
+                  return Card(
+                    child: ListTile(
+                      leading:
+                          const Icon(Icons.account_balance_wallet_outlined),
+                      title: Text('Saldo questo mese: $balanceLabel'),
+                      subtitle: pending.isNotEmpty
+                          ? Text('${pending.length} in attesa di conferma')
+                          : null,
+                      onTap: () => context
+                          .push('/workspace/${workspace.id}/transactions'),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: AppSpacing.lg),
               const Text('Prossimamente', style: AppTypography.heading3),

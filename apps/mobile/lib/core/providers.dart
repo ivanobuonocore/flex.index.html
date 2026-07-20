@@ -7,8 +7,10 @@ import '../features/chat/data/supabase_chat_repository.dart';
 import '../features/chat/data/supabase_message_repository.dart';
 import '../features/document/data/supabase_document_repository.dart';
 import '../features/note/data/supabase_note_repository.dart';
+import '../features/notifications/data/supabase_push_subscription_repository.dart';
 import '../features/search/data/supabase_search_repository.dart';
 import '../features/task/data/supabase_task_repository.dart';
+import '../features/transaction/data/supabase_transaction_repository.dart';
 import '../features/workspace/data/supabase_workspace_repository.dart';
 import 'supabase/supabase_bootstrap.dart';
 
@@ -47,4 +49,13 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
 
 final messageRepositoryProvider = Provider<MessageRepository>((ref) {
   return SupabaseMessageRepository(ref.watch(supabaseClientProvider));
+});
+
+final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
+  return SupabaseTransactionRepository(ref.watch(supabaseClientProvider));
+});
+
+final pushSubscriptionRepositoryProvider =
+    Provider<PushSubscriptionRepository>((ref) {
+  return SupabasePushSubscriptionRepository(ref.watch(supabaseClientProvider));
 });

@@ -17,6 +17,7 @@ export 'src/entities/note.dart';
 export 'src/entities/search_result.dart';
 export 'src/entities/task.dart';
 export 'src/entities/timeline_event.dart';
+export 'src/entities/transaction.dart';
 export 'src/entities/user.dart';
 export 'src/entities/workspace.dart';
 
@@ -25,6 +26,8 @@ export 'src/repositories/chat_repository.dart';
 export 'src/repositories/document_repository.dart';
 export 'src/repositories/message_repository.dart';
 export 'src/repositories/note_repository.dart';
+export 'src/repositories/push_subscription_repository.dart';
 export 'src/repositories/search_repository.dart';
 export 'src/repositories/task_repository.dart';
+export 'src/repositories/transaction_repository.dart';
 export 'src/repositories/workspace_repository.dart';

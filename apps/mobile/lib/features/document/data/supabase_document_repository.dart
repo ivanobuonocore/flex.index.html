@@ -42,6 +42,7 @@ class SupabaseDocumentRepository implements DocumentRepository {
     required String fileName,
     required String mimeType,
     required Uint8List bytes,
+    String? chatId,
   }) async {
     if (fileName.trim().isEmpty) {
       return const Result.err(
@@ -78,6 +79,7 @@ class SupabaseDocumentRepository implements DocumentRepository {
             'size_bytes': bytes.length,
             'storage_path': storagePath,
             'hash': sha256.convert(bytes).toString(),
+            'chat_id': chatId,
           })
           .select()
           .single();
@@ -122,6 +124,20 @@ class SupabaseDocumentRepository implements DocumentRepository {
     } catch (e) {
       return Result.err(
         UnexpectedFailure('Non è stato possibile aprire il documento.',
+            cause: e),
+      );
+    }
+  }
+
+  @override
+  Future<Result<Document>> getDocument(String documentId) async {
+    try {
+      final row =
+          await _client.from(_table).select().eq('id', documentId).single();
+      return Result.ok(_toDomain(row));
+    } catch (e) {
+      return Result.err(
+        UnexpectedFailure('Non è stato possibile leggere il documento.',
             cause: e),
       );
     }
