@@ -463,10 +463,76 @@ rimuove B dai membri, B perde di nuovo ogni accesso.
 (richiede un progetto remoto) — verificato lo stesso comportamento SQL su Postgres locale, non il
 trasporto RPC in sé.
 
+## Fase 3 (slice 9) — Promemoria via Chat
+
+Richiesta esplicita dell'utente: notifiche push vere per i promemoria (non un semplice elenco in
+app) — riusa l'infrastruttura Web Push già costruita e provata nella slice `push_subscriptions`/
+`send-test-push`.
+
+### `public.calendar_events`
+
+Stesso pattern RLS a join di `notes`/`tasks` (`EXISTS` su `workspaces.owner_id = auth.uid()`).
+
+| Colonna                    | Note                                                                |
+|----------------------------|----------------------------------------------------------------------|
+| `workspace_id`             | FK cascade, obbligatorio — sempre la sezione Appuntamenti se creato dalla Chat |
+| `title`                    | non vuoto (constraint)                                                |
+| `starts_at`                | data/ora del promemoria                                              |
+| `duration_minutes`         | default 30                                                            |
+| `reminder_minutes_before`  | facoltativo — anticipo dell'avviso rispetto a `starts_at`             |
+| `source_task_id`/`source_chat_id` | facoltativi — origine se derivato da una Task o da un messaggio di Chat |
+| `notified_at`              | valorizzato da `send-due-reminders` non appena inviata la notifica — evita un secondo invio |
+
+**A differenza di `transactions`, nessuno stato "pending/confirmed"**: un promemoria non è un dato
+finanziario da poter contare per errore, ed è banalmente reversibile (si elimina con uno swipe) —
+inserito direttamente, sia manualmente sia dall'Edge Function `ai-chat`.
+
+**Estrazione lato Edge Function `ai-chat`**: nuovo tool Anthropic `create_reminder` (schema JSON:
+`title`, `starts_at` ISO 8601, `reminder_minutes_before` facoltativo), attivo solo quando la Chat
+riceve un `remindersWorkspaceId` valido (parametro separato da `workspaceId`, sempre la sezione
+Bilancio — un promemoria non appartiene mai al Workspace delle transazioni). Può comparire insieme
+a `extract_transactions` nello stesso turno (un messaggio può descrivere sia una spesa sia un
+promemoria). Validazione difensiva (`sanitizeReminder`) analoga a `sanitizeTransaction`: una data
+non parsabile scarta il suggerimento invece di fallire l'intero turno.
+
+**Verificato manualmente su Postgres locale**: isolamento cross-utente su `calendar_events`
+(select/insert bloccati per un Workspace non proprio).
+
+**Non verificabile in questa sessione**: nessun runtime Deno disponibile (come per l'ultima
+modifica a `ai-chat` in Fase 3 slice 7C) — `ai-chat/index.ts` e la nuova function
+`send-due-reminders` sono state rilette manualmente per correttezza sintattica e di tipo, non
+verificate con il compilatore TypeScript. Nessuna chiamata reale al provider Anthropic.
+
+### Edge Function `send-due-reminders`
+
+**L'unica function di questo progetto che usa la service role**, non il JWT di un utente —
+giustificato esplicitamente: è invocata da un cron job Postgres (`pg_cron`, ogni minuto), non da
+una richiesta di un utente autenticato, quindi non esiste un JWT da inoltrare. Deve poter leggere
+`calendar_events` di **tutti** gli utenti (per trovare i promemoria scaduti) e le rispettive
+`push_subscriptions` per inviare la notifica — le RLS di quelle tabelle restano intatte per ogni
+altro accesso, qui vengono bypassate by design.
+
+Legge i promemoria con `notified_at is null` entro una finestra di lettura di 24 ore (limite
+prudenziale sulla query, non sul momento effettivo dell'invio), poi filtra riga per riga il
+momento di invio reale (`starts_at` meno l'eventuale `reminder_minutes_before`) contro `now()`.
+Marca `notified_at` su ogni promemoria elaborato indipendentemente dal numero di iscrizioni push
+raggiunte con successo (anche zero): un avviso a tempo non deve essere ritentato indefinitamente
+né consegnato in ritardo una volta risolto un problema di iscrizione.
+
+**Attivazione del cron (da eseguire manualmente, SQL commentato in fondo alla migrazione
+`20260722090000_calendar_events.sql`)**: richiede le estensioni `pg_cron`/`pg_net` abilitate
+(Database → Extensions nel pannello Supabase, non attive di default) e la Service Role Key del
+progetto come Bearer token della chiamata HTTP pianificata — `SUPABASE_SERVICE_ROLE_KEY` è invece
+già disponibile automaticamente **dentro** ogni Edge Function, non va configurato come secret.
+
+**Non verificabile in questa sessione**: nessun `pg_cron`/`pg_net` disponibili su Postgres locale
+(estensioni specifiche di Supabase), nessuna chiamata reale alla function. Verificato solo
+staticamente (rilettura manuale, nessun Deno disponibile).
+
 ## Fasi successive
 
-Memory, Agent, Calendar Event, Timeline Event sono già modellate in `packages/domain` ma non
-hanno ancora una migrazione: arriveranno con le rispettive feature (`docs/product/26-execution-blueprint.md`).
+Memory, Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una
+migrazione: arriveranno con le rispettive feature (`docs/product/26-execution-blueprint.md`).
 
 Note tecniche aperte dal Domain Model, da risolvere prima di quelle migrazioni:
 

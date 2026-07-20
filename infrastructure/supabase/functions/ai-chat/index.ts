@@ -1,7 +1,7 @@
 // AI Engine — unico punto di contatto con il provider AI (CLAUDE.md, AGENTS.md
 // paragrafo 4: nessun altro modulo chiama direttamente un provider LLM).
 //
-// Riceve { chatId, workspaceId? }: il messaggio dell'utente è già stato inserito in
+// Riceve { chatId, workspaceId?, remindersWorkspaceId? }: il messaggio dell'utente è già inserito in
 // `messages` dal client prima di questa chiamata (apps/mobile,
 // SupabaseMessageRepository.sendMessage). Questa function costruisce il contesto,
 // chiama Claude, e inserisce la risposta come nuova riga `messages` — il client la
@@ -96,6 +96,51 @@ const TRANSACTION_CATEGORIES = [
   "altro",
 ] as const;
 
+// Addendum al system prompt, solo quando è disponibile un Workspace per i promemoria
+// (vedi `reminderToolEnabled`): a differenza delle Transazioni, un promemoria non ha
+// uno stato "pending/confirmed" — non è un dato finanziario da poter contare per
+// errore, ed è banalmente reversibile (si cancella con un tocco) — inserito
+// direttamente, con una risposta testuale di conferma (stesso principio di
+// trasparenza, non lo stesso meccanismo di conferma delle Transazioni).
+const REMINDER_TOOL_INSTRUCTIONS =
+  `Quando l'utente chiede di essere ricordato di qualcosa in un momento specifico nel
+futuro (es. "ricordami la visita dal dentista giovedì alle 15", "promemoria: chiamare Mario
+domani alle 10"), usa lo strumento create_reminder per registrarlo — non limitarti a scriverlo
+in prosa. Usa la data odierna fornita nel contesto per risolvere date/orari relativi. Non usarlo
+per eventi già avvenuti, task senza un orario specifico, o richieste vaghe senza un momento
+preciso. Includi sempre, oltre all'uso dello strumento, una risposta testuale breve che confermi
+cosa hai registrato e quando.`;
+
+const CREATE_REMINDER_TOOL = {
+  name: "create_reminder",
+  description:
+    "Crea un promemoria per un momento specifico nel futuro, quando l'utente chiede " +
+    "esplicitamente di essere ricordato di qualcosa (es. 'ricordami la visita dal dentista " +
+    "giovedì alle 15'). Non usarlo per eventi già avvenuti o senza un orario preciso.",
+  input_schema: {
+    type: "object",
+    properties: {
+      title: {
+        type: "string",
+        description: "Breve descrizione del promemoria, es. 'Visita dal dentista'.",
+      },
+      starts_at: {
+        type: "string",
+        description:
+          "Data e ora del promemoria in formato ISO 8601 (es. '2026-07-24T15:00:00'), " +
+          "risolta rispetto alla data odierna fornita nel contesto.",
+      },
+      reminder_minutes_before: {
+        type: "integer",
+        description:
+          "Minuti di anticipo per l'avviso rispetto a starts_at (facoltativo, default 0 " +
+          "= avviso esattamente all'orario indicato).",
+      },
+    },
+    required: ["title", "starts_at"],
+  },
+};
+
 const EXTRACT_TRANSACTIONS_TOOL = {
   name: "extract_transactions",
   description:
@@ -157,6 +202,10 @@ const EXTRACT_TRANSACTIONS_TOOL = {
 interface RequestBody {
   chatId: string;
   workspaceId?: string | null;
+  // Sezione "Appuntamenti" (SystemWorkspaceCategory in packages/domain) — separata da
+  // `workspaceId` (sempre la sezione Bilancio, vedi apps/mobile ChatHomeScreen): un
+  // promemoria non appartiene mai al Workspace delle transazioni.
+  remindersWorkspaceId?: string | null;
 }
 
 interface ContextItem {
@@ -172,6 +221,12 @@ interface TransactionSuggestion {
   amountCents: number;
   occurredAt: string;
   category: TransactionCategory;
+}
+
+interface ReminderSuggestion {
+  title: string;
+  startsAt: string;
+  reminderMinutesBefore: number | null;
 }
 
 interface AnthropicTextBlock {
@@ -258,11 +313,16 @@ Deno.serve(async (req) => {
 
     const historyRows = (historyRowsDesc ?? []).slice().reverse();
 
-    const { systemPrompt, sourceReferences, transactionToolEnabled } =
-      await buildSystemPrompt(
-        supabase,
-        body.workspaceId ?? null,
-      );
+    const {
+      systemPrompt,
+      sourceReferences,
+      transactionToolEnabled,
+      reminderToolEnabled,
+    } = await buildSystemPrompt(
+      supabase,
+      body.workspaceId ?? null,
+      body.remindersWorkspaceId ?? null,
+    );
 
     const anthropicMessages = await buildAnthropicMessages(
       supabase,
@@ -290,8 +350,13 @@ Deno.serve(async (req) => {
         // questo il modello può comunque usarlo di sua iniziativa (vedi
         // commento su MAX_OUTPUT_TOKENS più sopra).
         thinking: { type: "disabled" },
-        ...(transactionToolEnabled
-          ? { tools: [EXTRACT_TRANSACTIONS_TOOL] }
+        ...((transactionToolEnabled || reminderToolEnabled)
+          ? {
+            tools: [
+              ...(transactionToolEnabled ? [EXTRACT_TRANSACTIONS_TOOL] : []),
+              ...(reminderToolEnabled ? [CREATE_REMINDER_TOOL] : []),
+            ],
+          }
           : {}),
       }),
     });
@@ -342,19 +407,64 @@ Deno.serve(async (req) => {
       }
     }
 
+    // A differenza delle Transazioni (pending/confirmed), un promemoria non ha nulla
+    // da confermare: reversibile con un tocco, non un dato finanziario — inserito
+    // direttamente (AI Constitution, Principio 1 si applica al "contare" qualcosa,
+    // non a un promemoria che si cancella con un tap).
+    const reminderSuggestions = reminderToolEnabled
+      ? extractReminderSuggestions(anthropicBody)
+        .map(sanitizeReminder)
+        .filter((r): r is ReminderSuggestion => r !== null)
+      : [];
+
+    let reminderInsertFailed = false;
+    if (reminderSuggestions.length > 0) {
+      const { error: reminderInsertError } = await supabase.from(
+        "calendar_events",
+      )
+        .insert(
+          reminderSuggestions.map((r) => ({
+            workspace_id: body.remindersWorkspaceId,
+            source_chat_id: body.chatId,
+            title: r.title,
+            starts_at: r.startsAt,
+            reminder_minutes_before: r.reminderMinutesBefore,
+          })),
+        );
+      if (reminderInsertError) {
+        console.error(
+          "ai-chat: errore insert calendar_events",
+          reminderInsertError,
+        );
+        reminderInsertFailed = true;
+      }
+    }
+
     // Il testo finale non deve mai affermare un successo che non c'è stato: se
-    // l'insert delle transazioni fallisce, lo diciamo esplicitamente invece di
-    // lasciare che la risposta del modello (scritta prima di sapere se l'insert
-    // sarebbe riuscito) suggerisca il contrario.
+    // l'insert delle transazioni/dei promemoria fallisce, lo diciamo esplicitamente
+    // invece di lasciare che la risposta del modello (scritta prima di sapere se
+    // l'insert sarebbe riuscito) suggerisca il contrario.
     let finalReplyText = replyText;
-    if (transactionInsertFailed) {
+    if (transactionInsertFailed && reminderInsertFailed) {
+      finalReplyText =
+        "Non sono riuscito a salvare né le transazioni né i promemoria rilevati: riprova." +
+        (replyText ? `\n\n${replyText}` : "");
+    } else if (transactionInsertFailed) {
       finalReplyText =
         "Non sono riuscito a salvare le transazioni rilevate: riprova." +
+        (replyText ? `\n\n${replyText}` : "");
+    } else if (reminderInsertFailed) {
+      finalReplyText =
+        "Non sono riuscito a salvare i promemoria rilevati: riprova." +
         (replyText ? `\n\n${replyText}` : "");
     } else if (!finalReplyText && suggestions.length > 0) {
       finalReplyText = `Ho registrato ${suggestions.length} ${
         suggestions.length === 1 ? "transazione" : "transazioni"
       } in attesa di conferma nella sezione Bilancio.`;
+    } else if (!finalReplyText && reminderSuggestions.length > 0) {
+      // "Promemoria" è invariante in italiano: nessuna forma plurale distinta da gestire.
+      finalReplyText =
+        `Ho creato ${reminderSuggestions.length} promemoria nella sezione Appuntamenti.`;
     }
 
     if (!finalReplyText) {
@@ -393,19 +503,40 @@ async function buildSystemPrompt(
   // deno-lint-ignore no-explicit-any
   supabase: any,
   workspaceId: string | null,
+  remindersWorkspaceId: string | null,
 ): Promise<
   {
     systemPrompt: string;
     sourceReferences: string[];
     transactionToolEnabled: boolean;
+    reminderToolEnabled: boolean;
   }
 > {
+  // Verificato indipendentemente da `workspaceId` (la sezione Bilancio): un
+  // promemoria va sempre nella sezione Appuntamenti, un Workspace diverso. Solo
+  // un controllo di esistenza/accesso (RLS) — a differenza del Workspace attivo,
+  // non ne serve il contenuto (Note/Task/Documenti) per il contesto della Chat.
+  const reminderToolEnabled = remindersWorkspaceId
+    ? Boolean(
+      (await supabase
+        .from("workspaces")
+        .select("id")
+        .eq("id", remindersWorkspaceId)
+        .maybeSingle()).data,
+    )
+    : false;
+
   if (!workspaceId) {
     // Una Chat senza Workspace non ha dove collegare una transazione: niente strumento.
     return {
-      systemPrompt: ASSISTANT_PERSONA,
+      systemPrompt: reminderToolEnabled
+        ? `${ASSISTANT_PERSONA}\n\n${REMINDER_TOOL_INSTRUCTIONS}\n\nData odierna: ${
+          new Date().toISOString().slice(0, 10)
+        }.`
+        : ASSISTANT_PERSONA,
       sourceReferences: [],
       transactionToolEnabled: false,
+      reminderToolEnabled,
     };
   }
 
@@ -420,9 +551,14 @@ async function buildSystemPrompt(
     // senza contesto invece di fallire l'intero turno. Nessuno strumento transazioni:
     // non c'è un Workspace verificato a cui collegarle (difesa in profondità oltre a RLS).
     return {
-      systemPrompt: ASSISTANT_PERSONA,
+      systemPrompt: reminderToolEnabled
+        ? `${ASSISTANT_PERSONA}\n\n${REMINDER_TOOL_INSTRUCTIONS}\n\nData odierna: ${
+          new Date().toISOString().slice(0, 10)
+        }.`
+        : ASSISTANT_PERSONA,
       sourceReferences: [],
       transactionToolEnabled: false,
+      reminderToolEnabled,
     };
   }
 
@@ -490,15 +626,21 @@ async function buildSystemPrompt(
     );
   }
 
+  const toolInstructions = reminderToolEnabled
+    ? `${TRANSACTION_TOOL_INSTRUCTIONS}\n\n${REMINDER_TOOL_INSTRUCTIONS}`
+    : TRANSACTION_TOOL_INSTRUCTIONS;
   const systemPrompt =
-    `${ASSISTANT_PERSONA}\n\n${TRANSACTION_TOOL_INSTRUCTIONS}\n\n${
-      sections.join("\n\n")
-    }`;
+    `${ASSISTANT_PERSONA}\n\n${toolInstructions}\n\n${sections.join("\n\n")}`;
   const sourceReferences = [...noteItems, ...taskItems, ...documentItems].map((
     i,
   ) => i.id);
 
-  return { systemPrompt, sourceReferences, transactionToolEnabled: true };
+  return {
+    systemPrompt,
+    sourceReferences,
+    transactionToolEnabled: true,
+    reminderToolEnabled,
+  };
 }
 
 // Costruisce i messaggi nel formato Anthropic. Solo l'ultimo messaggio
@@ -672,6 +814,51 @@ function sanitizeTransaction(raw: unknown): TransactionSuggestion | null {
   if (!Number.isFinite(amountCents) || amountCents <= 0) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(occurredAt)) return null;
   return { type, description, amountCents, occurredAt, category };
+}
+
+// Estrae le chiamate allo strumento create_reminder dalla risposta Anthropic — stesso
+// pattern di extractTransactionSuggestions (tool_choice "auto": il modello decide se
+// usarlo, e può comparire insieme a extract_transactions nello stesso turno).
+// deno-lint-ignore no-explicit-any
+function extractReminderSuggestions(anthropicBody: any): unknown[] {
+  const blocks = anthropicBody?.content;
+  if (!Array.isArray(blocks)) return [];
+  return blocks
+    .filter((block: { type: string; name?: string }) =>
+      block.type === "tool_use" && block.name === "create_reminder"
+    )
+    // deno-lint-ignore no-explicit-any
+    .map((block: any) => block.input);
+}
+
+// Validazione difensiva, stesso principio di sanitizeTransaction: lo schema del tool
+// vincola la forma del JSON, non la sua correttezza (una data non parsabile va
+// scartata qui, non solo delegata al tipo di colonna `timestamptz` del DB).
+function sanitizeReminder(raw: unknown): ReminderSuggestion | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const title = typeof r.title === "string" ? r.title.trim() : "";
+  const startsAt = typeof r.starts_at === "string" ? r.starts_at : "";
+  const startsAtDate = new Date(startsAt);
+  const reminderMinutesBeforeRaw = r.reminder_minutes_before;
+  const reminderMinutesBefore =
+    reminderMinutesBeforeRaw === undefined || reminderMinutesBeforeRaw === null
+      ? null
+      : Math.round(Number(reminderMinutesBeforeRaw));
+
+  if (!title) return null;
+  if (!startsAt || Number.isNaN(startsAtDate.getTime())) return null;
+  if (
+    reminderMinutesBefore !== null &&
+    (!Number.isFinite(reminderMinutesBefore) || reminderMinutesBefore < 0)
+  ) {
+    return null;
+  }
+  return {
+    title,
+    startsAt: startsAtDate.toISOString(),
+    reminderMinutesBefore,
+  };
 }
 
 function jsonError(message: string, status: number): Response {

@@ -112,6 +112,19 @@ Implementate, con dati reali via Supabase:
   utenti simulati (ricorsione infinita tra le RLS di `workspaces`/`workspace_members`, colonna
   ambigua nella funzione di redeem).
 
+- **reminder (Promemoria via Chat)** (Fase 3, "Promemoria via Chat" — CLAUDE.md, richiesta
+  esplicita dell'utente di notifiche push vere, non un semplice elenco in app) — nuova
+  `ReminderListScreen` (`/workspace/:id/reminders`, sezione "Promemoria" anche nella Home del
+  Workspace) per creare/eliminare promemoria manualmente in qualunque Workspace; scrivendo in Chat
+  "ricordami di... [orario]" l'assistente li registra da solo nella sezione Appuntamenti (nuovo
+  tool Anthropic `create_reminder` in `ai-chat`, stesso principio di `extract_transactions` ma
+  senza stato pending/confirmed — un promemoria è reversibile con uno swipe, non un dato
+  finanziario). L'invio effettivo della notifica push è una nuova Edge Function,
+  `send-due-reminders`, invocata ogni minuto da un cron job Postgres (`pg_cron`) — l'unica function
+  di questo progetto che usa la service role, giustificato esplicitamente (nessun JWT utente da
+  inoltrare, un cron non è una richiesta autenticata). Vedi `docs/database/README.md` per il
+  dettaglio (attivazione del cron, verifiche fatte e non fatte).
+
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
 
@@ -167,6 +180,16 @@ Non ancora presenti: memory, settings, billing.
   aggiuntive, funzione `redeem_workspace_invite`) va applicata manualmente al progetto Supabase
   reale come tutte le altre (vedi il punto sopra): senza di essa, creare un Bilancio condiviso o
   redimere un codice fallirà con un errore lato Supabase (tabella/funzione inesistente).
+- **Promemoria via Chat**: come per il Bilancio condiviso, la migrazione
+  `20260722090000_calendar_events.sql` va applicata manualmente al progetto Supabase reale prima
+  che la funzionalità sia utilizzabile. In più, l'invio effettivo delle notifiche richiede un passo
+  manuale aggiuntivo mai necessario prima in questo progetto: abilitare le estensioni `pg_cron`/
+  `pg_net` (Database → Extensions nel pannello Supabase, non attive di default) ed eseguire il
+  comando `cron.schedule` commentato in fondo alla migrazione, sostituendo `<PROJECT_REF>` e
+  `<SERVICE_ROLE_KEY>` con i valori reali del progetto. Senza questo passo i promemoria vengono
+  comunque creati e mostrati in app, ma la notifica push non parte mai. Nessun `pg_cron`/`pg_net`
+  disponibili su Postgres locale (estensioni specifiche di Supabase, non del Postgres open source):
+  verificata solo la RLS di `calendar_events`, non il comportamento del cron in sé.
 - `google_fonts` (Manrope, redesign estetico) scarica il font a runtime da fonts.gstatic.com: in
   `flutter test` questo viene evitato del tutto (`isRunningInFlutterTest`, in
   `packages/design-system/lib/src/testing/`) perché in questa sandbox quel dominio non è

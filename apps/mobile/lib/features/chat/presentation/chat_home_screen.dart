@@ -110,13 +110,16 @@ class _ChatHomeBody extends ConsumerWidget {
         ...workspaces.where((w) => w.category == category),
     ];
     // Le transazioni scritte in Chat vanno sempre nella sezione Bilancio, le
-    // foto sempre in Documenti — indipendentemente da dove si trovano nella
-    // lista (Fase 3, slice 7A ha già reso questi id stabili e unici per
-    // categoria). `null` finché il bootstrap non ha ancora creato le sezioni.
+    // foto sempre in Documenti, i promemoria sempre in Appuntamenti —
+    // indipendentemente da dove si trovano nella lista (Fase 3, slice 7A ha
+    // già reso questi id stabili e unici per categoria). `null` finché il
+    // bootstrap non ha ancora creato le sezioni.
     final bilancioId =
         _idForCategory(workspaces, SystemWorkspaceCategory.bilancio);
     final documentiId =
         _idForCategory(workspaces, SystemWorkspaceCategory.documenti);
+    final appuntamentiId =
+        _idForCategory(workspaces, SystemWorkspaceCategory.appuntamenti);
 
     return Column(
       children: [
@@ -164,6 +167,7 @@ class _ChatHomeBody extends ConsumerWidget {
           chatId: chatId,
           transactionsWorkspaceId: bilancioId,
           documentsWorkspaceId: documentiId,
+          remindersWorkspaceId: appuntamentiId,
         ),
       ],
     );
@@ -604,6 +608,7 @@ class _MessageInput extends ConsumerStatefulWidget {
     required this.chatId,
     required this.transactionsWorkspaceId,
     required this.documentsWorkspaceId,
+    required this.remindersWorkspaceId,
   });
 
   final String chatId;
@@ -616,6 +621,12 @@ class _MessageInput extends ConsumerStatefulWidget {
   /// Sezione Documenti dell'utente: dove finisce una foto allegata (diverso
   /// da [transactionsWorkspaceId] — sono due sezioni fisse distinte).
   final String? documentsWorkspaceId;
+
+  /// Sezione Appuntamenti dell'utente: passata come contesto all'Edge
+  /// Function `ai-chat` per abilitare `create_reminder` (Fase 3, "Promemoria
+  /// via Chat") — un promemoria riconosciuto in Chat va sempre lì, mai nella
+  /// sezione Bilancio.
+  final String? remindersWorkspaceId;
 
   @override
   ConsumerState<_MessageInput> createState() => _MessageInputState();
@@ -700,6 +711,7 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
           workspaceId: widget.transactionsWorkspaceId,
           content: content,
           attachmentIds: attachmentIds,
+          remindersWorkspaceId: widget.remindersWorkspaceId,
         );
 
     if (!mounted) return;

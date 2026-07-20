@@ -26,6 +26,7 @@ export 'src/entities/workspace_invite.dart';
 export 'src/entities/workspace_member.dart';
 
 export 'src/repositories/auth_repository.dart';
+export 'src/repositories/calendar_event_repository.dart';
 export 'src/repositories/chat_repository.dart';
 export 'src/repositories/document_repository.dart';
 export 'src/repositories/message_repository.dart';

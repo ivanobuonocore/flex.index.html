@@ -9,6 +9,7 @@ import '../../features/chat/presentation/chat_home_screen.dart';
 import '../../features/document/presentation/document_list_screen.dart';
 import '../../features/note/presentation/note_list_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/reminder/presentation/reminder_list_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 import '../../features/task/presentation/task_list_screen.dart';
 import '../../features/transaction/presentation/balance_overview_screen.dart';
@@ -86,6 +87,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                       GoRoute(
                         path: 'transactions',
                         builder: (context, state) => TransactionReportScreen(
+                          workspaceId: state.pathParameters['id']!,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'reminders',
+                        builder: (context, state) => ReminderListScreen(
                           workspaceId: state.pathParameters['id']!,
                         ),
                       ),

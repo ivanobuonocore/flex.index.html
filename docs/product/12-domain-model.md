@@ -67,8 +67,12 @@ Campi: id, nome, descrizione, prompt di sistema, strumenti disponibili, modello 
 Relazioni: associato a uno o più Workspace, utilizza Memoria, accede alla Knowledge Base autorizzata.
 
 ### Calendar Event
-Campi: id, titolo, data, ora, durata, promemoria.
-Relazioni: appartiene a un Workspace, può derivare da una Task o conversazione.
+Prima implementazione reale in Fase 3, "Promemoria via Chat" (CLAUDE.md — richiesta esplicita
+dell'utente: notifiche push vere, non un semplice elenco in app). Campi: id, titolo, data/ora di
+inizio, durata, minuti di preavviso (facoltativo), data di creazione, **notifiedAt** (valorizzato
+dalla Edge Function `send-due-reminders` non appena la notifica è stata inviata, evita un secondo
+invio allo stesso promemoria). Relazioni: appartiene a un Workspace (sempre la sezione
+Appuntamenti, se creato dalla Chat), può derivare da una Task o da una conversazione.
 
 ### Timeline Event
 Campi: id, tipo, descrizione, timestamp, autore.
