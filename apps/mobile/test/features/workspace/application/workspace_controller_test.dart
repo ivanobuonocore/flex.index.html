@@ -62,4 +62,61 @@ void main() {
 
     expect(failure, isA<ValidationFailure>());
   });
+
+  test('updateWorkspace e delete delegano al repository', () async {
+    fakeRepository.updateResult = Result.ok(workspace);
+
+    final updateFailure = await container
+        .read(workspaceFormControllerProvider.notifier)
+        .updateWorkspace(workspace);
+    expect(updateFailure, isNull);
+    expect(fakeRepository.lastUpdated, workspace);
+
+    final deleteFailure = await container
+        .read(workspaceFormControllerProvider.notifier)
+        .delete(workspace.id);
+    expect(deleteFailure, isNull);
+    expect(fakeRepository.lastArchivedId, workspace.id);
+  });
+
+  test('workspaceBootstrapProvider crea solo le sezioni fisse mancanti',
+      () async {
+    final bilancio =
+        workspace.copyWith(category: SystemWorkspaceCategory.bilancio);
+    fakeRepository.createResult = Result.ok(bilancio);
+
+    final subscription = container.listen(workspacesProvider, (_, __) {});
+    addTearDown(subscription.close);
+    fakeRepository.emit([
+      workspace, // Workspace libero, nessuna categoria: non conta come sezione fissa
+      workspace.copyWith(category: SystemWorkspaceCategory.bilancio),
+    ]);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(workspaceBootstrapProvider.future);
+
+    expect(
+      fakeRepository.createdCategories,
+      unorderedEquals([
+        SystemWorkspaceCategory.appuntamenti,
+        SystemWorkspaceCategory.attivita,
+        SystemWorkspaceCategory.documenti,
+      ]),
+    );
+  });
+
+  test('workspaceBootstrapProvider non crea nulla se le 4 sezioni esistono già',
+      () async {
+    final subscription = container.listen(workspacesProvider, (_, __) {});
+    addTearDown(subscription.close);
+    fakeRepository.emit([
+      for (final category in SystemWorkspaceCategory.all)
+        workspace.copyWith(category: category),
+    ]);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(workspaceBootstrapProvider.future);
+
+    expect(fakeRepository.createdCategories, isEmpty);
+  });
 }

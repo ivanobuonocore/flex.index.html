@@ -12,9 +12,14 @@ Bottom Navigation a 5 sezioni).
 Implementate, con dati reali via Supabase:
 
 - **auth** (Fase 1) — login, registrazione, sessione, logout.
-- **workspace** (Fase 1 + Fase 2 slice 1/2) — lista, creazione, Home del Workspace
-  (`/workspace/:id`) con anteprima Note/Task/Documenti e menu verso le sezioni non ancora
-  implementate.
+- **workspace** (Fase 1 + Fase 2 slice 1/2, **Sezioni fisse da Fase 3 slice 7A** — richiesta
+  esplicita dell'utente) — lista, creazione, Home del Workspace (`/workspace/:id`) con anteprima
+  Note/Task/Documenti e menu verso le sezioni non ancora implementate. Ogni utente ha sempre 4
+  Workspace di sistema (Bilancio/Appuntamenti/Attività/Documenti — `SystemWorkspaceCategory` in
+  `packages/domain`), creati automaticamente al primo accesso (`workspaceBootstrapProvider`, non
+  una migrazione: deve valere anche per gli utenti già esistenti). Ogni `WorkspaceCard` ha un menu
+  Rinomina (sempre) ed Elimina (solo sui Workspace liberi — le sezioni fisse sono strutturali, non
+  eliminabili).
 - **note** (Fase 2 slice 1) — CRUD completo per Workspace (`/workspace/:id/notes`), realtime.
 - **task** (Fase 2 slice 1) — CRUD completo per Workspace (`/workspace/:id/tasks`), realtime,
   toggle rapido todo↔done.

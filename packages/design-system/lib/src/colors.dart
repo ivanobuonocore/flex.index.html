@@ -24,4 +24,12 @@ abstract final class AppColors {
   static const Color success = Color(0xFF22C55E);
   static const Color warning = Color(0xFFF59E0B);
   static const Color error = Color(0xFFEF4444);
+
+  // Sezioni fisse (Fase 3, "Sezioni fisse" — un colore distintivo per
+  // categoria, comune a light e dark mode, per riconoscerle a colpo
+  // d'occhio nella striscia "Sezioni" e ovunque compaia una WorkspaceCard).
+  static const Color categoryBilancio = Color(0xFF16A34A);
+  static const Color categoryAppuntamenti = Color(0xFF2563EB);
+  static const Color categoryAttivita = Color(0xFFF97316);
+  static const Color categoryDocumenti = Color(0xFF0D9488);
 }

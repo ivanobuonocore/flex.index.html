@@ -118,6 +118,18 @@ entrate e di uscite"). Due modifiche indipendenti:
   Nessuna nuova tabella o migrazione: solo un filtro applicativo in meno, con l'isolamento tra
   utenti sempre garantito dalle RLS di `transactions`.
 
+**Fase 3 (slice 7A)**: Sezioni fisse — primo passo di un cambio più ampio richiesto esplicitamente
+dall'utente ("non deve essere l'utente a gestire il workspace ma la chat... i workspace
+predefiniti devono già comparire"). Ogni utente ha ora sempre 4 Workspace di sistema — Bilancio,
+Appuntamenti, Attività, Documenti — creati automaticamente al primo accesso e sempre visibili
+(striscia "Sezioni" in testa alla Home Chat, oltre che nella tab Workspace). Sono rinominabili ma
+non eliminabili (strutturali); i Workspace liberi restano invece rinominabili **ed eliminabili** —
+la `WorkspaceCard` guadagna un menu con entrambe le azioni. Questa slice pone le fondamenta (le
+sezioni esistono, sono navigabili, mostrano un'anteprima viva riusando Bilancio/Attività/Documenti
+già esistenti); le prossime slice collegheranno l'estrazione AI in Chat direttamente a queste
+sezioni (categorizzazione delle spese, tool `create_calendar_event`/`manage_tasks`), unificheranno
+la Chat in una sola conversazione, e rimuoveranno la sezione Note.
+
 Memoria resta nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.

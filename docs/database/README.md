@@ -295,6 +295,41 @@ correttamente (registro npm raggiungibile in questa sessione, come già per `@su
 **Non verificabile qui**: nessuna chiamata HTTP reale alla function (richiederebbe un progetto
 Supabase remoto o Docker), né una notifica realmente recapitata a un browser.
 
+## Fase 3 (slice 7A) — Sezioni fisse
+
+Richiesta esplicita dell'utente ("vorrei che non fosse l'utente a gestire il workspace ma che
+fosse la chat... i workspace predefiniti devono già comparire"): ogni utente ha 4 Workspace di
+sistema — Bilancio/Appuntamenti/Attività/Documenti (`SystemWorkspaceCategory` in
+`packages/domain`) — creati automaticamente (non da una migrazione/trigger, perché deve valere
+anche per gli utenti già esistenti, non solo per le nuove registrazioni: vedi
+`workspaceBootstrapProvider` in `apps/mobile`). Nessuna nuova tabella: riusa `workspaces.category`,
+già presente dallo schema Fase 1 ma finora non popolato dall'app.
+
+```sql
+create unique index if not exists workspaces_owner_system_category_unique
+  on public.workspaces (owner_id, category)
+  where category in ('bilancio', 'appuntamenti', 'attivita', 'documenti')
+    and deleted_at is null;
+```
+
+**Perché un indice e non solo il controllo lato app**: il bootstrap client-side è idempotente per
+singola chiamata, ma due sessioni concorrenti (due tab aperte) potrebbero correre in parallelo —
+l'indice unico parziale è l'unica vera garanzia contro sezioni duplicate (Architectural
+Principles, Principio 9: la sicurezza/validazione non può dipendere solo dall'app). Una violazione
+dell'indice fa fallire silenziosamente la sola `createWorkspace` di troppo (già gestita come
+`UnexpectedFailure`, ignorata dal bootstrap): nessun crash, nessun duplicato visibile.
+
+**`archiveWorkspace` ora imposta anche `deleted_at`** (prima impostava solo `status = 'archived'`,
+lasciando il Workspace comunque visibile — un bug latente, mai stato collegato a un pulsante in
+UI finché questa slice non ha aggiunto "Elimina" su `WorkspaceCard`): un Workspace "eliminato"
+sparisce ora davvero da `watchWorkspaces()`, restando comunque solo archiviato (soft delete, non
+una `DELETE` fisica) — coerente con Domain Model, "Le eliminazioni sono logiche". Le 4 sezioni
+fisse non espongono questa azione in UI (strutturali, non eliminabili — solo rinominabili).
+
+**Non verificabile qui**: nessun Postgres/Docker disponibile in questa sessione (stesso limite
+delle slice precedenti) — l'indice non è stato eseguito contro un database reale, solo scritto e
+riletto per correttezza sintattica.
+
 ### Mobile — interop col browser
 
 `apps/mobile/lib/features/notifications/`: `PushNotificationService` (interfaccia) con due

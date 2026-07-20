@@ -29,9 +29,16 @@ Business). Contiene: messaggi, file, cronologia, memoria, allegati, voice chat.
 
 ## Workspace
 
-Il cuore dell'app. Ogni Workspace rappresenta un progetto (Lavoro, Studio, Personale, Business, Casa,
-Immobili, Marketing, Viaggi, qualsiasi argomento). Contiene: AI dedicata, conversazioni, documenti,
-immagini, note, attività, calendario, Knowledge Base, memoria, cronologia, obiettivi, statistiche.
+Il cuore dell'app. Ogni utente ha sempre 4 **sezioni fisse**, create automaticamente e mostrate in
+testa alla Home Chat (striscia "Sezioni") oltre che nella tab Workspace — richiesta esplicita
+dell'utente ("non deve essere l'utente a gestire il workspace ma la chat"): **Bilancio**
+(entrate/uscite), **Appuntamenti** (calendario), **Attività** (liste/checklist), **Documenti**
+(foto e file). Sono popolate scrivendo in Chat, non creandole a mano: rinominabili/personalizzabili,
+ma non eliminabili (sono strutturali). Oltre alle sezioni fisse, l'utente può ancora creare
+Workspace liberi per progetti specifici (Lavoro, Studio, Personale, Business, Casa, Immobili,
+Marketing, Viaggi, qualsiasi argomento) — questi restano rinominabili **ed eliminabili**. Contiene:
+AI dedicata, conversazioni, documenti, immagini, note, attività, calendario, Knowledge Base,
+memoria, cronologia, obiettivi, statistiche.
 
 ## Ricerca
 
