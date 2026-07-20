@@ -35,6 +35,14 @@ class MessageFormController extends AutoDisposeAsyncNotifier<void> {
   /// `isLoading` copre l'intero turno (invio + attesa della risposta AI): la
   /// UI lo usa per mostrare "l'assistente sta scrivendo" invece di uno stato
   /// separato dedicato.
+  ///
+  /// `try/finally`, non solo l'`await` diretto: un errore della chiamata di
+  /// rete che raggiunge questo punto non passando per un `Result.err` (es. un
+  /// rifiuto della Promise JS sotto l'interop web di supabase_flutter, non
+  /// intercettato dal try/catch di [MessageRepository.sendMessage]) lascerebbe
+  /// altrimenti `isLoading` bloccato a `true` per sempre — e con esso ogni
+  /// invio successivo, dato che l'invio è protetto da un controllo su
+  /// `isLoading` per evitare doppi invii.
   Future<Failure?> send({
     required String chatId,
     required String? workspaceId,
@@ -42,13 +50,21 @@ class MessageFormController extends AutoDisposeAsyncNotifier<void> {
     List<String> attachmentIds = const [],
   }) async {
     state = const AsyncLoading();
-    final result = await ref.read(messageRepositoryProvider).sendMessage(
-          chatId: chatId,
-          workspaceId: workspaceId,
-          content: content,
-          attachmentIds: attachmentIds,
-        );
-    state = const AsyncData(null);
-    return result.fold((_) => null, (failure) => failure);
+    try {
+      final result = await ref.read(messageRepositoryProvider).sendMessage(
+            chatId: chatId,
+            workspaceId: workspaceId,
+            content: content,
+            attachmentIds: attachmentIds,
+          );
+      return result.fold((_) => null, (failure) => failure);
+    } catch (e) {
+      return UnexpectedFailure(
+        'L\'assistente non è riuscito a rispondere. Riprova.',
+        cause: e,
+      );
+    } finally {
+      state = const AsyncData(null);
+    }
   }
 }
