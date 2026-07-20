@@ -46,66 +46,85 @@ class _BottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final barBoxHeight = _barHeight + bottomPadding;
 
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.topCenter,
-      children: [
-        Container(
-          height: _barHeight + MediaQuery.of(context).padding.bottom,
-          padding:
-              EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            boxShadow: AppShadows.card(isDark: isDark),
+    // L'intero riquadro (non solo la barra) deve includere il cerchio
+    // sollevato: Scaffold instrada hover/tap solo ai punti dentro le
+    // dimensioni effettive di ciò che passa a `bottomNavigationBar` — con
+    // `Positioned(top: negativo)` + `Clip.none` (versione precedente) la
+    // metà superiore del cerchio, quella visivamente più in vista, veniva
+    // dipinta ma non riceveva mai eventi (bug segnalato dall'utente: "ancora
+    // non va" dopo il primo fix del cursore/hover).
+    return SizedBox(
+      height: barBoxHeight + _chatButtonSize / 2,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              height: barBoxHeight,
+              padding: EdgeInsets.only(bottom: bottomPadding),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                boxShadow: AppShadows.card(isDark: isDark),
+              ),
+              child: Row(
+                children: [
+                  _NavItem(
+                    icon: Icons.folder_outlined,
+                    selectedIcon: Icons.folder,
+                    label: 'Workspace',
+                    color: AppColors.categoryDocumenti,
+                    selected: currentIndex == 0,
+                    onTap: () => onSelect(0),
+                  ),
+                  _NavItem(
+                    icon: Icons.pie_chart_outline,
+                    selectedIcon: Icons.pie_chart,
+                    label: 'Bilancio',
+                    color: AppColors.categoryBilancio,
+                    selected: currentIndex == 1,
+                    onTap: () => onSelect(1),
+                  ),
+                  const SizedBox(width: _chatButtonSize),
+                  _NavItem(
+                    icon: Icons.search_outlined,
+                    selectedIcon: Icons.search,
+                    label: 'Ricerca',
+                    color: AppColors.categoryAppuntamenti,
+                    selected: currentIndex == 3,
+                    onTap: () => onSelect(3),
+                  ),
+                  _NavItem(
+                    icon: Icons.person_outline,
+                    selectedIcon: Icons.person,
+                    label: 'Profilo',
+                    color: isDark
+                        ? AppColors.secondaryDark
+                        : AppColors.secondaryLight,
+                    selected: currentIndex == 4,
+                    onTap: () => onSelect(4),
+                  ),
+                ],
+              ),
+            ),
           ),
-          child: Row(
-            children: [
-              _NavItem(
-                icon: Icons.folder_outlined,
-                selectedIcon: Icons.folder,
-                label: 'Workspace',
-                color: AppColors.categoryDocumenti,
-                selected: currentIndex == 0,
-                onTap: () => onSelect(0),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: _SiriChatButton(
+                selected: currentIndex == 2,
+                onTap: () => onSelect(2),
               ),
-              _NavItem(
-                icon: Icons.pie_chart_outline,
-                selectedIcon: Icons.pie_chart,
-                label: 'Bilancio',
-                color: AppColors.categoryBilancio,
-                selected: currentIndex == 1,
-                onTap: () => onSelect(1),
-              ),
-              const SizedBox(width: _chatButtonSize),
-              _NavItem(
-                icon: Icons.search_outlined,
-                selectedIcon: Icons.search,
-                label: 'Ricerca',
-                color: AppColors.categoryAppuntamenti,
-                selected: currentIndex == 3,
-                onTap: () => onSelect(3),
-              ),
-              _NavItem(
-                icon: Icons.person_outline,
-                selectedIcon: Icons.person,
-                label: 'Profilo',
-                color:
-                    isDark ? AppColors.secondaryDark : AppColors.secondaryLight,
-                selected: currentIndex == 4,
-                onTap: () => onSelect(4),
-              ),
-            ],
+            ),
           ),
-        ),
-        Positioned(
-          top: -_chatButtonSize / 2,
-          child: _SiriChatButton(
-            selected: currentIndex == 2,
-            onTap: () => onSelect(2),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
