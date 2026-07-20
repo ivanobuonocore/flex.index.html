@@ -31,6 +31,21 @@
 
   <title>mobile</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Senza questo, la pagina del browser (non le liste scrollabili interne
+       a Flutter) può scorrere da sola: quando il cursore di testo si
+       riposiziona ad ogni carattere digitato, o quando arriva un nuovo
+       messaggio, il browser può decidere di "riportare in vista" l'elemento
+       e scorrere l'intera pagina — lo scatto segnalato sia scrivendo sia
+       ricevendo risposte. Bloccando html/body a piena altezza senza overflow,
+       l'unico scroll possibile resta quello interno alle liste di Flutter. -->
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+  </style>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
