@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
@@ -156,41 +158,91 @@ class _NavItem extends StatelessWidget {
 /// al "glow" di Siri quando si attiva (richiesta esplicita dell'utente),
 /// sollevato sopra la barra così risalta anche visivamente, non solo per
 /// colore — l'utente deve percepirlo come il punto di partenza dell'app, non
-/// come una quinta voce uguale alle altre.
-class _SiriChatButton extends StatelessWidget {
+/// come una quinta voce uguale alle altre. `Material`+`InkWell` (non un
+/// semplice `GestureDetector`, che su web non cambia il cursore né dà alcun
+/// segnale al passaggio del mouse — bug segnalato dall'utente: "se vado con
+/// il cursore sopra l'icona chat non mi esce nulla") danno il cursore a
+/// manina e il ripple standard; al passaggio del mouse ("colori dinamici in
+/// movimento", richiesta esplicita) il gradiente ruota di continuo finché il
+/// cursore resta sopra.
+class _SiriChatButton extends StatefulWidget {
   const _SiriChatButton({required this.selected, required this.onTap});
 
   final bool selected;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final glowIntensity = selected ? 0.55 : 0.35;
+  State<_SiriChatButton> createState() => _SiriChatButtonState();
+}
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: _chatButtonSize,
-        height: _chatButtonSize,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: const LinearGradient(
-            colors: AppColors.siriGlow,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+class _SiriChatButtonState extends State<_SiriChatButton>
+    with SingleTickerProviderStateMixin {
+  late final _rotation = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 3),
+  );
+  bool _hovering = false;
+
+  @override
+  void dispose() {
+    _rotation.dispose();
+    super.dispose();
+  }
+
+  void _setHovering(bool hovering) {
+    if (_hovering == hovering) return;
+    setState(() => _hovering = hovering);
+    if (hovering) {
+      _rotation.repeat();
+    } else {
+      _rotation.stop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final glowIntensity = widget.selected ? 0.55 : 0.35;
+
+    return Tooltip(
+      message: 'Chat',
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: widget.onTap,
+          onHover: _setHovering,
+          child: AnimatedBuilder(
+            animation: _rotation,
+            builder: (context, child) {
+              return Container(
+                width: _chatButtonSize,
+                height: _chatButtonSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: SweepGradient(
+                    colors: [...AppColors.siriGlow, AppColors.siriGlow.first],
+                    transform: GradientRotation(_rotation.value * 2 * math.pi),
+                  ),
+                  boxShadow: [
+                    for (final color in AppColors.siriGlow)
+                      BoxShadow(
+                        color: color.withOpacity(
+                          (_hovering ? glowIntensity * 1.4 : glowIntensity) /
+                              AppColors.siriGlow.length,
+                        ),
+                        blurRadius:
+                            _hovering ? 28 : (widget.selected ? 24 : 16),
+                        spreadRadius: _hovering ? 3 : (widget.selected ? 2 : 0),
+                      ),
+                  ],
+                ),
+                child: const Icon(Icons.chat_bubble_rounded,
+                    color: Colors.white, size: 28),
+              );
+            },
           ),
-          boxShadow: [
-            for (final color in AppColors.siriGlow)
-              BoxShadow(
-                color: color
-                    .withOpacity(glowIntensity / AppColors.siriGlow.length),
-                blurRadius: selected ? 24 : 16,
-                spreadRadius: selected ? 2 : 0,
-              ),
-          ],
         ),
-        child: const Icon(Icons.chat_bubble_rounded,
-            color: Colors.white, size: 28),
       ),
     );
   }
