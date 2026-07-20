@@ -40,6 +40,13 @@ Implementate, con dati reali via Supabase:
   suggerita dall'AI conta nel saldo finché non viene confermata esplicitamente (AI Constitution,
   Principio 1).
 - **today** (Fase 1) — saluto, Workspace recenti.
+- **notifications** (Fase 3 slice 4, aggiunta oltre allo scaffold originale — richiesta reale
+  dell'utente, che ha esplicitamente rifiutato l'alternativa "elenco promemoria solo in app" per
+  volere notifiche di sistema vere) — prima slice: attivazione (permesso + iscrizione Web Push) e
+  un pulsante "Invia una notifica di prova" nella card "Notifiche" del Profilo. Visibile solo se
+  l'app è stata compilata con `VAPID_PUBLIC_KEY` (facoltativa: l'app resta utilizzabile anche
+  senza). Non ancora i Promemoria veri (`CalendarEvent`, già modellato in `packages/domain` ma non
+  implementato) — questa slice prova solo che la catena di consegna funziona.
 
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
@@ -73,6 +80,15 @@ Non ancora presenti: memory, settings, billing.
   rendering della bolla) è verificata; se Claude interpreta correttamente l'immagine non è
   verificabile senza chiave reale. Solo JPEG/PNG/GIF/WebP sono garantiti compatibili — formati
   come HEIC (comune su iPhone) possono far fallire il turno con un errore generico, non un crash.
+- Le notifiche push (`features/notifications`) hanno una parte web-only (`dart:js_interop` +
+  `package:web`, isolata da import condizionale) non eseguibile in `flutter test` (nessun browser
+  nel test runner): verificata con `flutter analyze` e un vero `flutter build web` con dart2js
+  (compilazione reale contro le API di `package:web`, non solo analisi statica VM); la logica pura
+  (codifica/decodifica delle chiavi Web Push) e la logica applicativa (controller) sono invece
+  testate normalmente. Il comportamento a runtime — permesso richiesto, notifica effettivamente
+  recapitata — non è verificabile senza un browser reale: su iPhone funziona solo dopo aver
+  aggiunto il sito alla schermata Home (icona Condividi → Aggiungi a Home, richiede iOS 16.4+),
+  mai da una scheda Safari normale.
 
 ## Setup locale
 

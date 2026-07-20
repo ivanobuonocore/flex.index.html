@@ -10,6 +10,14 @@ abstract final class AppEnv {
   static const String supabaseAnonKey =
       String.fromEnvironment('SUPABASE_ANON_KEY');
 
+  /// Chiave pubblica VAPID (Web Push, RFC 8291) — non è segreta: viene comunque
+  /// inviata al browser per `pushManager.subscribe()`, a differenza della chiave
+  /// privata (mai nel client, resta solo nei secrets della Edge Function
+  /// `send-test-push`). Facoltativa: l'app deve restare utilizzabile anche senza,
+  /// semplicemente senza il pulsante "Attiva notifiche" in Profilo.
+  static const String vapidPublicKey =
+      String.fromEnvironment('VAPID_PUBLIC_KEY');
+
   static void assertConfigured() {
     if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
       throw StateError(

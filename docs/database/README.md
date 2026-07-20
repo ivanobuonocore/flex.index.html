@@ -252,6 +252,73 @@ senza chiave Anthropic reale.
 provider Anthropic — se il modello interpreta correttamente le immagini non è testabile senza una
 chiave reale. Verificato solo staticamente (`deno check`/`lint`/`fmt`).
 
+## Fase 3 (slice 4) — Notifiche push vere
+
+### `public.push_subscriptions`
+
+Prima slice delle notifiche push vere (CLAUDE.md — richiesta esplicita dell'utente, che ha
+rifiutato l'alternativa "elenco prossimi promemoria in app" per volere invece notifiche di sistema
+reali). Livello **account, non Workspace** — una notifica non appartiene a un singolo Workspace,
+stesso pattern `owner_id` diretto di `workspaces`/`chats`, non un join come `notes`/`tasks`.
+
+| Colonna      | Tipo          | Note                                                        |
+|--------------|---------------|---------------------------------------------------------------|
+| `id`         | `uuid`        | Chiave primaria                                                |
+| `user_id`    | `uuid`        | FK diretta `auth.users`, non nullo                              |
+| `endpoint`   | `text`        | Univoco — identifica il dispositivo/browser abbonato            |
+| `p256dh`     | `text`        | Chiave pubblica della sottoscrizione (Web Push, RFC 8291)        |
+| `auth_key`   | `text`        | Segreto di autenticazione della sottoscrizione                   |
+| `created_at` | `timestamptz` | Default `now()`                                                 |
+
+**Sicurezza**: RLS diretta su `auth.uid() = user_id`, quattro policy (select/insert/update/delete).
+Verificato manualmente su Postgres locale: isolamento cross-utente su tutte e quattro le
+operazioni, oltre ai constraint su campi non vuoti e sull'unicità di `endpoint`.
+
+**Perché solo "infrastruttura + prova" e non ancora i Promemoria**: il collegamento
+browser↔notifica (permessi, service worker, chiavi VAPID, cifratura Web Push) non era mai stato
+costruito in questo progetto ed è verificabile solo in parte da questo ambiente (nessun browser
+reale). Questa slice consegna la catena completa ma minima — un pulsante "Invia una notifica di
+prova" in Profilo — per provarla per davvero prima di costruirci sopra i Promemoria
+(`CalendarEvent`, già modellato in `packages/domain` ma non ancora implementato).
+
+### Edge Function `send-test-push`
+
+Non fa parte dell'AI Engine (nessuna chiamata ad Anthropic): legge le `push_subscriptions`
+dell'utente che chiama (stesso client JWT-scoped delle altre function, mai la service role) e
+invia una notifica di prova a ciascuna tramite `npm:web-push`. Le iscrizioni che risultano scadute
+lato browser (risposta 404/410) vengono eliminate silenziosamente, non trattate come errore.
+Richiede tre secrets aggiuntivi (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) — vedi
+`infrastructure/supabase/README.md`.
+
+**Verificato**: `deno check`/`deno lint`/`deno fmt --check`, incluso che `npm:web-push@3` risolve
+correttamente (registro npm raggiungibile in questa sessione, come già per `@supabase/supabase-js`).
+**Non verificabile qui**: nessuna chiamata HTTP reale alla function (richiederebbe un progetto
+Supabase remoto o Docker), né una notifica realmente recapitata a un browser.
+
+### Mobile — interop col browser
+
+`apps/mobile/lib/features/notifications/`: `PushNotificationService` (interfaccia) con due
+implementazioni scelte a compile time tramite import condizionale su `dart.library.js_interop`
+(`push_notification_service_web.dart` per il target web, con `dart:js_interop` + `package:web`;
+`push_notification_service_stub.dart` no-op altrove). La conversione delle chiavi Web Push
+(base64url senza padding, sia per la chiave pubblica VAPID sia per le chiavi restituite dal
+browser) è isolata in `base64_url_codec.dart` — funzioni pure, **senza** dipendenza da
+`dart:js_interop`, testate con `flutter test` (incluso un test con la chiave pubblica VAPID reale
+generata per questa slice: 65 byte, prefisso `0x04` del punto EC non compresso).
+
+`apps/mobile/web/push-worker.js`: service worker dedicato agli eventi `push`/`notificationclick`,
+file sorgente distinto da `flutter_service_worker.js` (generato da Flutter per il caching, sempre
+sovrascritto ad ogni build) — registrato in aggiunta da `push_notification_service_web.dart`, non
+da `index.html`.
+
+**Verificato**: `flutter analyze` (risoluzione reale delle API di `package:web` tramite
+l'analyzer) e un vero `flutter build web` con dart2js (compila per il target web, non solo
+un'analisi VM) — entrambi puliti, confermano che l'interop è sintatticamente e tipologicamente
+corretto contro la versione reale del pacchetto. **Non verificabile qui**: il comportamento a
+runtime in un browser reale (richiesta del permesso, sottoscrizione effettiva, notifica
+recapitata) — nessun browser disponibile in questo ambiente. Verifica manuale richiesta all'utente
+(vedi `apps/mobile/README.md`, "Limiti noti").
+
 ## Fasi successive
 
 Memory, Agent, Calendar Event, Timeline Event sono già modellate in `packages/domain` ma non

@@ -78,9 +78,18 @@ simile a Planito". Riusa la sezione Documenti esistente (nessuna nuova tabella/m
 foto allegata a un messaggio è un `Document` con `chat_id` valorizzato, referenziato in
 `Message.attachmentIds`. L'Edge Function `ai-chat` invia l'immagine dell'ultimo messaggio a
 Claude come contenuto visivo (max 3 foto, ~5MB ciascuna). I messaggi vocali restano fuori scope:
-richiederebbero un servizio di trascrizione aggiuntivo non ancora attivato. I promemoria con
-notifiche push restano sospesi in attesa di trasformare l'app in una PWA installabile (richiede
-una pianificazione a sé).
+richiederebbero un servizio di trascrizione aggiuntivo non ancora attivato.
+
+**Fase 3 (slice 4)**: Notifiche push vere — prima slice: infrastruttura + prova. Su richiesta
+esplicita dell'utente (ha rifiutato l'alternativa "elenco promemoria solo in app" per volere
+notifiche di sistema reali), l'app è ora anche una PWA installabile ("Aggiungi a Home" su iPhone)
+con Web Push: tabella `push_subscriptions` (livello account), Edge Function `send-test-push`
+(`npm:web-push`, mai l'AI Engine), service worker dedicato (`push-worker.js`), e una card
+"Notifiche" in Profilo con attivazione e un pulsante di prova. Deliberatamente non ancora i
+Promemoria veri (`CalendarEvent`, già modellato ma non implementato): questa slice prova solo che
+l'intera catena browser↔notifica funziona, prima di costruirci sopra dei contenuti. Verificata
+staticamente (RLS su Postgres locale, `deno check`/`lint`/`fmt`, `flutter analyze` e un vero
+`flutter build web`); il recapito reale su un dispositivo non è verificabile da questo ambiente.
 
 Memoria resta nelle prossime slice.
 

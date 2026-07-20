@@ -26,6 +26,7 @@ export 'src/repositories/chat_repository.dart';
 export 'src/repositories/document_repository.dart';
 export 'src/repositories/message_repository.dart';
 export 'src/repositories/note_repository.dart';
+export 'src/repositories/push_subscription_repository.dart';
 export 'src/repositories/search_repository.dart';
 export 'src/repositories/task_repository.dart';
 export 'src/repositories/transaction_repository.dart';

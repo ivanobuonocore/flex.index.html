@@ -57,6 +57,12 @@ npx supabase db push
   Principio 1). Verificato manualmente: isolamento cross-utente, constraint su tipo/importo/
   descrizione, calcolo del saldo.
 
+- `migrations/20260720120000_push_subscriptions.sql` — tabella `push_subscriptions` (Notifiche
+  push vere, prima slice — vedi `docs/database/README.md`), livello account (`user_id` diretto,
+  come `workspaces`/`chats`), letta dalla Edge Function `send-test-push` per l'invio. Verificato
+  manualmente: isolamento cross-utente su tutte le operazioni, constraint su campi non vuoti e
+  sull'unicità di `endpoint`.
+
 Le altre entità del Domain Model (Memory, Agent, ...) avranno le proprie migrazioni quando le
 rispettive feature verranno implementate (`docs/product/26-execution-blueprint.md`) — lo schema
 non richiede di riscrivere quelle esistenti per crescere (Engineering Constitution, Articolo 8).
@@ -88,6 +94,38 @@ chiamata reale né al provider né alla function stessa tramite il runtime Supab
 (richiederebbe `supabase start` con Docker o un progetto remoto). Verificato invece il codice
 TypeScript con `deno check`/`deno lint`/`deno fmt --check` — dettagli in
 `docs/database/README.md`.
+
+## Notifiche push (`send-test-push`)
+
+Prima slice delle notifiche push vere (`docs/database/README.md`, Fase 3 slice 4) — non fa parte
+dell'AI Engine, è infrastruttura di consegna isolata in una function a sé. Legge
+`push_subscriptions` dell'utente che chiama e invia una notifica di prova tramite `npm:web-push`.
+Richiede una coppia di chiavi VAPID, generabile senza account esterno (a differenza di Anthropic):
+
+```
+npx web-push generate-vapid-keys
+npx supabase secrets set \
+  VAPID_PUBLIC_KEY=<chiave-pubblica> \
+  VAPID_PRIVATE_KEY=<chiave-privata> \
+  VAPID_SUBJECT=mailto:<tua-email>
+```
+
+La chiave pubblica va anche passata al client mobile in fase di build (non è segreta — viene
+comunque inviata al browser):
+
+```
+flutter build web --dart-define=VAPID_PUBLIC_KEY=<chiave-pubblica> ...
+```
+
+Deploy:
+
+```
+npx supabase functions deploy send-test-push
+```
+
+**Non verificato in questa sessione**: nessuna chiamata HTTP reale alla function (richiederebbe un
+progetto Supabase remoto o Docker), né una notifica realmente recapitata a un browser — vedi
+`docs/database/README.md` per il dettaglio di cosa è stato verificato staticamente.
 
 ## Nota su Realtime
 
