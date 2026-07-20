@@ -249,9 +249,16 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
   @override
   Widget build(BuildContext context) {
     ref.listen(messagesProvider(widget.chatId), (_, __) => _scrollToBottom());
+    // Solo quando l'invio INIZIA (per rivelare la bolla "sta scrivendo…"):
+    // quando l'invio finisce, il nuovo messaggio dell'assistente arriva quasi
+    // in contemporanea via Realtime e il listener sopra già scorre in fondo —
+    // due animazioni di scroll indipendenti avviate nello stesso istante
+    // erano la causa dello "scatto" segnalato dall'utente.
     ref.listen(
       messageFormControllerProvider.select((state) => state.isLoading),
-      (_, __) => _scrollToBottom(),
+      (previous, isLoading) {
+        if (isLoading) _scrollToBottom();
+      },
     );
     final messagesAsync = ref.watch(messagesProvider(widget.chatId));
     final isSending = ref.watch(messageFormControllerProvider).isLoading;
