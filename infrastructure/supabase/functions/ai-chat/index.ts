@@ -17,7 +17,14 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
-const MAX_OUTPUT_TOKENS = 1024;
+// 1024 si è rivelato insufficiente in produzione: senza `thinking: disabled`,
+// il modello può usare l'intero budget in ragionamento esteso interno prima
+// di scrivere anche solo un token di risposta visibile (osservato: 1024
+// thinking_tokens, stop_reason "max_tokens", nessun blocco di testo) — una
+// chat conversazionale non ha bisogno di quel ragionamento, quindi va
+// disabilitato esplicitamente (vedi la chiamata a fetch più sotto) invece di
+// limitarsi ad alzare il tetto e rimandare lo stesso problema.
+const MAX_OUTPUT_TOKENS = 2048;
 const MAX_HISTORY_MESSAGES = 20;
 const MAX_CONTEXT_ITEMS = 5;
 
@@ -278,6 +285,11 @@ Deno.serve(async (req) => {
         max_tokens: MAX_OUTPUT_TOKENS,
         system: systemPrompt,
         messages: anthropicMessages,
+        // Un assistente conversazionale non ha bisogno di ragionamento esteso
+        // interno: disabilitato esplicitamente, non solo omesso, perché senza
+        // questo il modello può comunque usarlo di sua iniziativa (vedi
+        // commento su MAX_OUTPUT_TOKENS più sopra).
+        thinking: { type: "disabled" },
         ...(transactionToolEnabled
           ? { tools: [EXTRACT_TRANSACTIONS_TOOL] }
           : {}),
