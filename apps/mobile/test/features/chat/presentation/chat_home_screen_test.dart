@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_mobile/core/providers.dart';
+import 'package:pip_mobile/features/chat/application/message_controller.dart';
 import 'package:pip_mobile/main.dart';
+import 'package:pip_mobile/shared/widgets/loading_view.dart';
 
 import '../../../support/fake_auth_repository.dart';
 import '../../../support/fake_chat_repository.dart';
@@ -580,5 +582,92 @@ void main() {
     secondPending.complete();
     await tester.pumpAndSettle();
     expect(find.textContaining('sta scrivendo'), findsNothing);
+  });
+
+  testWidgets(
+      'la lista dei messaggi non sparisce se lo stream si ricarica da capo '
+      '(es. riconnessione Realtime)', (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final message = Message(
+      id: 'm1',
+      chatId: 'c1',
+      role: MessageRole.user,
+      content: 'Messaggio già mostrato',
+      timestamp: DateTime.utc(2026, 1, 1),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(const []);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit([message]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Messaggio già mostrato'), findsOneWidget);
+
+    // Simula una ri-sottoscrizione dello stream (es. una riconnessione del
+    // canale Realtime di Supabase): il provider riparte da zero, in stato di
+    // caricamento, prima di ricevere di nuovo i dati.
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(PipApp)),
+    );
+    container.invalidate(messagesProvider('c1'));
+    await tester.pump();
+
+    // Il messaggio già mostrato non deve sparire: niente spinner o schermata
+    // vuota al posto della conversazione già visibile.
+    expect(find.text('Messaggio già mostrato'), findsOneWidget);
+    expect(find.byType(LoadingView), findsNothing);
+
+    // E quando arrivano di nuovo i dati (stream ripristinato), tutto
+    // continua a funzionare normalmente.
+    fakeMessage.emit([message]);
+    await tester.pumpAndSettle();
+    expect(find.text('Messaggio già mostrato'), findsOneWidget);
   });
 }

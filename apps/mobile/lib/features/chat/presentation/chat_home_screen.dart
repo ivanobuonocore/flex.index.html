@@ -240,6 +240,17 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
   bool _waitingForReply = false;
   Timer? _waitingForReplyTimeout;
 
+  // Il flusso realtime di `messagesProvider` può ripartire da zero (es. una
+  // riconnessione del canale Supabase Realtime) e ripassare per uno stato di
+  // caricamento: osservato in produzione subito dopo un invio, con la lista
+  // che spariva per un istante mostrando una schermata vuota — o perfino una
+  // porzione molto più vecchia della conversazione, prima di riallinearsi —
+  // un secondo scatto indipendente da quelli già corretti sopra. Tenendo in
+  // cache l'ultimo elenco valido e continuando a mostrarlo durante un
+  // ricaricamento (invece di sostituirlo con uno spinner a schermo intero),
+  // quel ricaricamento diventa invisibile: la lista non sparisce mai.
+  List<Message>? _lastKnownMessages;
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -311,42 +322,55 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
         ref.watch(optimisticMessageProvider(widget.chatId));
 
     return messagesAsync.when(
-      loading: () => const LoadingView(),
-      error: (error, stackTrace) => ErrorView(
-        message: 'Non è stato possibile caricare i messaggi.',
-        onRetry: () => ref.invalidate(messagesProvider(widget.chatId)),
-      ),
-      data: (messages) {
-        final displayMessages = [
-          ...messages,
-          if (optimisticMessage != null) optimisticMessage,
-        ];
-        if (displayMessages.isEmpty && !_waitingForReply) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(AppSpacing.xl),
-              child: Text(
-                'Scrivi il primo messaggio per iniziare: puoi raccontare '
-                'una spesa, un appuntamento, o quello che vuoi organizzare.',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          );
-        }
-        if (!_scrolledInitially && messages.isNotEmpty) {
-          _scrolledInitially = true;
-          _scrollToBottom(animate: false);
-        }
-        final itemCount = displayMessages.length + (_waitingForReply ? 1 : 0);
-        return ListView.builder(
-          controller: _scrollController,
-          padding: const EdgeInsets.all(AppSpacing.md),
-          itemCount: itemCount,
-          itemBuilder: (context, index) {
-            if (index == displayMessages.length) return const _TypingBubble();
-            return _MessageBubble(message: displayMessages[index]);
-          },
+      loading: () {
+        final cached = _lastKnownMessages;
+        if (cached != null) return _buildList(cached, optimisticMessage);
+        return const LoadingView();
+      },
+      error: (error, stackTrace) {
+        final cached = _lastKnownMessages;
+        if (cached != null) return _buildList(cached, optimisticMessage);
+        return ErrorView(
+          message: 'Non è stato possibile caricare i messaggi.',
+          onRetry: () => ref.invalidate(messagesProvider(widget.chatId)),
         );
+      },
+      data: (messages) {
+        _lastKnownMessages = messages;
+        return _buildList(messages, optimisticMessage);
+      },
+    );
+  }
+
+  Widget _buildList(List<Message> messages, Message? optimisticMessage) {
+    final displayMessages = [
+      ...messages,
+      if (optimisticMessage != null) optimisticMessage,
+    ];
+    if (displayMessages.isEmpty && !_waitingForReply) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(AppSpacing.xl),
+          child: Text(
+            'Scrivi il primo messaggio per iniziare: puoi raccontare '
+            'una spesa, un appuntamento, o quello che vuoi organizzare.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+    if (!_scrolledInitially && messages.isNotEmpty) {
+      _scrolledInitially = true;
+      _scrollToBottom(animate: false);
+    }
+    final itemCount = displayMessages.length + (_waitingForReply ? 1 : 0);
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        if (index == displayMessages.length) return const _TypingBubble();
+        return _MessageBubble(message: displayMessages[index]);
       },
     );
   }
