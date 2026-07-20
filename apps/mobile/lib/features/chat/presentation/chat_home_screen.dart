@@ -28,11 +28,33 @@ import '../application/message_controller.dart';
 /// visibile — non scorre via con i messaggi — così le informazioni che la
 /// Chat ha già raccolto (saldo, attività aperte, documenti) sono sempre a un
 /// tocco di distanza.
-class ChatHomeScreen extends ConsumerWidget {
+class ChatHomeScreen extends ConsumerStatefulWidget {
   const ChatHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatHomeScreen> createState() => _ChatHomeScreenState();
+}
+
+/// Un trigger Postgres (`messages_touch_chat_last_message`) aggiorna
+/// `chats.last_message_at` ad ogni messaggio inserito — sia quello
+/// dell'utente sia quello dell'assistente. `singleChatProvider` dipende da
+/// `chatsProvider(null)` (uno stream realtime sulla tabella `chats`), quindi
+/// quell'aggiornamento lo fa "ricaricare" ad ogni invio e ad ogni risposta.
+/// Per le regole di default di Riverpod un ricaricamento del genere (diverso
+/// da un refresh manuale) passa comunque dal ramo `loading:` di
+/// `AsyncValue.when()`: senza questa cache, ad ogni messaggio l'intero corpo
+/// della schermata veniva sostituito con `LoadingView()`, distruggendo e
+/// ricreando da zero `_ChatHomeBody`/`_MessagesArea` — con essi lo
+/// `ScrollController` e la cache dei messaggi già mostrati. Era questa,
+/// non lo stream dei messaggi, la vera causa dello scatto "sale e poi
+/// scende" e del lampo su una parte più vecchia della conversazione (la
+/// lista ricreata riparte dalla cima, offset zero, prima del salto
+/// automatico in fondo).
+class _ChatHomeScreenState extends ConsumerState<ChatHomeScreen> {
+  String? _lastKnownChatId;
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(sessionControllerProvider).value;
     // Idempotente: crea solo le sezioni fisse mancanti (Fase 3, slice 7A).
     ref.watch(workspaceBootstrapProvider);
@@ -41,12 +63,23 @@ class ChatHomeScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text(_greeting(user?.name))),
       body: chatAsync.when(
-        loading: () => const LoadingView(),
-        error: (error, stackTrace) => ErrorView(
-          message: 'Non è stato possibile aprire la Chat.',
-          onRetry: () => ref.invalidate(singleChatProvider),
-        ),
-        data: (chat) => _ChatHomeBody(chatId: chat.id),
+        loading: () {
+          final cachedId = _lastKnownChatId;
+          if (cachedId != null) return _ChatHomeBody(chatId: cachedId);
+          return const LoadingView();
+        },
+        error: (error, stackTrace) {
+          final cachedId = _lastKnownChatId;
+          if (cachedId != null) return _ChatHomeBody(chatId: cachedId);
+          return ErrorView(
+            message: 'Non è stato possibile aprire la Chat.',
+            onRetry: () => ref.invalidate(singleChatProvider),
+          );
+        },
+        data: (chat) {
+          _lastKnownChatId = chat.id;
+          return _ChatHomeBody(chatId: chat.id);
+        },
       ),
     );
   }

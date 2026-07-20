@@ -670,4 +670,102 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Messaggio già mostrato'), findsOneWidget);
   });
+
+  testWidgets(
+      'un aggiornamento della Chat (es. il trigger che segna l\'ultimo '
+      'messaggio) non distrugge la lista messaggi né lo scroll già fatto',
+      (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    // Una conversazione lunga: se `_MessagesArea` venisse ricreata da zero,
+    // lo scroll tornerebbe a zero (cima della lista) invece di restare dov'era.
+    final messages = [
+      for (var i = 0; i < 30; i++)
+        Message(
+          id: 'm$i',
+          chatId: 'c1',
+          role: i.isEven ? MessageRole.user : MessageRole.ai,
+          content: 'Messaggio numero $i, abbastanza lungo da occupare più '
+              'di una riga nella bolla della chat.',
+          timestamp: DateTime.utc(2026, 1, 1).add(Duration(minutes: i)),
+        ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(const []);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit(messages);
+    await tester.pumpAndSettle();
+
+    final offsetBefore =
+        tester.widget<ListView>(find.byType(ListView)).controller!.offset;
+    expect(offsetBefore, greaterThan(0));
+
+    // `chatsProvider` riemette (come farebbe il trigger Postgres
+    // `messages_touch_chat_last_message` ad ogni messaggio inviato o
+    // ricevuto, aggiornando `chats.last_message_at`): `singleChatProvider` ne
+    // dipende e "ricarica" di conseguenza.
+    fakeChat.emit([chat]);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+
+    // Non deve comparire nessuno spinner a schermo intero, e la lista (con
+    // il suo scroll) deve essere rimasta esattamente la stessa istanza:
+    // se `_ChatHomeBody`/`_MessagesArea` fossero stati ricreati da zero, lo
+    // scroll sarebbe tornato a 0.
+    expect(find.byType(LoadingView), findsNothing);
+    expect(
+        find.text('Messaggio numero 29, abbastanza lungo da occupare più '
+            'di una riga nella bolla della chat.'),
+        findsOneWidget);
+    final offsetAfter =
+        tester.widget<ListView>(find.byType(ListView)).controller!.offset;
+    expect(offsetAfter, offsetBefore);
+  });
 }
