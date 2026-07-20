@@ -42,6 +42,17 @@ Implementate, con dati reali via Supabase:
   vecchio `workspaceId` della Chat). Si può allegare una foto a un messaggio: va sempre nella
   sezione Documenti (`Document` con `chat_id`, stesso bucket riusato — nessuna nuova
   infrastruttura) e l'assistente la "vede" tramite il supporto immagini di Claude.
+- **chat (scroll automatico)** (bug segnalato dall'utente: "quando risponde non si blocca la
+  pagina ma che esca di seguito senza scatti, come una normale conversazione su whatsapp") — la
+  lista messaggi scorre automaticamente in fondo a ogni nuovo messaggio (proprio o
+  dell'assistente); prima non lo faceva, quindi ogni risposta restava fuori vista finché l'utente
+  non scorreva a mano. La bolla "l'assistente sta scrivendo…" è ora l'ultimo elemento della stessa
+  lista messaggi (non un widget fisso sotto, che cambiando l'altezza disponibile causava lo
+  "scatto" percepito) — appare e scompare nel flusso normale, come la bolla "..." di WhatsApp. La
+  striscia "Sezioni" in testa è anche più sottile (56px, non più 128px) e usa una card compatta
+  dedicata (`_SectionChip`, solo icona/nome/anteprima — senza il menu Rinomina/Elimina, che resta
+  nella tab Workspace) invece della `WorkspaceCard` completa. Il saluto capitalizza sempre il nome
+  dell'utente, anche se salvato in minuscolo.
 - **transaction** (Fase 3 slice 2, aggiunta oltre allo scaffold originale — richiesta reale
   dell'utente, ispirata all'app Planito) — Bilancio per Workspace (`/workspace/:id/transactions`):
   saldo del mese corrente (entrate meno uscite confermate) + lista con totali separati, aggiunta
@@ -140,6 +151,12 @@ Non ancora presenti: memory, settings, billing.
   `packages/design-system/lib/src/testing/`) perché in questa sandbox quel dominio non è
   raggiungibile — non accade in produzione (web o mobile), dove il fetch avviene nel browser/app
   dell'utente finale con rete normale, non nell'ambiente di sviluppo.
+- **Build web: usare `--web-renderer html`** (bug segnalato dall'utente: "vorrei emoji colorate
+  nella chat"). Il renderer di default (`auto`) usa CanvasKit su desktop, che non renderizza le
+  emoji a colori — una limitazione nota di Flutter Web/Skia, non del codice di questo progetto:
+  CanvasKit non recupera i font emoji a colori del sistema operativo nello stesso modo del
+  renderer HTML, che invece usa il testo nativo del browser. `flutter build web --web-renderer
+  html` risolve; nessun cambiamento di codice necessario.
 
 ## Setup locale
 

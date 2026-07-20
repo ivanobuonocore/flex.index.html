@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
@@ -10,9 +11,9 @@ import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../../auth/application/session_controller.dart';
 import '../../document/application/document_controller.dart';
+import '../../workspace/application/workspace_category_meta.dart';
 import '../../workspace/application/workspace_controller.dart';
 import '../../workspace/presentation/widgets/section_preview.dart';
-import '../../workspace/presentation/widgets/workspace_card.dart';
 import '../application/chat_controller.dart';
 import '../application/message_controller.dart';
 
@@ -53,8 +54,12 @@ class ChatHomeScreen extends ConsumerWidget {
     final moment = hour < 12
         ? 'Buongiorno'
         : (hour < 18 ? 'Buon pomeriggio' : 'Buonasera');
-    return name == null || name.isEmpty ? moment : '$moment, $name';
+    return name == null || name.isEmpty
+        ? moment
+        : '$moment, ${_capitalize(name)}';
   }
+
+  String _capitalize(String name) => name[0].toUpperCase() + name.substring(1);
 }
 
 class _ChatHomeBody extends ConsumerWidget {
@@ -64,7 +69,6 @@ class _ChatHomeBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final messagesAsync = ref.watch(messagesProvider(chatId));
     final workspaces = ref.watch(workspacesProvider).value ?? const [];
     final sections = <Workspace>[
       for (final category in SystemWorkspaceCategory.all)
@@ -89,27 +93,23 @@ class _ChatHomeBody extends ConsumerWidget {
                 isDark: Theme.of(context).brightness == Brightness.dark,
               ),
             ),
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+            // Più sottile e leggera della card completa usata nella tab
+            // Workspace (richiesta esplicita dell'utente: "più sottile ed
+            // esteticamente più bella ed intuitiva") — solo icona, nome e
+            // anteprima, senza il menu Rinomina/Elimina: qui è una scorciatoia
+            // di lettura, non il posto da cui gestire un Workspace.
             child: SizedBox(
-              height: 128,
+              height: 56,
               child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                 scrollDirection: Axis.horizontal,
                 itemCount: sections.length,
                 separatorBuilder: (_, __) =>
                     const SizedBox(width: AppSpacing.sm),
                 itemBuilder: (context, index) {
                   final section = sections[index];
-                  return SizedBox(
-                    width: 240,
-                    child: WorkspaceCard(
-                      workspace: section,
-                      subtitle: SectionPreview(
-                        category: section.category!,
-                        workspaceId: section.id,
-                      ),
-                    ),
-                  );
+                  return _SectionChip(workspace: section);
                 },
               ),
             ),
@@ -122,36 +122,9 @@ class _ChatHomeBody extends ConsumerWidget {
             color: Theme.of(context).brightness == Brightness.light
                 ? const Color(0xFFECE5DD)
                 : const Color(0xFF0B141A),
-            child: messagesAsync.when(
-              loading: () => const LoadingView(),
-              error: (error, stackTrace) => ErrorView(
-                message: 'Non è stato possibile caricare i messaggi.',
-                onRetry: () => ref.invalidate(messagesProvider(chatId)),
-              ),
-              data: (messages) {
-                if (messages.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(AppSpacing.xl),
-                      child: Text(
-                        'Scrivi il primo messaggio per iniziare: puoi raccontare '
-                        'una spesa, un appuntamento, o quello che vuoi organizzare.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) =>
-                      _MessageBubble(message: messages[index]),
-                );
-              },
-            ),
+            child: _MessagesArea(chatId: chatId),
           ),
         ),
-        _TypingIndicator(chatId: chatId),
         _MessageInput(
           chatId: chatId,
           transactionsWorkspaceId: bilancioId,
@@ -166,6 +139,206 @@ class _ChatHomeBody extends ConsumerWidget {
       if (workspace.category == category) return workspace.id;
     }
     return null;
+  }
+}
+
+/// Sezione fissa nella striscia in testa alla Chat: solo icona colorata,
+/// nome e anteprima viva — nessun menu (quello resta nella tab Workspace).
+class _SectionChip extends StatelessWidget {
+  const _SectionChip({required this.workspace});
+
+  final Workspace workspace;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = WorkspaceCategoryMeta.of(workspace.category);
+    final tint = meta?.color ?? Theme.of(context).colorScheme.primary;
+    final icon = meta?.icon ?? Icons.folder_outlined;
+
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: AppRadii.buttonRadius,
+      child: InkWell(
+        borderRadius: AppRadii.buttonRadius,
+        onTap: () => GoRouter.of(context).push('/workspace/${workspace.id}'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                    color: tint.withOpacity(0.15), shape: BoxShape.circle),
+                child: Icon(icon, size: 16, color: tint),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 130),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      workspace.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption
+                          .copyWith(fontWeight: FontWeight.w700, fontSize: 12),
+                    ),
+                    SectionPreview(
+                      category: workspace.category!,
+                      workspaceId: workspace.id,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Messaggi con scorrimento automatico verso il basso — senza, ogni nuovo
+/// messaggio (proprio o dell'assistente) restava fuori vista finché l'utente
+/// non scorreva a mano: bug segnalato dall'utente ("quando risponde non si
+/// blocca la pagina ma che esca di seguito senza scatti, come una normale
+/// conversazione su whatsapp"). L'indicatore "sta scrivendo" è ora l'ultimo
+/// elemento della stessa lista (non un widget fisso sotto, che cambiando
+/// altezza disponibile della lista causava lo "scatto" percepito) — appare e
+/// scompare nel normale flusso di scroll, come la bolla "..." di WhatsApp.
+class _MessagesArea extends ConsumerStatefulWidget {
+  const _MessagesArea({required this.chatId});
+
+  final String chatId;
+
+  @override
+  ConsumerState<_MessagesArea> createState() => _MessagesAreaState();
+}
+
+class _MessagesAreaState extends ConsumerState<_MessagesArea> {
+  final _scrollController = ScrollController();
+  bool _scrolledInitially = false;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom({bool animate = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      final target = _scrollController.position.maxScrollExtent;
+      if (animate) {
+        _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      } else {
+        _scrollController.jumpTo(target);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(messagesProvider(widget.chatId), (_, __) => _scrollToBottom());
+    ref.listen(
+      messageFormControllerProvider.select((state) => state.isLoading),
+      (_, __) => _scrollToBottom(),
+    );
+    final messagesAsync = ref.watch(messagesProvider(widget.chatId));
+    final isSending = ref.watch(messageFormControllerProvider).isLoading;
+
+    return messagesAsync.when(
+      loading: () => const LoadingView(),
+      error: (error, stackTrace) => ErrorView(
+        message: 'Non è stato possibile caricare i messaggi.',
+        onRetry: () => ref.invalidate(messagesProvider(widget.chatId)),
+      ),
+      data: (messages) {
+        if (messages.isEmpty && !isSending) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(AppSpacing.xl),
+              child: Text(
+                'Scrivi il primo messaggio per iniziare: puoi raccontare '
+                'una spesa, un appuntamento, o quello che vuoi organizzare.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+        if (!_scrolledInitially && messages.isNotEmpty) {
+          _scrolledInitially = true;
+          _scrollToBottom(animate: false);
+        }
+        final itemCount = messages.length + (isSending ? 1 : 0);
+        return ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.all(AppSpacing.md),
+          itemCount: itemCount,
+          itemBuilder: (context, index) {
+            if (index == messages.length) return const _TypingBubble();
+            return _MessageBubble(message: messages[index]);
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Bolla "l'assistente sta scrivendo…", nel flusso della lista come un
+/// messaggio in più — non un banner fisso sotto la lista.
+class _TypingBubble extends StatelessWidget {
+  const _TypingBubble();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          const _AssistantAvatar(),
+          const SizedBox(width: AppSpacing.xs),
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(AppRadii.standard),
+                topRight: Radius.circular(AppRadii.standard),
+                bottomRight: Radius.circular(AppRadii.standard),
+                bottomLeft: Radius.circular(4),
+              ),
+              boxShadow:
+                  AppShadows.card(isDark: theme.brightness == Brightness.dark),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                    height: 14,
+                    width: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2)),
+                const SizedBox(width: AppSpacing.sm),
+                Text('L\'assistente sta scrivendo…',
+                    style: AppTypography.caption),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -306,34 +479,6 @@ class _AttachmentImage extends ConsumerWidget {
             child: Center(child: Icon(Icons.broken_image_outlined)),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _TypingIndicator extends ConsumerWidget {
-  const _TypingIndicator({required this.chatId});
-
-  final String chatId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isSending = ref.watch(messageFormControllerProvider).isLoading;
-    if (!isSending) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          const SizedBox(
-              height: 14,
-              width: 14,
-              child: CircularProgressIndicator(strokeWidth: 2)),
-          const SizedBox(width: AppSpacing.sm),
-          Text('L\'assistente sta scrivendo…', style: AppTypography.caption),
-        ],
       ),
     );
   }

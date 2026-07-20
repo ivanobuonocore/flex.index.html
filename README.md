@@ -176,6 +176,17 @@ righe duplicate esistenti (mantenendo la più vecchia), e `workspacesProvider` l
 sezioni fisse duplicate allo stesso modo — così l'interfaccia è corretta anche subito, prima
 ancora che tu applichi la migrazione.
 
+**Fix Chat**: tre bug segnalati dall'utente in un'unica richiesta. (1) Emoji monocromatiche nella
+demo web: causa il renderer CanvasKit (default su desktop), che non recupera i font emoji a
+colori del sistema — build ora con `--web-renderer html` (limite noto di Flutter Web, non un bug
+di questo progetto). (2) "Quando risponde non si blocca la pagina ma che esca di seguito senza
+scatti, come whatsapp": la lista messaggi non scorreva mai automaticamente in fondo — corretto con
+scroll automatico a ogni nuovo messaggio; la bolla "sta scrivendo" è ora l'ultimo elemento della
+lista invece di un widget fisso sotto (quello causava lo "scatto" percepito quando appariva/
+scompariva). (3) Il saluto in cima alla Chat ora capitalizza sempre il nome dell'utente. Colto
+anche al volo: la striscia "Sezioni" è più sottile ed essenziale (56px, card compatta dedicata
+invece della WorkspaceCard completa).
+
 Memoria resta nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.

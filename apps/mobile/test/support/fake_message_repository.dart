@@ -13,6 +13,11 @@ class FakeMessageRepository implements MessageRepository {
   String? lastContent;
   List<String>? lastAttachmentIds;
 
+  /// Se impostato, `sendMessage` resta in sospeso finché questo Completer
+  /// non viene risolto — permette ai test di osservare lo stato
+  /// intermedio "in corso" (es. la bolla "sta scrivendo…").
+  Completer<void>? pendingSend;
+
   void emit(List<Message> messages) => _controller.add(messages);
 
   @override
@@ -29,6 +34,7 @@ class FakeMessageRepository implements MessageRepository {
     lastWorkspaceId = workspaceId;
     lastContent = content;
     lastAttachmentIds = attachmentIds;
+    if (pendingSend != null) await pendingSend!.future;
     return sendResult ?? const Result.ok(unit);
   }
 
