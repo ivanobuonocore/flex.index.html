@@ -22,15 +22,18 @@ Implementate, con dati reali via Supabase:
   (`/workspace/:id/documents`), Supabase Storage con signed URL, realtime.
 - **search** (Fase 2 slice 3) — Ricerca Universale cross-tabella (Workspace/Note/Task/
   Documenti) via full-text search Postgres, debounce lato UI.
-- **chat** (Fase 3 slice 1, foto in Fase 3 slice 3) — Chat contestuale al Workspace
-  (`/workspace/:id/chat`) e tab globale con tutte le Chat dell'utente; invio messaggio + risposta
-  AI in tempo reale (realtime, non streaming token-by-token), indicatore "l'assistente sta
-  scrivendo". La creazione avviene sempre dentro un Workspace. Il frontend non chiama mai
-  direttamente Anthropic: ogni messaggio passa dall'Edge Function `ai-chat`
-  (`infrastructure/supabase/functions/ai-chat`), l'unico punto in cui l'app tocca un provider AI.
-  Si può allegare una foto a un messaggio (solo dentro un Workspace, non in Chat private): la foto
-  viene caricata come `Document` (stesso bucket/sezione di Documenti, riusati — nessuna nuova
-  infrastruttura) e l'assistente la "vede" tramite il supporto immagini di Claude.
+- **chat** (Fase 3 slice 1, foto in slice 3, **Home dell'app da slice 4** — richiesta esplicita
+  dell'utente) — `/chat` è ora la prima schermata dopo il login: saluto, Workspace recenti, e
+  tutte le Chat dell'utente (private o di un Workspace), con creazione diretta da qui (scelta del
+  Workspace o chat privata). Da una Chat di Workspace, un pulsante "cartelle" nell'AppBar apre
+  Note/Attività/Documenti/Bilancio di quel Workspace senza passare dalla tab Workspace. Resta
+  anche l'accesso da dentro un Workspace (`/workspace/:id/chat`). Invio messaggio + risposta AI in
+  tempo reale (realtime, non streaming token-by-token), indicatore "l'assistente sta scrivendo".
+  Il frontend non chiama mai direttamente Anthropic: ogni messaggio passa dall'Edge Function
+  `ai-chat` (`infrastructure/supabase/functions/ai-chat`), l'unico punto in cui l'app tocca un
+  provider AI. Si può allegare una foto a un messaggio (solo dentro un Workspace, non in Chat
+  private): la foto viene caricata come `Document` (stesso bucket/sezione di Documenti, riusati —
+  nessuna nuova infrastruttura) e l'assistente la "vede" tramite il supporto immagini di Claude.
 - **transaction** (Fase 3 slice 2, aggiunta oltre allo scaffold originale — richiesta reale
   dell'utente, ispirata all'app Planito) — Bilancio per Workspace (`/workspace/:id/transactions`):
   saldo del mese corrente (entrate meno uscite confermate) + lista con totali separati, aggiunta
@@ -39,7 +42,6 @@ Implementate, con dati reali via Supabase:
   lo stipendio di 1500€") ma che l'utente non ha ancora confermato — nessuna transazione
   suggerita dall'AI conta nel saldo finché non viene confermata esplicitamente (AI Constitution,
   Principio 1).
-- **today** (Fase 1) — saluto, Workspace recenti.
 - **notifications** (Fase 3 slice 4, aggiunta oltre allo scaffold originale — richiesta reale
   dell'utente, che ha esplicitamente rifiutato l'alternativa "elenco promemoria solo in app" per
   volere notifiche di sistema vere) — prima slice: attivazione (permesso + iscrizione Web Push) e

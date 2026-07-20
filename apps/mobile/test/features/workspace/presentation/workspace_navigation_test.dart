@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_mobile/core/providers.dart';
+import 'package:pip_mobile/features/workspace/presentation/workspace_list_screen.dart';
 import 'package:pip_mobile/main.dart';
 
 import '../../../support/fake_auth_repository.dart';
@@ -63,18 +64,26 @@ void main() {
     );
 
     fakeAuth.emit(user);
-    await tester.pump(); // elabora il redirect verso /today
-    // TodayScreen osserva già workspacesProvider: emettere qui evita uno
-    // spinner infinito che farebbe scadere pumpAndSettle.
+    await tester.pump(); // elabora il redirect verso /chat (nuova Home)
+    // La Home Chat osserva chatsProvider(null) e workspacesProvider: senza
+    // emettere qui resterebbe in caricamento, facendo scadere pumpAndSettle.
     fakeWorkspace.emit([workspace]);
+    fakeChat.emit(const []);
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Workspace'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Lavoro'), findsOneWidget);
+    // La Home Chat mostra anch'essa un'anteprima "Workspace recenti" (Slice
+    // A) e resta montata sotto la tab attiva (StatefulShellRoute.indexedStack):
+    // il finder va ristretto alla schermata Workspace per restare univoco.
+    final workspaceCardInList = find.descendant(
+      of: find.byType(WorkspaceListScreen),
+      matching: find.text('Lavoro'),
+    );
+    expect(workspaceCardInList, findsOneWidget);
 
-    await tester.tap(find.text('Lavoro'));
+    await tester.tap(workspaceCardInList);
     await tester
         .pump(); // costruisce WorkspaceDetailScreen, sottoscrive Note/Task/Documenti
     fakeNote.emit(const []);

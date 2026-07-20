@@ -91,6 +91,16 @@ l'intera catena browser↔notifica funziona, prima di costruirci sopra dei conte
 staticamente (RLS su Postgres locale, `deno check`/`lint`/`fmt`, `flutter analyze` e un vero
 `flutter build web`); il recapito reale su un dispositivo non è verificabile da questo ambiente.
 
+**Fase 3 (slice 5)**: Chat come Home dell'app — richiesta esplicita dell'utente ("la funzione
+principale deve essere la chat"), dopo aver notato che nella versione precedente la Chat era
+sepolta 3-4 tocchi dentro un Workspace. La tab "Oggi" viene rimossa: il suo contenuto (saluto,
+Workspace recenti) confluisce nella nuova Home, che è ora `/chat` — la prima cosa che si vede
+dopo il login, con tutte le conversazioni dell'utente e la creazione diretta di una nuova chat
+(privata o in un Workspace). Da una Chat di Workspace, un pulsante "cartelle" apre
+Note/Attività/Documenti/Bilancio senza uscire dalla conversazione. Nessun cambio al modello dati:
+`Chat` resta collegata a un Workspace come prima (CLAUDE.md, "Chat è una feature dentro Workspace,
+non un dominio a sé stante") — cambia solo la navigazione.
+
 Memoria resta nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.

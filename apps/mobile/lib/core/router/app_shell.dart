@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-/// Bottom Navigation a 5 sezioni, sempre accessibile
-/// (docs/product/05-design-system.md, "Bottom Navigation"). Ogni tab
-/// preserva il proprio stack di navigazione grazie a
+/// Bottom Navigation a 4 sezioni, sempre accessibile. La Chat è la prima
+/// (funzione principale, richiesta esplicita dell'utente — sostituisce
+/// "Oggi": aprendo l'app si arriva subito su una conversazione, non su un
+/// cruscotto). Ogni tab preserva il proprio stack di navigazione grazie a
 /// `StatefulShellRoute.indexedStack`.
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.navigationShell});
@@ -21,8 +22,6 @@ class AppShell extends StatelessWidget {
           initialLocation: index == navigationShell.currentIndex,
         ),
         destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.today_outlined), label: 'Today'),
           NavigationDestination(
               icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
           NavigationDestination(

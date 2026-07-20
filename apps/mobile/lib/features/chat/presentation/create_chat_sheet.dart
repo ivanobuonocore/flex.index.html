@@ -3,27 +3,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 
+import '../../workspace/application/workspace_controller.dart';
 import '../application/chat_controller.dart';
 
-/// Creazione di una nuova Chat dentro un Workspace (docs/product/06,
-/// "Pulsante +"). A differenza di Note/Task/Documenti, alla creazione si
-/// naviga subito al dettaglio: una Chat vuota in un elenco non è utile
-/// quanto poterci scrivere subito.
-Future<void> showCreateChatSheet(BuildContext context, {required String workspaceId}) {
+/// Creazione di una nuova Chat (docs/product/06, "Pulsante +"). A differenza
+/// di Note/Task/Documenti, alla creazione si naviga subito al dettaglio: una
+/// Chat vuota in un elenco non è utile quanto poterci scrivere subito.
+///
+/// [workspaceId] fissa il Workspace quando la chiamata arriva da dentro un
+/// Workspace (`WorkspaceChatListScreen`): il selettore non compare, non ha
+/// senso poterlo cambiare da lì. Se `null` (dalla Home Chat, che non ha un
+/// Workspace di contesto) mostra un selettore con l'opzione "Chat privata".
+Future<void> showCreateChatSheet(BuildContext context, {String? workspaceId}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.cardPremium)),
     ),
-    builder: (context) => _CreateChatSheet(workspaceId: workspaceId),
+    builder: (context) => _CreateChatSheet(
+      workspaceId: workspaceId,
+      lockWorkspace: workspaceId != null,
+    ),
   );
 }
 
 class _CreateChatSheet extends ConsumerStatefulWidget {
-  const _CreateChatSheet({required this.workspaceId});
+  const _CreateChatSheet({required this.workspaceId, required this.lockWorkspace});
 
-  final String workspaceId;
+  final String? workspaceId;
+  final bool lockWorkspace;
 
   @override
   ConsumerState<_CreateChatSheet> createState() => _CreateChatSheetState();
@@ -33,6 +42,13 @@ class _CreateChatSheetState extends ConsumerState<_CreateChatSheet> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   String? _errorMessage;
+  String? _selectedWorkspaceId;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedWorkspaceId = widget.workspaceId;
+  }
 
   @override
   void dispose() {
@@ -44,15 +60,20 @@ class _CreateChatSheetState extends ConsumerState<_CreateChatSheet> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _errorMessage = null);
 
+    final workspaceId = _selectedWorkspaceId;
     final result = await ref
         .read(chatFormControllerProvider.notifier)
-        .create(workspaceId: widget.workspaceId, title: _titleController.text);
+        .create(workspaceId: workspaceId, title: _titleController.text);
 
     if (!mounted) return;
     result.fold(
       (chat) {
         Navigator.of(context).pop();
-        context.push('/workspace/${widget.workspaceId}/chat/${chat.id}');
+        context.push(
+          workspaceId == null
+              ? '/chat/${chat.id}'
+              : '/workspace/$workspaceId/chat/${chat.id}',
+        );
       },
       (failure) => setState(() => _errorMessage = failure.message),
     );
@@ -61,6 +82,7 @@ class _CreateChatSheetState extends ConsumerState<_CreateChatSheet> {
   @override
   Widget build(BuildContext context) {
     final isLoading = ref.watch(chatFormControllerProvider).isLoading;
+    final workspacesAsync = ref.watch(workspacesProvider);
 
     return Padding(
       padding: EdgeInsets.only(
@@ -85,6 +107,27 @@ class _CreateChatSheetState extends ConsumerState<_CreateChatSheet> {
                   (value == null || value.trim().isEmpty) ? 'Il titolo è obbligatorio' : null,
               onFieldSubmitted: (_) => _submit(),
             ),
+            if (!widget.lockWorkspace) ...[
+              const SizedBox(height: AppSpacing.md),
+              DropdownButtonFormField<String?>(
+                value: _selectedWorkspaceId,
+                decoration: const InputDecoration(labelText: 'Workspace'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Chat privata (nessun Workspace)'),
+                  ),
+                  for (final workspace in workspacesAsync.value ?? const [])
+                    DropdownMenuItem<String?>(
+                      value: workspace.id,
+                      child: Text(workspace.name),
+                    ),
+                ],
+                onChanged: isLoading
+                    ? null
+                    : (value) => setState(() => _selectedWorkspaceId = value),
+              ),
+            ],
             if (_errorMessage != null) ...[
               const SizedBox(height: AppSpacing.md),
               Text(_errorMessage!, style: TextStyle(color: Theme.of(context).colorScheme.error)),

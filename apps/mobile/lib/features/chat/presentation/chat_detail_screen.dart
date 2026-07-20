@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
@@ -30,7 +31,17 @@ class ChatDetailScreen extends ConsumerWidget {
     final messagesAsync = ref.watch(messagesProvider(chatId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Chat')),
+      appBar: AppBar(
+        title: const Text('Chat'),
+        actions: [
+          if (workspaceId != null)
+            IconButton(
+              tooltip: 'Cartelle del Workspace',
+              icon: const Icon(Icons.folder_open_outlined),
+              onPressed: () => _showFoldersSheet(context, workspaceId!),
+            ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
@@ -65,6 +76,79 @@ class ChatDetailScreen extends ConsumerWidget {
           _MessageInput(chatId: chatId, workspaceId: workspaceId),
         ],
       ),
+    );
+  }
+
+  /// "Le informazioni della Chat devono riportare a delle cartelle" —
+  /// richiesta esplicita dell'utente: da qui si raggiungono in un tocco le
+  /// sezioni del Workspace già esistenti, senza passare dalla tab Workspace.
+  void _showFoldersSheet(BuildContext context, String workspaceId) {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.cardPremium)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(AppSpacing.md),
+              child: Text('Cartelle del Workspace', style: AppTypography.heading3),
+            ),
+            _FolderTile(
+              icon: Icons.note_outlined,
+              label: 'Note',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                context.push('/workspace/$workspaceId/notes');
+              },
+            ),
+            _FolderTile(
+              icon: Icons.check_circle_outline,
+              label: 'Attività',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                context.push('/workspace/$workspaceId/tasks');
+              },
+            ),
+            _FolderTile(
+              icon: Icons.folder_outlined,
+              label: 'Documenti',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                context.push('/workspace/$workspaceId/documents');
+              },
+            ),
+            _FolderTile(
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'Bilancio',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                context.push('/workspace/$workspaceId/transactions');
+              },
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FolderTile extends StatelessWidget {
+  const _FolderTile({required this.icon, required this.label, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(label),
+      onTap: onTap,
     );
   }
 }
