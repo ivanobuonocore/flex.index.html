@@ -65,11 +65,25 @@ class SupabaseAuthRepository implements AuthRepository {
         password: password,
         data: {'name': name},
       );
+      // `response.user` è quasi sempre valorizzato anche quando serve
+      // confermare l'email (l'account esiste già, solo non ancora attivo):
+      // il segnale corretto è `response.session` — resta null finché
+      // l'utente non conferma, non `response.user`. Controllare `user ==
+      // null` (come faceva la versione precedente) faceva sembrare la
+      // registrazione riuscita subito, senza mostrare alcun messaggio.
+      if (response.session == null) {
+        return const Result.err(
+          AuthFailure(
+            'Ti abbiamo inviato un\'email di conferma: clicca sul link per '
+            'completare la registrazione (controlla anche nella posta '
+            'indesiderata/spam se non la vedi).',
+          ),
+        );
+      }
       final user = _toDomainUser(response.user);
       if (user == null) {
         return const Result.err(
-          AuthFailure(
-              'Registrazione avviata: controlla la tua email per confermare.'),
+          UnexpectedFailure('Registrazione non riuscita. Riprova.'),
         );
       }
       return Result.ok(user);

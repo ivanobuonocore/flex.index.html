@@ -110,7 +110,31 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ],
                     if (_infoMessage != null) ...[
                       const SizedBox(height: AppSpacing.md),
-                      Text(_infoMessage!, style: AppTypography.body),
+                      Container(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          borderRadius: AppRadii.standardRadius,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.mark_email_read_outlined,
+                              color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                _infoMessage!,
+                                style: AppTypography.body.copyWith(
+                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                     const SizedBox(height: AppSpacing.lg),
                     ElevatedButton(
