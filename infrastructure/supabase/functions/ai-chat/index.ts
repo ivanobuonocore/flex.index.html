@@ -60,16 +60,35 @@ serio o delicato (es. un errore, un dato finanziario critico, un argomento sensi
 const TRANSACTION_TOOL_INSTRUCTIONS =
   `Quando l'utente descrive una o più spese o entrate già avvenute (es. "barbiere 23€,
 supermercato 35€" oppure "ho ricevuto lo stipendio di 1500€"), usa lo strumento
-extract_transactions per registrarle — non limitarti a scriverle in prosa. Le transazioni
-estratte restano "in attesa di conferma" finché l'utente non le conferma esplicitamente nella
-schermata Bilancio del Workspace: non contano ancora nel saldo. Includi sempre, oltre
-all'eventuale uso dello strumento, una risposta testuale breve che nomini cosa hai registrato
-(tipo, descrizione e importo di ciascuna transazione) e che è in attesa di conferma.`;
+extract_transactions per registrarle — non limitarti a scriverle in prosa. Classifica ogni
+transazione nella categoria più adatta tra quelle disponibili nello schema dello strumento (es.
+"barbiere" è "svago", "supermercato" è "alimentari", uno stipendio è "stipendio"): se nessuna
+categoria specifica calza, usa "altro" — non lasciare il campo indeciso. Le transazioni estratte
+restano "in attesa di conferma" finché l'utente non le conferma esplicitamente nella sezione
+Bilancio: non contano ancora nel saldo. Includi sempre, oltre all'eventuale uso dello strumento,
+una risposta testuale breve che nomini cosa hai registrato (tipo, descrizione e importo di
+ciascuna transazione) e che è in attesa di conferma.`;
 
 // Nome e schema dello strumento Anthropic per l'estrazione strutturata di spese ed
 // entrate (Fase 3 slice 2 — vedi docs/database/README.md). Niente `currency`: questa
 // slice registra sempre in EUR. Attaccato alla richiesta solo quando esiste un
 // Workspace reale a cui collegare le transazioni (vedi `transactionToolEnabled`).
+// Set fisso, coerente con packages/domain TransactionCategory (Fase 3, slice 7C — "Bilancio
+// con categorie"). Se lo schema cambia va cambiato in entrambi i posti: nessuna condivisione
+// di tipi tra Dart e TypeScript in questo progetto.
+const TRANSACTION_CATEGORIES = [
+  "alimentari",
+  "trasporti",
+  "casa",
+  "bollette",
+  "salute",
+  "svago",
+  "shopping",
+  "istruzione",
+  "stipendio",
+  "altro",
+] as const;
+
 const EXTRACT_TRANSACTIONS_TOOL = {
   name: "extract_transactions",
   description:
@@ -105,8 +124,22 @@ const EXTRACT_TRANSACTIONS_TOOL = {
                 "mese, usa il giorno 1 di quel mese, nell'anno corrente rispetto alla data " +
                 "odierna fornita nel contesto.",
             },
+            category: {
+              type: "string",
+              enum: TRANSACTION_CATEGORIES,
+              description:
+                "Categoria più adatta (es. 'barbiere' → 'svago', 'supermercato' → " +
+                "'alimentari', uno stipendio → 'stipendio'). Usa 'altro' solo se nessuna " +
+                "categoria più specifica calza.",
+            },
           },
-          required: ["type", "description", "amount_cents", "occurred_at"],
+          required: [
+            "type",
+            "description",
+            "amount_cents",
+            "occurred_at",
+            "category",
+          ],
         },
       },
     },
@@ -124,11 +157,14 @@ interface ContextItem {
   label: string;
 }
 
+type TransactionCategory = typeof TRANSACTION_CATEGORIES[number];
+
 interface TransactionSuggestion {
   type: "income" | "expense";
   description: string;
   amountCents: number;
   occurredAt: string;
+  category: TransactionCategory;
 }
 
 interface AnthropicTextBlock {
@@ -272,6 +308,7 @@ Deno.serve(async (req) => {
             occurred_at: s.occurredAt,
             status: "pending",
             created_by_ai: true,
+            category: s.category,
           })),
         );
       if (transactionInsertError) {
@@ -602,11 +639,17 @@ function sanitizeTransaction(raw: unknown): TransactionSuggestion | null {
     : "";
   const amountCents = Math.round(Number(r.amount_cents));
   const occurredAt = typeof r.occurred_at === "string" ? r.occurred_at : "";
+  // A differenza di type/description/amount_cents/occurred_at, una categoria mancante o non
+  // riconosciuta non invalida la transazione: ricade su "altro" (stesso default della colonna
+  // DB e di Transaction.category lato Dart), non blocca la registrazione di una spesa reale.
+  const category = TRANSACTION_CATEGORIES.includes(r.category as TransactionCategory)
+    ? (r.category as TransactionCategory)
+    : "altro";
   if (!type) return null;
   if (!description) return null;
   if (!Number.isFinite(amountCents) || amountCents <= 0) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(occurredAt)) return null;
-  return { type, description, amountCents, occurredAt };
+  return { type, description, amountCents, occurredAt, category };
 }
 
 function jsonError(message: string, status: number): Response {

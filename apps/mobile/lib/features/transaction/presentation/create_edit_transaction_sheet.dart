@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
+import '../application/transaction_category_meta.dart';
 import '../application/transaction_controller.dart';
 
 /// Creazione o modifica manuale di una Transazione (entrata o uscita)
@@ -54,6 +55,8 @@ class _CreateEditTransactionSheetState
   late DateTime _occurredAt = widget.transaction?.occurredAt ?? DateTime.now();
   late TransactionType _type =
       widget.transaction?.type ?? TransactionType.expense;
+  late TransactionCategory _category =
+      widget.transaction?.category ?? TransactionCategory.altro;
   String? _errorMessage;
 
   bool get _isEditing => widget.transaction != null;
@@ -91,6 +94,7 @@ class _CreateEditTransactionSheetState
               description: _descriptionController.text,
               amountCents: amountCents,
               occurredAt: _occurredAt,
+              category: _category,
             ),
           )
         : await controller.create(
@@ -99,6 +103,7 @@ class _CreateEditTransactionSheetState
             description: _descriptionController.text,
             amountCents: amountCents,
             occurredAt: _occurredAt,
+            category: _category,
           );
 
     if (!mounted) return;
@@ -176,6 +181,25 @@ class _CreateEditTransactionSheetState
               subtitle: Text(_formatDate(_occurredAt)),
               trailing: const Icon(Icons.calendar_today_outlined),
               onTap: _pickDate,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Categoria', style: AppTypography.caption),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.xs,
+              children: TransactionCategory.values.map((category) {
+                final meta = TransactionCategoryMeta.of(category);
+                return ChoiceChip(
+                  avatar: Icon(meta.icon, size: 18, color: meta.color),
+                  label: Text(meta.label),
+                  selected: category == _category,
+                  onSelected: (_) => setState(() => _category = category),
+                );
+              }).toList(growable: false),
             ),
             if (_errorMessage != null) ...[
               const SizedBox(height: AppSpacing.md),

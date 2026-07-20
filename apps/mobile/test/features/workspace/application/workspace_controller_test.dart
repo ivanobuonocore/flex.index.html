@@ -62,4 +62,108 @@ void main() {
 
     expect(failure, isA<ValidationFailure>());
   });
+
+  test('updateWorkspace e delete delegano al repository', () async {
+    fakeRepository.updateResult = Result.ok(workspace);
+
+    final updateFailure = await container
+        .read(workspaceFormControllerProvider.notifier)
+        .updateWorkspace(workspace);
+    expect(updateFailure, isNull);
+    expect(fakeRepository.lastUpdated, workspace);
+
+    final deleteFailure = await container
+        .read(workspaceFormControllerProvider.notifier)
+        .delete(workspace.id);
+    expect(deleteFailure, isNull);
+    expect(fakeRepository.lastArchivedId, workspace.id);
+  });
+
+  test(
+      'workspacesProvider filtra le sezioni fisse duplicate, mantenendo la più vecchia',
+      () async {
+    final oldAppuntamenti = Workspace(
+      id: 'w-appuntamenti-old',
+      ownerId: 'u1',
+      name: 'Appuntamenti',
+      icon: 'folder',
+      status: WorkspaceStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+      category: SystemWorkspaceCategory.appuntamenti,
+    );
+    final newAppuntamenti = Workspace(
+      id: 'w-appuntamenti-new',
+      ownerId: 'u1',
+      name: 'Appuntamenti',
+      icon: 'folder',
+      status: WorkspaceStatus.active,
+      createdAt: DateTime.utc(2026, 2, 1),
+      category: SystemWorkspaceCategory.appuntamenti,
+    );
+
+    final subscription = container.listen(workspacesProvider, (_, __) {});
+    addTearDown(subscription.close);
+    // Workspace libero senza categoria (mai deduplicato) + 2 duplicati della
+    // stessa sezione fissa, in ordine "più recente prima" (come restituito
+    // dal repository reale, created_at desc).
+    fakeRepository.emit([newAppuntamenti, workspace, oldAppuntamenti]);
+    await Future<void>.delayed(Duration.zero);
+
+    final result = container.read(workspacesProvider).value!;
+
+    expect(
+      result
+          .where((w) => w.category == SystemWorkspaceCategory.appuntamenti)
+          .length,
+      1,
+    );
+    expect(
+      result
+          .firstWhere((w) => w.category == SystemWorkspaceCategory.appuntamenti)
+          .id,
+      oldAppuntamenti.id,
+    );
+    expect(result.any((w) => w.id == workspace.id), isTrue);
+  });
+
+  test('workspaceBootstrapProvider crea solo le sezioni fisse mancanti',
+      () async {
+    final bilancio =
+        workspace.copyWith(category: SystemWorkspaceCategory.bilancio);
+    fakeRepository.createResult = Result.ok(bilancio);
+
+    final subscription = container.listen(workspacesProvider, (_, __) {});
+    addTearDown(subscription.close);
+    fakeRepository.emit([
+      workspace, // Workspace libero, nessuna categoria: non conta come sezione fissa
+      workspace.copyWith(category: SystemWorkspaceCategory.bilancio),
+    ]);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(workspaceBootstrapProvider.future);
+
+    expect(
+      fakeRepository.createdCategories,
+      unorderedEquals([
+        SystemWorkspaceCategory.appuntamenti,
+        SystemWorkspaceCategory.attivita,
+        SystemWorkspaceCategory.documenti,
+      ]),
+    );
+  });
+
+  test('workspaceBootstrapProvider non crea nulla se le 4 sezioni esistono già',
+      () async {
+    final subscription = container.listen(workspacesProvider, (_, __) {});
+    addTearDown(subscription.close);
+    fakeRepository.emit([
+      for (final category in SystemWorkspaceCategory.all)
+        workspace.copyWith(category: category),
+    ]);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(workspaceBootstrapProvider.future);
+
+    expect(fakeRepository.createdCategories, isEmpty);
+  });
 }

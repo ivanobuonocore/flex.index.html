@@ -6,7 +6,6 @@ import 'package:pip_domain/pip_domain.dart';
 
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
-import '../../chat/application/chat_controller.dart';
 import '../../document/application/document_controller.dart';
 import '../../note/application/note_controller.dart';
 import '../../task/application/task_controller.dart';
@@ -70,7 +69,6 @@ class _WorkspaceDetailBody extends ConsumerWidget {
     final notesAsync = ref.watch(notesProvider(workspace.id));
     final tasksAsync = ref.watch(tasksProvider(workspace.id));
     final documentsAsync = ref.watch(documentsProvider(workspace.id));
-    final chatsAsync = ref.watch(chatsProvider(workspace.id));
     final transactionsAsync = ref.watch(transactionsProvider(workspace.id));
 
     return CustomScrollView(
@@ -201,43 +199,6 @@ class _WorkspaceDetailBody extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.lg),
               _SectionHeader(
-                title: 'Chat',
-                onSeeAll: () => context.push('/workspace/${workspace.id}/chat'),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              chatsAsync.when(
-                loading: () => const Padding(
-                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-                error: (_, __) =>
-                    const Text('Non è stato possibile caricare le chat.'),
-                data: (chats) => chats.isEmpty
-                    ? const _EmptySectionHint(
-                        message:
-                            'Nessuna chat. Toccando "Vedi tutte" puoi crearne una.',
-                      )
-                    : Column(
-                        children: chats
-                            .take(3)
-                            .map((chat) => Card(
-                                  child: ListTile(
-                                    leading:
-                                        const Icon(Icons.chat_bubble_outline),
-                                    title: Text(
-                                      chat.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    onTap: () => context.push(
-                                        '/workspace/${workspace.id}/chat/${chat.id}'),
-                                  ),
-                                ))
-                            .toList(growable: false),
-                      ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              _SectionHeader(
                 title: 'Bilancio',
                 onSeeAll: () =>
                     context.push('/workspace/${workspace.id}/transactions'),
@@ -278,7 +239,7 @@ class _WorkspaceDetailBody extends ConsumerWidget {
                 },
               ),
               const SizedBox(height: AppSpacing.lg),
-              const Text('Prossimamente', style: AppTypography.heading3),
+              Text('Prossimamente', style: AppTypography.heading3),
               const SizedBox(height: AppSpacing.sm),
               Card(
                 child: Column(

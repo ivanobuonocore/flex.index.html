@@ -115,10 +115,10 @@ class _NotificationsCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.notifications_outlined),
-                SizedBox(width: AppSpacing.sm),
+                const Icon(Icons.notifications_outlined),
+                const SizedBox(width: AppSpacing.sm),
                 Text('Notifiche', style: AppTypography.heading3),
               ],
             ),
@@ -131,7 +131,7 @@ class _NotificationsCard extends ConsumerWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
-              error: (_, __) => const Text(
+              error: (_, __) => Text(
                 'Non è stato possibile verificare lo stato delle notifiche.',
                 style: AppTypography.caption,
               ),
@@ -150,7 +150,7 @@ class _NotificationsCard extends ConsumerWidget {
   ) {
     switch (status) {
       case PushSupportStatus.unsupported:
-        return const Text(
+        return Text(
           'Le notifiche non sono supportate su questo dispositivo o browser. '
           'Su iPhone funzionano solo dopo aver aggiunto il sito alla schermata '
           'Home (icona Condividi → Aggiungi a Home).',
@@ -166,7 +166,7 @@ class _NotificationsCard extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Notifiche attive su questo dispositivo.',
+            Text('Notifiche attive su questo dispositivo.',
                 style: AppTypography.caption),
             const SizedBox(height: AppSpacing.sm),
             OutlinedButton.icon(

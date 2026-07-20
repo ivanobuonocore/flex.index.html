@@ -116,7 +116,8 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                     .delete(document.id),
                 child: Card(
                   child: ListTile(
-                    leading: Icon(_iconFor(document.mimeType)),
+                    leading: Icon(_iconFor(document.mimeType),
+                        color: AppColors.categoryDocumenti),
                     title: Text(document.name,
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                     subtitle: Text(_formatSize(document.sizeBytes)),

@@ -1,13 +1,17 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pip_design_system/pip_design_system.dart';
 
-/// Bottom Navigation a 5 sezioni, sempre accessibile. La Chat è la prima
-/// (funzione principale, richiesta esplicita dell'utente — sostituisce
-/// "Oggi": aprendo l'app si arriva subito su una conversazione, non su un
-/// cruscotto). "Bilancio" è la quinta voce (richiesta esplicita dell'utente):
-/// aggrega entrate/uscite di tutti i Workspace in un grafico a torta, a
-/// differenza del Bilancio per Workspace già presente nelle "cartelle" di
-/// una Chat. Ogni tab preserva il proprio stack di navigazione grazie a
+/// Bottom Navigation a 5 sezioni (redesign estetico — richiesta esplicita
+/// dell'utente: "inseriscila al centro al posto di 'ricerca'... mettila in
+/// risalto magari all'interno di un cerchio"). Chat, la funzione principale
+/// dell'app, occupa il centro in un cerchio con un gradiente ispirato al
+/// "glow" di Siri quando si attiva — non una voce come le altre, ma il punto
+/// da cui parte tutto. Le altre 4 voci hanno ciascuna un colore distintivo
+/// quando selezionate, coerente con "icone colorate" in tutta l'interfaccia.
+/// Ogni tab preserva il proprio stack di navigazione grazie a
 /// `StatefulShellRoute.indexedStack`.
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.navigationShell});
@@ -18,23 +22,246 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: (index) => navigationShell.goBranch(
+      bottomNavigationBar: _BottomBar(
+        currentIndex: navigationShell.currentIndex,
+        onSelect: (index) => navigationShell.goBranch(
           index,
           initialLocation: index == navigationShell.currentIndex,
         ),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
-          NavigationDestination(
-              icon: Icon(Icons.folder_outlined), label: 'Workspace'),
-          NavigationDestination(icon: Icon(Icons.search), label: 'Ricerca'),
-          NavigationDestination(
-              icon: Icon(Icons.pie_chart_outline), label: 'Bilancio'),
-          NavigationDestination(
-              icon: Icon(Icons.person_outline), label: 'Profilo'),
+      ),
+    );
+  }
+}
+
+const _barHeight = 64.0;
+const _chatButtonSize = 60.0;
+
+class _BottomBar extends StatelessWidget {
+  const _BottomBar({required this.currentIndex, required this.onSelect});
+
+  final int currentIndex;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final barBoxHeight = _barHeight + bottomPadding;
+
+    // L'intero riquadro (non solo la barra) deve includere il cerchio
+    // sollevato: Scaffold instrada hover/tap solo ai punti dentro le
+    // dimensioni effettive di ciò che passa a `bottomNavigationBar` — con
+    // `Positioned(top: negativo)` + `Clip.none` (versione precedente) la
+    // metà superiore del cerchio, quella visivamente più in vista, veniva
+    // dipinta ma non riceveva mai eventi (bug segnalato dall'utente: "ancora
+    // non va" dopo il primo fix del cursore/hover).
+    return SizedBox(
+      height: barBoxHeight + _chatButtonSize / 2,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              height: barBoxHeight,
+              padding: EdgeInsets.only(bottom: bottomPadding),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                boxShadow: AppShadows.card(isDark: isDark),
+              ),
+              child: Row(
+                children: [
+                  _NavItem(
+                    icon: Icons.folder_outlined,
+                    selectedIcon: Icons.folder,
+                    label: 'Workspace',
+                    color: AppColors.categoryDocumenti,
+                    selected: currentIndex == 0,
+                    onTap: () => onSelect(0),
+                  ),
+                  _NavItem(
+                    icon: Icons.pie_chart_outline,
+                    selectedIcon: Icons.pie_chart,
+                    label: 'Bilancio',
+                    color: AppColors.categoryBilancio,
+                    selected: currentIndex == 1,
+                    onTap: () => onSelect(1),
+                  ),
+                  const SizedBox(width: _chatButtonSize),
+                  _NavItem(
+                    icon: Icons.search_outlined,
+                    selectedIcon: Icons.search,
+                    label: 'Ricerca',
+                    color: AppColors.categoryAppuntamenti,
+                    selected: currentIndex == 3,
+                    onTap: () => onSelect(3),
+                  ),
+                  _NavItem(
+                    icon: Icons.person_outline,
+                    selectedIcon: Icons.person,
+                    label: 'Profilo',
+                    color: isDark
+                        ? AppColors.secondaryDark
+                        : AppColors.secondaryLight,
+                    selected: currentIndex == 4,
+                    onTap: () => onSelect(4),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: _SiriChatButton(
+                selected: currentIndex == 2,
+                onTap: () => onSelect(2),
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final unselectedColor = theme.brightness == Brightness.dark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
+    final tint = selected ? color : unselectedColor;
+
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(selected ? selectedIcon : icon, color: tint),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: AppTypography.caption.copyWith(color: tint, fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Il pulsante Chat, sempre al centro: un cerchio con un gradiente ispirato
+/// al "glow" di Siri quando si attiva (richiesta esplicita dell'utente),
+/// sollevato sopra la barra così risalta anche visivamente, non solo per
+/// colore — l'utente deve percepirlo come il punto di partenza dell'app, non
+/// come una quinta voce uguale alle altre. `Material`+`InkWell` (non un
+/// semplice `GestureDetector`, che su web non cambia il cursore né dà alcun
+/// segnale al passaggio del mouse — bug segnalato dall'utente: "se vado con
+/// il cursore sopra l'icona chat non mi esce nulla") danno il cursore a
+/// manina e il ripple standard; al passaggio del mouse ("colori dinamici in
+/// movimento", richiesta esplicita) il gradiente ruota di continuo finché il
+/// cursore resta sopra.
+class _SiriChatButton extends StatefulWidget {
+  const _SiriChatButton({required this.selected, required this.onTap});
+
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  State<_SiriChatButton> createState() => _SiriChatButtonState();
+}
+
+class _SiriChatButtonState extends State<_SiriChatButton>
+    with SingleTickerProviderStateMixin {
+  late final _rotation = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 3),
+  );
+  bool _hovering = false;
+
+  @override
+  void dispose() {
+    _rotation.dispose();
+    super.dispose();
+  }
+
+  void _setHovering(bool hovering) {
+    if (_hovering == hovering) return;
+    setState(() => _hovering = hovering);
+    if (hovering) {
+      _rotation.repeat();
+    } else {
+      _rotation.stop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final glowIntensity = widget.selected ? 0.55 : 0.35;
+
+    return Tooltip(
+      message: 'Chat',
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: widget.onTap,
+          onHover: _setHovering,
+          child: AnimatedBuilder(
+            animation: _rotation,
+            builder: (context, child) {
+              return Container(
+                width: _chatButtonSize,
+                height: _chatButtonSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: SweepGradient(
+                    colors: [...AppColors.siriGlow, AppColors.siriGlow.first],
+                    transform: GradientRotation(_rotation.value * 2 * math.pi),
+                  ),
+                  boxShadow: [
+                    for (final color in AppColors.siriGlow)
+                      BoxShadow(
+                        color: color.withOpacity(
+                          (_hovering ? glowIntensity * 1.4 : glowIntensity) /
+                              AppColors.siriGlow.length,
+                        ),
+                        blurRadius:
+                            _hovering ? 28 : (widget.selected ? 24 : 16),
+                        spreadRadius: _hovering ? 3 : (widget.selected ? 2 : 0),
+                      ),
+                  ],
+                ),
+                child: const Icon(Icons.chat_bubble_rounded,
+                    color: Colors.white, size: 28),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

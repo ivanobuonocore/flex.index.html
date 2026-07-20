@@ -70,6 +70,8 @@ class NoteListScreen extends ConsumerWidget {
                     .delete(note.id),
                 child: Card(
                   child: ListTile(
+                    leading: const Icon(Icons.sticky_note_2_outlined,
+                        color: AppColors.accentNote),
                     title: Text(note.title,
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                     subtitle: note.content.isEmpty

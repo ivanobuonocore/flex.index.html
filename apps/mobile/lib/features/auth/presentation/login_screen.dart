@@ -56,7 +56,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('Bentornato', style: AppTypography.heading1),
+                    Text('Bentornato', style: AppTypography.heading1),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
                       'Accedi al tuo Workspace',

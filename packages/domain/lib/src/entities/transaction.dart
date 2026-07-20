@@ -21,6 +21,7 @@ final class Transaction {
     this.chatId,
     this.createdByAi = false,
     this.deletedAt,
+    this.category = TransactionCategory.altro,
   });
 
   final String id;
@@ -33,6 +34,11 @@ final class Transaction {
 
   final TransactionType type;
   final String description;
+
+  /// Fase 3, slice 7C ("Bilancio con categorie"). Default [TransactionCategory.altro]:
+  /// mai `null`, così ogni transazione — anche quelle create prima di questa
+  /// slice — ha sempre una categoria da mostrare.
+  final TransactionCategory category;
 
   /// Importo in centesimi, sempre positivo (mai un double, per evitare
   /// errori di somma): il segno nel bilancio lo decide [type].
@@ -51,6 +57,7 @@ final class Transaction {
     int? amountCents,
     DateTime? occurredAt,
     TransactionStatus? status,
+    TransactionCategory? category,
   }) {
     return Transaction(
       id: id,
@@ -65,6 +72,7 @@ final class Transaction {
       createdByAi: createdByAi,
       createdAt: createdAt,
       deletedAt: deletedAt,
+      category: category ?? this.category,
     );
   }
 
@@ -82,7 +90,8 @@ final class Transaction {
       other.status == status &&
       other.createdByAi == createdByAi &&
       other.createdAt == createdAt &&
-      other.deletedAt == deletedAt;
+      other.deletedAt == deletedAt &&
+      other.category == category;
 
   @override
   int get hashCode => Object.hash(
@@ -98,6 +107,7 @@ final class Transaction {
         createdByAi,
         createdAt,
         deletedAt,
+        category,
       );
 
   @override

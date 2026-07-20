@@ -10,6 +10,20 @@ final messagesProvider =
   return ref.watch(messageRepositoryProvider).watchMessages(chatId);
 });
 
+/// Eco locale del messaggio dell'utente appena inviato, mostrata subito senza
+/// aspettare il giro di andata/ritorno di Realtime — senza, la bolla "sta
+/// scrivendo" (mostrata a `isLoading == true`, prima ancora che il messaggio
+/// reale sia stato scritto su `messages`) appariva come ultimo elemento della
+/// lista sopra un messaggio dell'utente non ancora visibile: quando il
+/// messaggio reale arrivava (spostando in basso la bolla "sta scrivendo"), lo
+/// scatto risultante è quello segnalato dall'utente ad ogni invio, non solo
+/// quando l'assistente risponde. Ripulita non appena arriva un aggiornamento
+/// reale di `messagesProvider` (che, per come `sendMessage` inserisce prima
+/// la riga utente e solo dopo chiama l'AI Engine, è sempre l'eco del
+/// messaggio appena inviato) o al termine di `send()`, qualunque sia l'esito.
+final optimisticMessageProvider =
+    StateProvider.autoDispose.family<Message?, String>((ref, chatId) => null);
+
 final messageFormControllerProvider =
     AsyncNotifierProvider.autoDispose<MessageFormController, void>(
         MessageFormController.new);
@@ -21,6 +35,14 @@ class MessageFormController extends AutoDisposeAsyncNotifier<void> {
   /// `isLoading` copre l'intero turno (invio + attesa della risposta AI): la
   /// UI lo usa per mostrare "l'assistente sta scrivendo" invece di uno stato
   /// separato dedicato.
+  ///
+  /// `try/finally`, non solo l'`await` diretto: un errore della chiamata di
+  /// rete che raggiunge questo punto non passando per un `Result.err` (es. un
+  /// rifiuto della Promise JS sotto l'interop web di supabase_flutter, non
+  /// intercettato dal try/catch di [MessageRepository.sendMessage]) lascerebbe
+  /// altrimenti `isLoading` bloccato a `true` per sempre — e con esso ogni
+  /// invio successivo, dato che l'invio è protetto da un controllo su
+  /// `isLoading` per evitare doppi invii.
   Future<Failure?> send({
     required String chatId,
     required String? workspaceId,
@@ -28,13 +50,21 @@ class MessageFormController extends AutoDisposeAsyncNotifier<void> {
     List<String> attachmentIds = const [],
   }) async {
     state = const AsyncLoading();
-    final result = await ref.read(messageRepositoryProvider).sendMessage(
-          chatId: chatId,
-          workspaceId: workspaceId,
-          content: content,
-          attachmentIds: attachmentIds,
-        );
-    state = const AsyncData(null);
-    return result.fold((_) => null, (failure) => failure);
+    try {
+      final result = await ref.read(messageRepositoryProvider).sendMessage(
+            chatId: chatId,
+            workspaceId: workspaceId,
+            content: content,
+            attachmentIds: attachmentIds,
+          );
+      return result.fold((_) => null, (failure) => failure);
+    } catch (e) {
+      return UnexpectedFailure(
+        'L\'assistente non è riuscito a rispondere. Riprova.',
+        cause: e,
+      );
+    } finally {
+      state = const AsyncData(null);
+    }
   }
 }

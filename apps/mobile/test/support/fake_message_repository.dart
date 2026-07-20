@@ -13,6 +13,18 @@ class FakeMessageRepository implements MessageRepository {
   String? lastContent;
   List<String>? lastAttachmentIds;
 
+  /// Se impostato, `sendMessage` resta in sospeso finché questo Completer
+  /// non viene risolto — permette ai test di osservare lo stato
+  /// intermedio "in corso" (es. la bolla "sta scrivendo…").
+  Completer<void>? pendingSend;
+
+  /// Se impostato, `sendMessage` lancia questo errore invece di ritornare un
+  /// `Result` — simula un fallimento che scappa dal `try/catch` interno del
+  /// repository reale (es. un rifiuto della Promise JS non intercettato
+  /// sotto l'interop web di supabase_flutter), usato per verificare che
+  /// [MessageFormController.send] non lasci `isLoading` bloccato per sempre.
+  Object? throwOnSend;
+
   void emit(List<Message> messages) => _controller.add(messages);
 
   @override
@@ -29,6 +41,8 @@ class FakeMessageRepository implements MessageRepository {
     lastWorkspaceId = workspaceId;
     lastContent = content;
     lastAttachmentIds = attachmentIds;
+    if (pendingSend != null) await pendingSend!.future;
+    if (throwOnSend != null) throw throwOnSend!;
     return sendResult ?? const Result.ok(unit);
   }
 

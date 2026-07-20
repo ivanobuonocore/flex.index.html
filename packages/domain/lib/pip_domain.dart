@@ -6,6 +6,7 @@
 library pip_domain;
 
 export 'src/enums.dart';
+export 'src/system_workspace_category.dart';
 
 export 'src/entities/agent.dart';
 export 'src/entities/calendar_event.dart';

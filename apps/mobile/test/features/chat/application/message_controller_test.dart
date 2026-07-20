@@ -81,4 +81,29 @@ void main() {
 
     expect(fakeRepository.lastAttachmentIds, isEmpty);
   });
+
+  test(
+      'send ritorna un Failure (non lascia isLoading bloccato) se il '
+      'repository lancia invece di ritornare un Result', () async {
+    fakeRepository.throwOnSend = Exception('rifiuto JS non intercettato');
+
+    final failure = await container
+        .read(messageFormControllerProvider.notifier)
+        .send(chatId: chatId, workspaceId: workspaceId, content: 'Ciao');
+
+    expect(failure, isA<UnexpectedFailure>());
+    expect(
+      container.read(messageFormControllerProvider).isLoading,
+      isFalse,
+    );
+
+    // Un secondo invio non deve restare bloccato dal primo fallimento.
+    fakeRepository.throwOnSend = null;
+    final secondFailure = await container
+        .read(messageFormControllerProvider.notifier)
+        .send(chatId: chatId, workspaceId: workspaceId, content: 'Riprovo');
+
+    expect(secondFailure, isNull);
+    expect(fakeRepository.lastContent, 'Riprovo');
+  });
 }

@@ -34,6 +34,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
     required int amountCents,
     String currency = 'EUR',
     required DateTime occurredAt,
+    TransactionCategory category = TransactionCategory.altro,
   }) async {
     if (description.trim().isEmpty) {
       return const Result.err(ValidationFailure(
@@ -56,6 +57,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
             'occurred_at': occurredAt.toIso8601String(),
             'status': TransactionStatus.confirmed.name,
             'created_by_ai': false,
+            'category': category.name,
           })
           .select()
           .single();
@@ -85,6 +87,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
             'description': transaction.description.trim(),
             'amount_cents': transaction.amountCents,
             'occurred_at': transaction.occurredAt.toIso8601String(),
+            'category': transaction.category.name,
           })
           .eq('id', transaction.id)
           .select()
@@ -148,6 +151,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
       deletedAt: row['deleted_at'] != null
           ? DateTime.parse(row['deleted_at'] as String)
           : null,
+      category: TransactionCategory.values.byName(row['category'] as String),
     );
   }
 }

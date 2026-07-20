@@ -118,6 +118,75 @@ entrate e di uscite"). Due modifiche indipendenti:
   Nessuna nuova tabella o migrazione: solo un filtro applicativo in meno, con l'isolamento tra
   utenti sempre garantito dalle RLS di `transactions`.
 
+**Fase 3 (slice 7A)**: Sezioni fisse — primo passo di un cambio più ampio richiesto esplicitamente
+dall'utente ("non deve essere l'utente a gestire il workspace ma la chat... i workspace
+predefiniti devono già comparire"). Ogni utente ha ora sempre 4 Workspace di sistema — Bilancio,
+Appuntamenti, Attività, Documenti — creati automaticamente al primo accesso e sempre visibili
+(striscia "Sezioni" in testa alla Home Chat, oltre che nella tab Workspace). Sono rinominabili ma
+non eliminabili (strutturali); i Workspace liberi restano invece rinominabili **ed eliminabili** —
+la `WorkspaceCard` guadagna un menu con entrambe le azioni. Questa slice pone le fondamenta (le
+sezioni esistono, sono navigabili, mostrano un'anteprima viva riusando Bilancio/Attività/Documenti
+già esistenti); le prossime slice collegheranno l'estrazione AI in Chat direttamente a queste
+sezioni (categorizzazione delle spese, tool `create_calendar_event`/`manage_tasks`), unificheranno
+la Chat in una sola conversazione, e rimuoveranno la sezione Note.
+
+**Fase 3 (slice 7B)**: Chat unica — richiesta esplicita dell'utente ("la chat deve essere unica...
+non deve fare più chat... la logica è gestire in unico posto tutte le attività"). Rimossa la
+creazione di nuove chat e le chat per-Workspace: `/chat` è ora sia la Home sia l'unica
+conversazione dell'utente, creata automaticamente al primo accesso (riusa quella più recente se
+esistevano già chat da prima di questa slice — non ne crea mai una seconda). La striscia "Sezioni"
+(slice 7A) resta sempre visibile in testa, sopra i messaggi. Le transazioni riconosciute in Chat
+vanno sempre nella sezione Bilancio, le foto sempre in Documenti — instradate tramite gli id delle
+sezioni fisse, non più tramite il Workspace "di quella chat" (che non esiste più come concetto).
+Durante il lavoro, un test ha scoperto un overflow verticale preesistente in `WorkspaceCard`
+quando un'anteprima viva è più lunga di una riga in una card stretta: corretto (`maxLines` +
+`overflow: ellipsis` su nome e sottotitolo).
+
+**Fase 3 (slice 7C)**: Bilancio con categorie — richiesta esplicita dell'utente: una spesa come
+"barbiere" va classificata, non solo registrata. `TransactionCategory` (10 categorie fisse:
+Alimentari/Trasporti/Casa/Bollette/Salute/Svago/Shopping/Istruzione/Stipendio/Altro, non
+estensibile dall'utente) su ogni Transazione, con un picker nella creazione/modifica manuale e la
+categoria visibile in ogni riga del Bilancio. L'Edge Function `ai-chat` ora classifica
+automaticamente le transazioni che estrae dalla Chat (es. "barbiere" → Svago) — una
+classificazione mancante o non riconosciuta ricade su "Altro" invece di far scartare l'intera
+transazione, così un errore dell'AI sulla categoria non fa perdere una spesa reale.
+
+**Redesign estetico**: richiesta esplicita dell'utente ("rendi più estetica l'interfaccia con
+icone colorate e utilizzando un font dedicato... inserisci la Chat al centro... in un cerchio...
+con i colori di Siri quando si attiva"). Font Manrope (via `google_fonts`) in tutta l'app; Bottom
+Navigation riordinata con la Chat al centro in un cerchio dal gradiente ispirato al "glow" di Siri,
+sollevato sopra la barra; icone colorate nelle voci di navigazione, nelle categorie di
+Transazione, e nelle liste Note/Attività/Documenti. Durante il lavoro è stato scoperto e corretto
+un rischio reale per l'affidabilità dei test: `google_fonts` scarica il font a runtime, il che
+avrebbe reso ogni test che costruisce il tema dell'app dipendente dalla rete — ora i test lo
+evitano rilevando l'esecuzione sotto `flutter test`.
+
+**Nota operativa importante**: questa sessione non ha mai avuto un token di accesso al progetto
+Supabase reale, quindi nessuna migrazione o Edge Function scritta in questo repository (in
+nessuna slice) è mai stata applicata/deployata dall'assistente — serve eseguire manualmente `npx
+supabase db push` e `npx supabase functions deploy` dopo ogni slice che tocca `infrastructure/
+supabase/` (vedi `infrastructure/supabase/README.md`). Un ritardo in questo passaggio ha causato
+un fallimento reale in produzione dopo la slice "Bilancio con categorie".
+
+**Fix**: bug segnalato dall'utente ("ci sono più categorie di appuntamenti") — causato
+esattamente dal gap operativo descritto sopra: senza l'indice unico di database (mai applicato),
+il bootstrap delle sezioni fisse ha potuto inserire più righe con la stessa categoria a ogni
+ricarica dell'app. Corretto su due livelli: la migrazione dell'indice ora disattiva prima le
+righe duplicate esistenti (mantenendo la più vecchia), e `workspacesProvider` lato app filtra le
+sezioni fisse duplicate allo stesso modo — così l'interfaccia è corretta anche subito, prima
+ancora che tu applichi la migrazione.
+
+**Fix Chat**: tre bug segnalati dall'utente in un'unica richiesta. (1) Emoji monocromatiche nella
+demo web: causa il renderer CanvasKit (default su desktop), che non recupera i font emoji a
+colori del sistema — build ora con `--web-renderer html` (limite noto di Flutter Web, non un bug
+di questo progetto). (2) "Quando risponde non si blocca la pagina ma che esca di seguito senza
+scatti, come whatsapp": la lista messaggi non scorreva mai automaticamente in fondo — corretto con
+scroll automatico a ogni nuovo messaggio; la bolla "sta scrivendo" è ora l'ultimo elemento della
+lista invece di un widget fisso sotto (quello causava lo "scatto" percepito quando appariva/
+scompariva). (3) Il saluto in cima alla Chat ora capitalizza sempre il nome dell'utente. Colto
+anche al volo: la striscia "Sezioni" è più sottile ed essenziale (56px, card compatta dedicata
+invece della WorkspaceCard completa).
+
 Memoria resta nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.

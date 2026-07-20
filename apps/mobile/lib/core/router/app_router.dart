@@ -5,9 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/application/session_controller.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
-import '../../features/chat/presentation/chat_detail_screen.dart';
-import '../../features/chat/presentation/chat_list_screen.dart';
-import '../../features/chat/presentation/workspace_chat_list_screen.dart';
+import '../../features/chat/presentation/chat_home_screen.dart';
 import '../../features/document/presentation/document_list_screen.dart';
 import '../../features/note/presentation/note_list_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
@@ -49,28 +47,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
             AppShell(navigationShell: navigationShell),
+        // Ordine della barra di navigazione (redesign estetico — richiesta
+        // esplicita dell'utente): Workspace, Bilancio, [Chat al centro, in
+        // risalto], Ricerca, Profilo. L'ordine dei branch deve corrispondere
+        // 1:1 a quello delle destinazioni in `AppShell` (indice per indice).
         branches: [
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/chat',
-                builder: (context, state) => const ChatListScreen(),
-                routes: [
-                  // Solo Chat private (senza Workspace): quelle di un
-                  // Workspace restano su /workspace/:id/chat/:chatId, già
-                  // esistente, per non duplicare la stessa schermata su due
-                  // percorsi con significati diversi.
-                  GoRoute(
-                    path: ':chatId',
-                    builder: (context, state) => ChatDetailScreen(
-                      chatId: state.pathParameters['chatId']!,
-                      workspaceId: null,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -102,21 +83,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                         ),
                       ),
                       GoRoute(
-                        path: 'chat',
-                        builder: (context, state) => WorkspaceChatListScreen(
-                          workspaceId: state.pathParameters['id']!,
-                        ),
-                        routes: [
-                          GoRoute(
-                            path: ':chatId',
-                            builder: (context, state) => ChatDetailScreen(
-                              chatId: state.pathParameters['chatId']!,
-                              workspaceId: state.pathParameters['id']!,
-                            ),
-                          ),
-                        ],
-                      ),
-                      GoRoute(
                         path: 'transactions',
                         builder: (context, state) => TransactionReportScreen(
                           workspaceId: state.pathParameters['id']!,
@@ -131,15 +97,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                  path: '/search',
-                  builder: (context, state) => const SearchScreen()),
+                  path: '/balance',
+                  builder: (context, state) => const BalanceOverviewScreen()),
             ],
           ),
           StatefulShellBranch(
             routes: [
               GoRoute(
-                  path: '/balance',
-                  builder: (context, state) => const BalanceOverviewScreen()),
+                path: '/chat',
+                builder: (context, state) => const ChatHomeScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                  path: '/search',
+                  builder: (context, state) => const SearchScreen()),
             ],
           ),
           StatefulShellBranch(

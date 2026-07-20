@@ -8,7 +8,12 @@ class FakeWorkspaceRepository implements WorkspaceRepository {
 
   final _controller = StreamController<List<Workspace>>.broadcast();
   Result<Workspace>? createResult;
+  Result<Workspace>? updateResult;
+  Result<Unit>? archiveResult;
   Workspace? lastCreated;
+  Workspace? lastUpdated;
+  String? lastArchivedId;
+  final List<String> createdCategories = [];
 
   void emit(List<Workspace> workspaces) => _controller.add(workspaces);
 
@@ -23,6 +28,7 @@ class FakeWorkspaceRepository implements WorkspaceRepository {
     String? category,
     String? color,
   }) async {
+    if (category != null) createdCategories.add(category);
     final result = createResult ??
         const Result<Workspace>.err(
             ValidationFailure('Nessun risultato configurato.'));
@@ -34,12 +40,14 @@ class FakeWorkspaceRepository implements WorkspaceRepository {
 
   @override
   Future<Result<Workspace>> updateWorkspace(Workspace workspace) async {
-    return Result.ok(workspace);
+    lastUpdated = workspace;
+    return updateResult ?? Result.ok(workspace);
   }
 
   @override
   Future<Result<Unit>> archiveWorkspace(String workspaceId) async {
-    return const Result.ok(unit);
+    lastArchivedId = workspaceId;
+    return archiveResult ?? const Result.ok(unit);
   }
 
   void dispose() => _controller.close();

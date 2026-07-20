@@ -75,6 +75,7 @@ class TaskListScreen extends ConsumerWidget {
                   child: ListTile(
                     leading: Checkbox(
                       value: isDone,
+                      activeColor: AppColors.categoryAttivita,
                       onChanged: (_) => ref
                           .read(taskFormControllerProvider.notifier)
                           .updateTask(

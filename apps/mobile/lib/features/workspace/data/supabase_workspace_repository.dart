@@ -103,8 +103,10 @@ class SupabaseWorkspaceRepository implements WorkspaceRepository {
   @override
   Future<Result<Unit>> archiveWorkspace(String workspaceId) async {
     try {
-      await _client.from(_table).update(
-          {'status': WorkspaceStatus.archived.name}).eq('id', workspaceId);
+      await _client.from(_table).update({
+        'status': WorkspaceStatus.archived.name,
+        'deleted_at': DateTime.now().toIso8601String(),
+      }).eq('id', workspaceId);
       return const Result.ok(unit);
     } catch (e) {
       return Result.err(

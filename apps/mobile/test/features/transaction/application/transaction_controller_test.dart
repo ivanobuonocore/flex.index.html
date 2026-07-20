@@ -60,6 +60,22 @@ void main() {
 
     expect(failure, isNull);
     expect(fakeRepository.lastCreated, expense);
+    expect(fakeRepository.lastCreatedCategory, TransactionCategory.altro);
+  });
+
+  test('create inoltra la categoria indicata al repository', () async {
+    fakeRepository.createResult = Result.ok(expense);
+
+    await container.read(transactionFormControllerProvider.notifier).create(
+          workspaceId: workspaceId,
+          type: TransactionType.expense,
+          description: 'Barbiere',
+          amountCents: 2300,
+          occurredAt: DateTime.utc(2026, 6, 15),
+          category: TransactionCategory.svago,
+        );
+
+    expect(fakeRepository.lastCreatedCategory, TransactionCategory.svago);
   });
 
   test('create con importo non valido ritorna un ValidationFailure', () async {
