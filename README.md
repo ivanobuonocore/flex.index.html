@@ -101,6 +101,23 @@ Note/Attività/Documenti/Bilancio senza uscire dalla conversazione. Nessun cambi
 `Chat` resta collegata a un Workspace come prima (CLAUDE.md, "Chat è una feature dentro Workspace,
 non un dominio a sé stante") — cambia solo la navigazione.
 
+**Fase 3 (slice 6)**: Emoji nelle risposte AI + Bilancio globale (grafico a torta) — su richiesta
+esplicita dell'utente ("vorrei che la chat fosse più bella... che rispondesse anche con emoji" e
+"un grafico a torta... dove attualmente si trova 'ricerca', 'workspace'... con un prospetto di
+entrate e di uscite"). Due modifiche indipendenti:
+- L'assistente AI (`ai-chat`) ora usa emoji con naturalezza nelle risposte (aggiunta al system
+  prompt `ASSISTANT_PERSONA`), non solo il selettore manuale già presente nell'input della Chat
+  (restyling stile WhatsApp, stessa richiesta).
+- Nuova quinta voce di navigazione **Bilancio**, tra Ricerca e Profilo: a differenza del Bilancio
+  per Workspace (già esistente, raggiungibile dalle "cartelle" di una Chat), questa schermata
+  aggrega le transazioni confermate di **tutti** i Workspace dell'utente in un grafico a torta
+  entrate/uscite (`fl_chart`) più un prospetto testuale del saldo — le stesse transazioni che la
+  Chat riconosce e registra in linguaggio naturale, indipendentemente da quale Workspace le ha
+  generate. Richiede `TransactionRepository.watchTransactions(workspaceId)` → `(String?)`
+  (`null` = tutti i Workspace, stesso pattern già usato da `ChatRepository.watchChats`).
+  Nessuna nuova tabella o migrazione: solo un filtro applicativo in meno, con l'isolamento tra
+  utenti sempre garantito dalle RLS di `transactions`.
+
 Memoria resta nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.

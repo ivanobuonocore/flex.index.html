@@ -8,8 +8,11 @@ import '../enums.dart';
 /// Articolo 4).
 abstract interface class TransactionRepository {
   /// Transazioni (pending + confirmed, non eliminate) del Workspace
-  /// [workspaceId], ordinate per data.
-  Stream<List<Transaction>> watchTransactions(String workspaceId);
+  /// [workspaceId], ordinate per data. Se [workspaceId] è `null`, restituisce
+  /// le transazioni di **tutti** i Workspace dell'utente (schermata Bilancio
+  /// globale) — l'isolamento resta garantito dalle RLS, non da questo filtro
+  /// applicativo (stesso pattern di `ChatRepository.watchChats`).
+  Stream<List<Transaction>> watchTransactions(String? workspaceId);
 
   /// Transazione manuale: nasce sempre `confirmed`, mai `createdByAi`, senza
   /// [Transaction.chatId] — a differenza di quelle estratte dalla Chat.

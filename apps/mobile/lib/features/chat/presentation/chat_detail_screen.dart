@@ -42,39 +42,46 @@ class ChatDetailScreen extends ConsumerWidget {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: messagesAsync.when(
-              loading: () => const LoadingView(),
-              error: (error, stackTrace) => ErrorView(
-                message: 'Non è stato possibile caricare i messaggi.',
-                onRetry: () => ref.invalidate(messagesProvider(chatId)),
-              ),
-              data: (messages) {
-                if (messages.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(AppSpacing.xl),
-                      child: Text(
-                        'Scrivi il primo messaggio per iniziare la conversazione.',
-                        textAlign: TextAlign.center,
+      body: Container(
+        // Colori dello sfondo chat ispirati a WhatsApp (chiaro/scuro): fanno
+        // risaltare le bolle molto più di un semplice sfondo bianco/nero.
+        color: Theme.of(context).brightness == Brightness.light
+            ? const Color(0xFFECE5DD)
+            : const Color(0xFF0B141A),
+        child: Column(
+          children: [
+            Expanded(
+              child: messagesAsync.when(
+                loading: () => const LoadingView(),
+                error: (error, stackTrace) => ErrorView(
+                  message: 'Non è stato possibile caricare i messaggi.',
+                  onRetry: () => ref.invalidate(messagesProvider(chatId)),
+                ),
+                data: (messages) {
+                  if (messages.isEmpty) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(AppSpacing.xl),
+                        child: Text(
+                          'Scrivi il primo messaggio per iniziare la conversazione.',
+                          textAlign: TextAlign.center,
+                        ),
                       ),
-                    ),
+                    );
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    itemCount: messages.length,
+                    itemBuilder: (context, index) =>
+                        _MessageBubble(message: messages[index]),
                   );
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) =>
-                      _MessageBubble(message: messages[index]),
-                );
-              },
+                },
+              ),
             ),
-          ),
-          _TypingIndicator(chatId: chatId),
-          _MessageInput(chatId: chatId, workspaceId: workspaceId),
-        ],
+            _TypingIndicator(chatId: chatId),
+            _MessageInput(chatId: chatId, workspaceId: workspaceId),
+          ],
+        ),
       ),
     );
   }
@@ -167,35 +174,61 @@ class _MessageBubble extends StatelessWidget {
     final textColor =
         isUser ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface;
 
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-        margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm,
-        ),
-        decoration: BoxDecoration(
-          color: bubbleColor,
-          borderRadius: AppRadii.standardRadius,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final attachmentId in message.attachmentIds) ...[
-              _AttachmentImage(documentId: attachmentId),
-              const SizedBox(height: AppSpacing.xs),
-            ],
-            Text(message.content, style: AppTypography.body.copyWith(color: textColor)),
+    // Angolo "a coda", stile WhatsApp: un raggio molto più piccolo sull'angolo
+    // rivolto verso il mittente, gli altri tre restano arrotondati normalmente.
+    const tail = Radius.circular(4);
+    const round = Radius.circular(AppRadii.standard);
+    final bubbleRadius = BorderRadius.only(
+      topLeft: round,
+      topRight: round,
+      bottomLeft: isUser ? round : tail,
+      bottomRight: isUser ? tail : round,
+    );
+
+    final bubble = Container(
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: bubbleColor,
+        borderRadius: bubbleRadius,
+        boxShadow: AppShadows.card(isDark: theme.brightness == Brightness.dark),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final attachmentId in message.attachmentIds) ...[
+            _AttachmentImage(documentId: attachmentId),
             const SizedBox(height: AppSpacing.xs),
-            Text(
+          ],
+          Text(message.content, style: AppTypography.body.copyWith(color: textColor)),
+          const SizedBox(height: AppSpacing.xs),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
               _formatTime(message.timestamp),
               style: AppTypography.caption.copyWith(color: textColor.withOpacity(0.7)),
             ),
+          ),
+        ],
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      child: Row(
+        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!isUser) ...[
+            const _AssistantAvatar(),
+            const SizedBox(width: AppSpacing.xs),
           ],
-        ),
+          Flexible(child: bubble),
+        ],
       ),
     );
   }
@@ -205,6 +238,27 @@ class _MessageBubble extends StatelessWidget {
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+}
+
+/// Piccolo avatar per i messaggi dell'assistente — dà un punto di riferimento
+/// visivo a colpo d'occhio (stile app di messaggistica), senza bisogno di
+/// un'immagine da caricare: solo un'icona su un cerchio colorato.
+class _AssistantAvatar extends StatelessWidget {
+  const _AssistantAvatar();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return CircleAvatar(
+      radius: 14,
+      backgroundColor: theme.colorScheme.secondaryContainer,
+      child: Icon(
+        Icons.auto_awesome,
+        size: 16,
+        color: theme.colorScheme.onSecondaryContainer,
+      ),
+    );
   }
 }
 
@@ -291,6 +345,7 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
   String? _errorMessage;
   PlatformFile? _pendingPhoto;
   bool _isUploadingPhoto = false;
+  bool _showEmojiPicker = false;
 
   /// Una Chat privata (senza Workspace) non ha dove allegare la foto — stesso
   /// limite già applicato alle Transazioni estratte dall'AI Engine.
@@ -371,6 +426,21 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     }
   }
 
+  /// Inserisce l'emoji alla posizione del cursore (non solo in coda al
+  /// testo) — così funziona anche se l'utente ha già scritto qualcosa e
+  /// vuole aggiungere l'emoji in mezzo alla frase.
+  void _insertEmoji(String emoji) {
+    final text = _controller.text;
+    final selection = _controller.selection;
+    final start = selection.start >= 0 ? selection.start : text.length;
+    final end = selection.end >= 0 ? selection.end : text.length;
+    final newText = text.replaceRange(start, end, emoji);
+    _controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + emoji.length),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isSending = ref.watch(messageFormControllerProvider).isLoading || _isUploadingPhoto;
@@ -400,6 +470,17 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
             Row(
               children: [
                 IconButton(
+                  tooltip: 'Emoji',
+                  onPressed: isSending
+                      ? null
+                      : () => setState(() => _showEmojiPicker = !_showEmojiPicker),
+                  icon: Icon(
+                    _showEmojiPicker
+                        ? Icons.keyboard_outlined
+                        : Icons.emoji_emotions_outlined,
+                  ),
+                ),
+                IconButton(
                   tooltip: _canAttachPhoto
                       ? 'Allega una foto'
                       : 'Le chat private non possono allegare foto',
@@ -423,8 +504,54 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                 ),
               ],
             ),
+            if (_showEmojiPicker) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _EmojiPicker(onSelected: _insertEmoji),
+            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Selettore di emoji semplice (stile WhatsApp: una tastiera alternativa
+/// sotto il campo di testo, non un menu a comparsa). Nessuna dipendenza
+/// esterna: sono solo caratteri Unicode, disegnati dal font di sistema —
+/// funzionano allo stesso modo su web, Android e iOS senza bisogno di un
+/// pacchetto dedicato.
+class _EmojiPicker extends StatelessWidget {
+  const _EmojiPicker({required this.onSelected});
+
+  final ValueChanged<String> onSelected;
+
+  static const _emojis = [
+    '😀', '😂', '🥰', '😍', '😊', '😉', '😎', '🤔',
+    '😅', '😭', '😢', '😡', '🥳', '😴', '🤗', '🙄',
+    '👍', '👎', '👏', '🙏', '💪', '🤝', '👋', '✌️',
+    '❤️', '🔥', '✨', '🎉', '👌', '💯', '⭐', '✅',
+    '☕', '🍕', '🎂', '🚀', '📌', '📅', '💰', '🏠',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 160,
+      child: GridView.builder(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 8,
+        ),
+        itemCount: _emojis.length,
+        itemBuilder: (context, index) {
+          final emoji = _emojis[index];
+          return InkWell(
+            borderRadius: AppRadii.buttonRadius,
+            onTap: () => onSelected(emoji),
+            child: Center(
+              child: Text(emoji, style: const TextStyle(fontSize: 22)),
+            ),
+          );
+        },
       ),
     );
   }

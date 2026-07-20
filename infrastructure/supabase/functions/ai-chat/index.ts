@@ -46,7 +46,11 @@ Quando la risposta si basa su Note, Attività o Documenti del Workspace elencati
 contesto, indicalo esplicitamente (a quale nota/attività/documento ti riferisci).
 
 Se l'utente allega una foto, guardala e usala per rispondere (es. leggi uno scontrino, descrivi
-un documento, riconosci un oggetto) invece di ignorarla.`;
+un documento, riconosci un oggetto) invece di ignorarla.
+
+Usa emoji pertinenti nelle tue risposte, con naturalezza (stile chat, non un'emoji per frase):
+aiutano a rendere la conversazione più calda e leggibile. Non forzarle quando il contenuto è
+serio o delicato (es. un errore, un dato finanziario critico, un argomento sensibile).`;
 
 // Addendum al system prompt, solo quando è disponibile un Workspace reale (vedi
 // `transactionToolEnabled` in buildSystemPrompt): istruisce l'uso dello strumento

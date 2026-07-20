@@ -9,11 +9,14 @@ essere raggiungibile in pochi tocchi. L'intera applicazione è costruita attorno
 ## Struttura generale
 
 **Aggiornato** (richiesta esplicita dell'utente — "la funzione principale deve essere la chat"):
-quattro aree principali, sempre accessibili dalla barra inferiore: **Chat** (Home), Workspace,
-Ricerca, Profilo. "Today" non è più un'area separata: il suo contenuto (saluto, Workspace
-recenti) confluisce in testa alla Home Chat, che diventa così il vero punto di ingresso
+cinque aree principali, sempre accessibili dalla barra inferiore: **Chat** (Home), Workspace,
+Ricerca, **Bilancio**, Profilo. "Today" non è più un'area separata: il suo contenuto (saluto,
+Workspace recenti) confluisce in testa alla Home Chat, che diventa così il vero punto di ingresso
 dell'app — coerente con "Struttura generale... Workspace + AI", dove l'AI si esprime
-concretamente attraverso la conversazione.
+concretamente attraverso la conversazione. "Bilancio" è una quinta voce aggiunta oltre alla
+roadmap originale (richiesta esplicita dell'utente: un "prospetto di entrate e di uscite" con un
+grafico a torta): aggrega le transazioni confermate di tutti i Workspace, a differenza del
+Bilancio per Workspace già presente nelle "cartelle" di una Chat.
 
 ## Chat (Home)
 

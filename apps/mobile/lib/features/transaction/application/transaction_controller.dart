@@ -5,9 +5,10 @@ import 'package:pip_shared/pip_shared.dart';
 import '../../../core/providers.dart';
 
 /// Transazioni (entrate/uscite) di un Workspace, in tempo reale (Software
-/// Architecture, "Sincronizzazione" — Realtime lato Supabase).
+/// Architecture, "Sincronizzazione" — Realtime lato Supabase). `null` =
+/// transazioni di tutti i Workspace dell'utente (schermata Bilancio globale).
 final transactionsProvider =
-    StreamProvider.autoDispose.family<List<Transaction>, String>(
+    StreamProvider.autoDispose.family<List<Transaction>, String?>(
   (ref, workspaceId) =>
       ref.watch(transactionRepositoryProvider).watchTransactions(workspaceId),
 );

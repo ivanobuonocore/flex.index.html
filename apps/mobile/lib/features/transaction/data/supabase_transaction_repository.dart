@@ -14,13 +14,10 @@ class SupabaseTransactionRepository implements TransactionRepository {
   static const _table = 'transactions';
 
   @override
-  Stream<List<Transaction>> watchTransactions(String workspaceId) {
-    return _client
-        .from(_table)
-        .stream(primaryKey: ['id'])
-        .eq('workspace_id', workspaceId)
-        .order('occurred_at', ascending: false)
-        .map(
+  Stream<List<Transaction>> watchTransactions(String? workspaceId) {
+    final query = _client.from(_table).stream(primaryKey: ['id']);
+    final scoped = workspaceId == null ? query : query.eq('workspace_id', workspaceId);
+    return scoped.order('occurred_at', ascending: false).map(
           (rows) => rows
               .where((row) => row['deleted_at'] == null)
               .map(_toDomain)

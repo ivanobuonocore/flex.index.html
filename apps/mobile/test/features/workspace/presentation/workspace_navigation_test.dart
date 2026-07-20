@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_mobile/core/providers.dart';
+import 'package:pip_mobile/features/workspace/presentation/workspace_detail_screen.dart';
 import 'package:pip_mobile/features/workspace/presentation/workspace_list_screen.dart';
 import 'package:pip_mobile/main.dart';
 
@@ -106,6 +107,15 @@ void main() {
       scrollable: find.byType(Scrollable),
     );
     expect(find.text('Prossimamente'), findsOneWidget);
-    expect(find.text('Bilancio'), findsOneWidget);
+    // "Bilancio" compare anche come label della quinta tab della Bottom
+    // Navigation (sempre montata, StatefulShellRoute.indexedStack): il finder
+    // va ristretto alla WorkspaceDetailScreen per restare univoco.
+    expect(
+      find.descendant(
+        of: find.byType(WorkspaceDetailScreen),
+        matching: find.text('Bilancio'),
+      ),
+      findsOneWidget,
+    );
   });
 }

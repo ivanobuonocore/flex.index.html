@@ -49,6 +49,17 @@ Implementate, con dati reali via Supabase:
   l'app è stata compilata con `VAPID_PUBLIC_KEY` (facoltativa: l'app resta utilizzabile anche
   senza). Non ancora i Promemoria veri (`CalendarEvent`, già modellato in `packages/domain` ma non
   implementato) — questa slice prova solo che la catena di consegna funziona.
+- **chat (restyling)** (Fase 3 slice 6, richiesta reale dell'utente — "vorrei che la chat fosse
+  più bella esteticamente... stile whatsapp") — sfondo, bolle con effetto "coda" e avatar
+  dell'assistente ispirati a WhatsApp, selettore emoji manuale nell'input; l'assistente AI stesso
+  ora usa emoji con naturalezza nelle risposte (system prompt aggiornato in `ai-chat`).
+- **transaction (Bilancio globale)** (Fase 3 slice 6, oltre al Bilancio per Workspace già
+  esistente — richiesta reale dell'utente: un "prospetto di entrate e di uscite" con un grafico a
+  torta) — nuova quinta voce di navigazione `/balance`: aggrega le transazioni confermate di
+  **tutti** i Workspace in un grafico a torta (`fl_chart`) entrate/uscite più le stesse sezioni
+  "in attesa di conferma"/confermate del Bilancio per Workspace, qui etichettate per Workspace di
+  provenienza. `TransactionRepository.watchTransactions` accetta ora un `workspaceId` nullable
+  (`null` = tutti i Workspace), stesso pattern di `ChatRepository.watchChats`.
 
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):

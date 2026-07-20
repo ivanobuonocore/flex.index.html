@@ -18,7 +18,7 @@ class FakeTransactionRepository implements TransactionRepository {
   void emit(List<Transaction> transactions) => _controller.add(transactions);
 
   @override
-  Stream<List<Transaction>> watchTransactions(String workspaceId) => _controller.stream;
+  Stream<List<Transaction>> watchTransactions(String? workspaceId) => _controller.stream;
 
   @override
   Future<Result<Transaction>> createTransaction({
