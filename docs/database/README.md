@@ -330,6 +330,18 @@ fisse non espongono questa azione in UI (strutturali, non eliminabili — solo r
 delle slice precedenti) — l'indice non è stato eseguito contro un database reale, solo scritto e
 riletto per correttezza sintattica.
 
+**Fix (bug segnalato dall'utente: "ci sono più categorie di appuntamenti")**: questa migrazione
+non era ancora stata applicata a un progetto Supabase reale — nel frattempo il bootstrap lato app
+ha potuto inserire più righe con la stessa categoria a ogni ricarica, senza che nulla lo
+impedisse (l'unico argine reale era proprio questo indice, mai attivo). Aggiunta all'inizio della
+stessa migrazione una query che disattiva (soft delete) le sezioni fisse duplicate, mantenendo la
+più vecchia per ciascuna `(owner_id, categoria)`, prima di creare l'indice — così chi non ha
+ancora eseguito `db push` non troverà l'indice fallire per violazione dei dati esistenti.
+Idempotente (eseguita di nuovo dopo che l'indice esiste, non trova più righe da disattivare).
+Fix speculare lato app: `workspacesProvider` (`apps/mobile`) filtra ora le sezioni fisse
+duplicate allo stesso modo, così l'interfaccia è corretta anche prima che la migrazione venga
+applicata.
+
 ## Fase 3 (slice 7C) — Bilancio con categorie
 
 Richiesta esplicita dell'utente: una spesa come "barbiere" va classificata, non solo registrata.

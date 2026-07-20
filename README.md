@@ -168,6 +168,14 @@ supabase db push` e `npx supabase functions deploy` dopo ogni slice che tocca `i
 supabase/` (vedi `infrastructure/supabase/README.md`). Un ritardo in questo passaggio ha causato
 un fallimento reale in produzione dopo la slice "Bilancio con categorie".
 
+**Fix**: bug segnalato dall'utente ("ci sono più categorie di appuntamenti") — causato
+esattamente dal gap operativo descritto sopra: senza l'indice unico di database (mai applicato),
+il bootstrap delle sezioni fisse ha potuto inserire più righe con la stessa categoria a ogni
+ricarica dell'app. Corretto su due livelli: la migrazione dell'indice ora disattiva prima le
+righe duplicate esistenti (mantenendo la più vecchia), e `workspacesProvider` lato app filtra le
+sezioni fisse duplicate allo stesso modo — così l'interfaccia è corretta anche subito, prima
+ancora che tu applichi la migrazione.
+
 Memoria resta nelle prossime slice.
 
 Vedi `apps/mobile/README.md` per lo stato feature-per-feature e le istruzioni di setup locale.

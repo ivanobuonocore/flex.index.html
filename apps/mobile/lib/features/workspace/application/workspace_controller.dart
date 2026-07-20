@@ -6,10 +6,52 @@ import '../../../core/providers.dart';
 import 'workspace_category_meta.dart';
 
 /// Workspace dell'utente autenticato, in tempo reale (Software Architecture,
-/// "Sincronizzazione" — Realtime lato Supabase).
+/// "Sincronizzazione" — Realtime lato Supabase). Filtra eventuali sezioni
+/// fisse duplicate ([_dedupeSystemWorkspaces]) — un fix, non solo una
+/// difesa: senza l'indice unico di database (mai applicato a un progetto
+/// Supabase reale in questa sessione, vedi apps/mobile/README.md, "Limiti
+/// noti"), il bootstrap ha potuto inserire più righe con la stessa
+/// categoria a ogni ricarica dell'app prima che l'indice esistesse
+/// davvero — bug segnalato dall'utente ("ci sono più categorie di
+/// appuntamenti").
 final workspacesProvider = StreamProvider.autoDispose<List<Workspace>>((ref) {
-  return ref.watch(workspaceRepositoryProvider).watchWorkspaces();
+  return ref
+      .watch(workspaceRepositoryProvider)
+      .watchWorkspaces()
+      .map(_dedupeSystemWorkspaces);
 });
+
+/// Tiene solo la sezione fissa più vecchia per categoria (presumibilmente
+/// quella già in uso, se un duplicato ha mai accumulato dati collegati);
+/// i Workspace liberi non sono mai toccati — la firma "una categoria di
+/// sistema per utente" vale solo per le 4 sezioni fisse, non per i
+/// Workspace che l'utente crea liberamente (possono benissimo avere lo
+/// stesso nome). Non elimina le righe duplicate dal database (richiede la
+/// migrazione, vedi `infrastructure/supabase/migrations/
+/// 20260720140000_workspace_system_category_unique.sql`): questa funzione
+/// evita solo che l'utente le veda, finché quella migrazione non è stata
+/// applicata.
+List<Workspace> _dedupeSystemWorkspaces(List<Workspace> workspaces) {
+  final earliestPerCategory = <String, Workspace>{};
+  for (final workspace in workspaces) {
+    final category = workspace.category;
+    if (category == null || !SystemWorkspaceCategory.all.contains(category)) {
+      continue;
+    }
+    final current = earliestPerCategory[category];
+    if (current == null || workspace.createdAt.isBefore(current.createdAt)) {
+      earliestPerCategory[category] = workspace;
+    }
+  }
+  final keptSystemIds = earliestPerCategory.values.map((w) => w.id).toSet();
+
+  return workspaces.where((workspace) {
+    final category = workspace.category;
+    final isSystem =
+        category != null && SystemWorkspaceCategory.all.contains(category);
+    return !isSystem || keptSystemIds.contains(workspace.id);
+  }).toList(growable: false);
+}
 
 /// Garantisce che le 4 sezioni fisse (Fase 3, "Sezioni fisse" — richiesta
 /// esplicita dell'utente) esistano per l'utente autenticato, creando solo
