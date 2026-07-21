@@ -324,49 +324,57 @@ class _DayCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = AppColors.heroGradient[0];
+    final hasEvent = eventCount > 0;
+
+    // Richiesta esplicita dell'utente: il giorno di un appuntamento deve
+    // essere "più caratteristico" (non un puntino minuscolo) — un cerchio
+    // pieno, in una tinta più tenue del blu "selezionato" così restano
+    // distinguibili tra loro. "Oggi" invece diventa il puntino piccolo,
+    // indipendente dallo sfondo del giorno (mostrato anche se quel giorno
+    // ha già il cerchio pieno per un appuntamento).
+    final fillColor = isSelected
+        ? accent
+        : hasEvent
+            ? Color.alphaBlend(
+                accent.withOpacity(0.55), theme.colorScheme.surface)
+            : Colors.transparent;
+    final numberColor =
+        (isSelected || hasEvent) ? Colors.white : theme.colorScheme.onSurface;
+    final markerColor = (isSelected || hasEvent) ? Colors.white : accent;
 
     return Padding(
       padding: const EdgeInsets.all(2),
       child: Material(
-        color: isSelected ? accent : Colors.transparent,
+        color: fillColor,
         shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
-          child: Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: isToday && !isSelected
-                  ? Border.all(color: accent, width: 1.5)
-                  : null,
-            ),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$day',
-                    style: AppTypography.body.copyWith(
-                      color: isSelected
-                          ? Colors.white
-                          : theme.colorScheme.onSurface,
-                      fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
-                    ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$day',
+                  style: AppTypography.body.copyWith(
+                    color: numberColor,
+                    fontWeight:
+                        hasEvent || isToday ? FontWeight.w700 : FontWeight.w400,
                   ),
-                  if (eventCount > 0)
-                    Container(
-                      margin: const EdgeInsets.only(top: 2),
-                      width: 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isSelected ? Colors.white : accent,
-                      ),
-                    )
-                  else
-                    const SizedBox(height: 7),
-                ],
-              ),
+                ),
+                if (isToday)
+                  Container(
+                    margin: const EdgeInsets.only(top: 2),
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: markerColor,
+                    ),
+                  )
+                else
+                  const SizedBox(height: 6),
+              ],
             ),
           ),
         ),

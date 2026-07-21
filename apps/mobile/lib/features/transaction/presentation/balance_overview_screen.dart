@@ -365,7 +365,7 @@ class _HeroStatPill extends StatelessWidget {
   }
 }
 
-class _BalancePieChart extends StatelessWidget {
+class _BalancePieChart extends StatefulWidget {
   const _BalancePieChart(
       {required this.incomeCents, required this.expenseCents});
 
@@ -373,7 +373,20 @@ class _BalancePieChart extends StatelessWidget {
   final int expenseCents;
 
   @override
+  State<_BalancePieChart> createState() => _BalancePieChartState();
+}
+
+class _BalancePieChartState extends State<_BalancePieChart> {
+  // Indice della fetta sotto il cursore/il dito (richiesta esplicita
+  // dell'utente: "se passo con il cursore sul grafico vorrei che mi desse
+  // qualche feedback"): `null` = nessuna, altrimenti l'indice nella lista
+  // `slices` costruita in build.
+  int? _touchedIndex;
+
+  @override
   Widget build(BuildContext context) {
+    final incomeCents = widget.incomeCents;
+    final expenseCents = widget.expenseCents;
     final total = incomeCents + expenseCents;
 
     if (total == 0) {
@@ -385,8 +398,6 @@ class _BalancePieChart extends StatelessWidget {
       );
     }
 
-    final incomePercent = incomeCents / total * 100;
-    final expensePercent = expenseCents / total * 100;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Un'unica palette in tutta l'app (richiesta esplicita dell'utente: "usa
@@ -398,6 +409,30 @@ class _BalancePieChart extends StatelessWidget {
     // gradiente a due tinte diverse per fetta.
     final incomeColor = AppColors.heroGradient[0];
     final expenseColor = AppColors.heroGradient[1];
+
+    // Costruita come lista esplicita (non due `if` diretti dentro
+    // `sections`) perché l'indice della fetta toccata restituito da
+    // fl_chart si riferisce a questa stessa lista, condizionale a seconda
+    // di quali importi sono diversi da zero.
+    final slices = [
+      if (incomeCents > 0)
+        (
+          label: 'Entrate',
+          amountCents: incomeCents,
+          percent: incomeCents / total * 100,
+          color: incomeColor,
+        ),
+      if (expenseCents > 0)
+        (
+          label: 'Uscite',
+          amountCents: expenseCents,
+          percent: expenseCents / total * 100,
+          color: expenseColor,
+        ),
+    ];
+    final touchedSlice = _touchedIndex != null && _touchedIndex! < slices.length
+        ? slices[_touchedIndex!]
+        : null;
 
     return Container(
       // Un solo alone, blu (AppShadows.glow, la stessa usata per l'hero del
@@ -456,45 +491,36 @@ class _BalancePieChart extends StatelessWidget {
                     // strette) invece di una torta piena: lettura più
                     // "dashboard premium" che "grafico a torta" classico.
                     centerSpaceRadius: 64,
+                    // Feedback al passaggio del cursore/tocco (richiesta
+                    // esplicita dell'utente): la fetta toccata "esce" di
+                    // qualche pixel in più (raggio maggiore) e il centro del
+                    // donut mostra il suo importo invece del netto — un
+                    // riscontro immediato senza bisogno di un vero tooltip.
+                    pieTouchData: PieTouchData(
+                      touchCallback: (event, response) {
+                        final index =
+                            response?.touchedSection?.touchedSectionIndex;
+                        final next =
+                            (index != null && index >= 0) ? index : null;
+                        if (next != _touchedIndex) {
+                          setState(() => _touchedIndex = next);
+                        }
+                      },
+                    ),
                     sections: [
-                      if (incomeCents > 0)
+                      for (var i = 0; i < slices.length; i++)
                         PieChartSectionData(
-                          value: incomeCents.toDouble(),
+                          value: slices[i].amountCents.toDouble(),
                           gradient: LinearGradient(
                             colors: [
-                              incomeColor,
-                              Color.lerp(incomeColor, Colors.white, 0.25)!,
+                              slices[i].color,
+                              Color.lerp(slices[i].color, Colors.white, 0.25)!,
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
-                          title: '${incomePercent.toStringAsFixed(0)}%',
-                          radius: 52,
-                          borderSide: BorderSide(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surface
-                                .withOpacity(0.6),
-                            width: 2,
-                          ),
-                          titleStyle: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      if (expenseCents > 0)
-                        PieChartSectionData(
-                          value: expenseCents.toDouble(),
-                          gradient: LinearGradient(
-                            colors: [
-                              expenseColor,
-                              Color.lerp(expenseColor, Colors.white, 0.25)!,
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          title: '${expensePercent.toStringAsFixed(0)}%',
-                          radius: 52,
+                          title: '${slices[i].percent.toStringAsFixed(0)}%',
+                          radius: _touchedIndex == i ? 60 : 52,
                           borderSide: BorderSide(
                             color: Theme.of(context)
                                 .colorScheme
@@ -530,13 +556,25 @@ class _BalancePieChart extends StatelessWidget {
                   child: Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('Netto', style: AppTypography.caption),
-                        Text(
-                          _formatSignedAmount(incomeCents - expenseCents),
-                          style: AppTypography.heading3,
-                        ),
-                      ],
+                      children: touchedSlice == null
+                          ? [
+                              Text('Netto', style: AppTypography.caption),
+                              Text(
+                                _formatSignedAmount(incomeCents - expenseCents),
+                                style: AppTypography.heading3,
+                              ),
+                            ]
+                          : [
+                              Text(touchedSlice.label,
+                                  style: AppTypography.caption
+                                      .copyWith(color: touchedSlice.color)),
+                              Text(
+                                _formatAmount(touchedSlice.amountCents),
+                                style: AppTypography.heading3,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                     ),
                   ),
                 ),
