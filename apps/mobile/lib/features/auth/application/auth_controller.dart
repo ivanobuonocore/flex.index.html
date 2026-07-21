@@ -45,8 +45,7 @@ class AuthController extends AsyncNotifier<void> {
 
   Future<Failure?> updateThemeMode(AppThemeMode mode) async {
     state = const AsyncLoading();
-    final result =
-        await ref.read(authRepositoryProvider).updateThemeMode(mode);
+    final result = await ref.read(authRepositoryProvider).updateThemeMode(mode);
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);
   }

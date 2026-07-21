@@ -962,8 +962,8 @@ void _showExportSheet(
             ),
             const SizedBox(height: AppSpacing.sm),
             OutlinedButton.icon(
-              onPressed: () => _sendSummaryByEmail(context,
-                  month: month, body: summary),
+              onPressed: () =>
+                  _sendSummaryByEmail(context, month: month, body: summary),
               icon: const Icon(Icons.email_outlined),
               label: const Text('Invia via email'),
             ),

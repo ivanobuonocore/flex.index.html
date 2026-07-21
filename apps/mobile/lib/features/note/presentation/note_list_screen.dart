@@ -140,8 +140,7 @@ class _NoteListScreenState extends ConsumerState<NoteListScreen> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis),
                                 subtitle: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     if (note.content.isNotEmpty)

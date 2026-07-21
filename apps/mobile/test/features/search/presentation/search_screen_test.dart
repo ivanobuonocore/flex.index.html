@@ -29,14 +29,16 @@ void main() {
         GoRoute(
           path: '/workspace/:id/transactions',
           builder: (context, state) {
-            onRouteMatched('/workspace/${state.pathParameters['id']}/transactions');
+            onRouteMatched(
+                '/workspace/${state.pathParameters['id']}/transactions');
             return const SizedBox.shrink();
           },
         ),
         GoRoute(
           path: '/workspace/:id/reminders',
           builder: (context, state) {
-            onRouteMatched('/workspace/${state.pathParameters['id']}/reminders');
+            onRouteMatched(
+                '/workspace/${state.pathParameters['id']}/reminders');
             return const SizedBox.shrink();
           },
         ),
@@ -112,7 +114,8 @@ void main() {
     expect(matchedRoute, '/workspace/w1/transactions');
   });
 
-  testWidgets('toccare un risultato Promemoria naviga a /workspace/:id/reminders',
+  testWidgets(
+      'toccare un risultato Promemoria naviga a /workspace/:id/reminders',
       (tester) async {
     final fakeRepository = FakeSearchRepository(
       result: const Result.ok([

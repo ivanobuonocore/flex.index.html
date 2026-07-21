@@ -71,7 +71,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           autofocus: true,
           decoration: const InputDecoration(
             hintText:
-              'Cerca in Workspace, Note, Attività, Documenti, Transazioni, Promemoria',
+                'Cerca in Workspace, Note, Attività, Documenti, Transazioni, Promemoria',
             border: InputBorder.none,
           ),
           onChanged: _onChanged,

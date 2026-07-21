@@ -56,10 +56,10 @@ void main() {
     fakeRepository.createResult = Result.ok(note);
 
     await container.read(noteFormControllerProvider.notifier).create(
-          workspaceId: workspaceId,
-          title: 'Idea',
-          tags: const ['lavoro', 'urgente'],
-        );
+      workspaceId: workspaceId,
+      title: 'Idea',
+      tags: const ['lavoro', 'urgente'],
+    );
 
     expect(fakeRepository.lastCreatedTags, ['lavoro', 'urgente']);
   });
