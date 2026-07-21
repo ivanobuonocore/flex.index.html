@@ -78,6 +78,12 @@ void main() {
     fakeTransaction.emit([personalIncome, sharedExpense]);
     await tester.pumpAndSettle();
 
+    // L'hero del saldo + il grafico (redesign estetico 2.0) spingono
+    // l'elenco delle transazioni confermate sotto la piega: va scorsa la
+    // lista per trovarla, come farebbe l'utente.
+    await tester.scrollUntilVisible(find.text('Stipendio'), 300);
+    await tester.pumpAndSettle();
+
     // Solo la transazione del Bilancio personale conta: 1.000,00 € di
     // entrate, nessuna uscita — se il filtro non ci fosse, la spesa
     // condivisa (50,00 €) comparirebbe nell'elenco e nel saldo.

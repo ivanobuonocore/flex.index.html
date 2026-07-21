@@ -7,6 +7,7 @@ import 'package:pip_domain/pip_domain.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../../workspace/application/workspace_controller.dart';
 import '../application/transaction_category_meta.dart';
@@ -51,7 +52,7 @@ class BalanceOverviewScreen extends ConsumerWidget {
     final workspacesAsync = ref.watch(workspacesProvider);
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: GradientAppBar(
         title: const Text('Bilancio'),
         actions: [
           IconButton(
@@ -114,34 +115,13 @@ class BalanceOverviewScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              _BalancePieChart(incomeCents: income, expenseCents: expense),
-              const SizedBox(height: AppSpacing.md),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Saldo del mese', style: AppTypography.caption),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(_formatSignedAmount(balance),
-                          style: AppTypography.heading1),
-                      const SizedBox(height: AppSpacing.sm),
-                      _LegendRow(
-                        color: AppColors.success,
-                        label: 'Entrate',
-                        amountCents: income,
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      _LegendRow(
-                        color: AppColors.error,
-                        label: 'Uscite',
-                        amountCents: expense,
-                      ),
-                    ],
-                  ),
-                ),
+              _BalanceHeroCard(
+                balanceCents: balance,
+                incomeCents: income,
+                expenseCents: expense,
               ),
+              const SizedBox(height: AppSpacing.md),
+              _BalancePieChart(incomeCents: income, expenseCents: expense),
               if (pending.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
                 Text('In attesa di conferma', style: AppTypography.heading3),
@@ -198,6 +178,135 @@ class BalanceOverviewScreen extends ConsumerWidget {
   }
 }
 
+/// Saldo del mese in evidenza, con gradiente "premium" (redesign estetico 2.0
+/// — richiesta esplicita dell'utente: "molto tecnologica", "profondità"):
+/// stessa famiglia cromatica dell'AppBar e della Chat, per un linguaggio
+/// visivo coerente in tutta l'app — al posto della Card piatta precedente.
+class _BalanceHeroCard extends StatelessWidget {
+  const _BalanceHeroCard({
+    required this.balanceCents,
+    required this.incomeCents,
+    required this.expenseCents,
+  });
+
+  final int balanceCents;
+  final int incomeCents;
+  final int expenseCents;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: AppColors.heroGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: AppRadii.cardPremiumRadius,
+        boxShadow: AppShadows.glow(
+          color: AppColors.heroGradient.first,
+          isDark: isDark,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Saldo del mese',
+            style: AppTypography.caption
+                .copyWith(color: Colors.white.withOpacity(0.85)),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            _formatSignedAmount(balanceCents),
+            style: AppTypography.heading1.copyWith(color: Colors.white),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: _HeroStatPill(
+                  icon: Icons.add_circle_outline,
+                  label: 'Entrate',
+                  amountCents: incomeCents,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _HeroStatPill(
+                  icon: Icons.remove_circle_outline,
+                  label: 'Uscite',
+                  amountCents: expenseCents,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Pillola statistica dentro l'hero del saldo (Entrate/Uscite) — sfondo
+/// bianco traslucido, non un colore semantico proprio: sul gradiente
+/// heroGradient, il verde/rosso di AppColors.success/error perderebbe
+/// leggibilità.
+class _HeroStatPill extends StatelessWidget {
+  const _HeroStatPill({
+    required this.icon,
+    required this.label,
+    required this.amountCents,
+  });
+
+  final IconData icon;
+  final String label;
+  final int amountCents;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: AppRadii.buttonRadius,
+        border: Border.all(color: Colors.white.withOpacity(0.22)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.white),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: AppTypography.caption
+                      .copyWith(color: Colors.white.withOpacity(0.8)),
+                ),
+                Text(
+                  _formatAmount(amountCents),
+                  style: AppTypography.body.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BalancePieChart extends StatelessWidget {
   const _BalancePieChart(
       {required this.incomeCents, required this.expenseCents});
@@ -210,74 +319,72 @@ class _BalancePieChart extends StatelessWidget {
     final total = incomeCents + expenseCents;
 
     if (total == 0) {
-      return const SizedBox(
-        height: 180,
-        child: Center(child: Text('Nessun importo confermato questo mese.')),
+      return const Card(
+        child: SizedBox(
+          height: 180,
+          child: Center(child: Text('Nessun importo confermato questo mese.')),
+        ),
       );
     }
 
     final incomePercent = incomeCents / total * 100;
     final expensePercent = expenseCents / total * 100;
 
-    return SizedBox(
-      height: 220,
-      child: PieChart(
-        PieChartData(
-          sectionsSpace: 3,
-          centerSpaceRadius: 48,
-          sections: [
-            if (incomeCents > 0)
-              PieChartSectionData(
-                value: incomeCents.toDouble(),
-                color: AppColors.success,
-                title: '${incomePercent.toStringAsFixed(0)}%',
-                radius: 64,
-                titleStyle: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: SizedBox(
+          height: 220,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              PieChart(
+                PieChartData(
+                  sectionsSpace: 4,
+                  centerSpaceRadius: 56,
+                  sections: [
+                    if (incomeCents > 0)
+                      PieChartSectionData(
+                        value: incomeCents.toDouble(),
+                        color: AppColors.success,
+                        title: '${incomePercent.toStringAsFixed(0)}%',
+                        radius: 64,
+                        titleStyle: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    if (expenseCents > 0)
+                      PieChartSectionData(
+                        value: expenseCents.toDouble(),
+                        color: AppColors.error,
+                        title: '${expensePercent.toStringAsFixed(0)}%',
+                        radius: 64,
+                        titleStyle: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
                 ),
               ),
-            if (expenseCents > 0)
-              PieChartSectionData(
-                value: expenseCents.toDouble(),
-                color: AppColors.error,
-                title: '${expensePercent.toStringAsFixed(0)}%',
-                radius: 64,
-                titleStyle: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
+              // Centro del donut: il netto del mese a colpo d'occhio, senza
+              // dover sommare mentalmente le due fette (redesign estetico
+              // 2.0 — richiesta esplicita dell'utente: "molto tecnologica").
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Netto', style: AppTypography.caption),
+                  Text(
+                    _formatSignedAmount(incomeCents - expenseCents),
+                    style: AppTypography.heading3,
+                  ),
+                ],
               ),
-          ],
+            ],
+          ),
         ),
       ),
-    );
-  }
-}
-
-class _LegendRow extends StatelessWidget {
-  const _LegendRow(
-      {required this.color, required this.label, required this.amountCents});
-
-  final Color color;
-  final String label;
-  final int amountCents;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: AppSpacing.xs),
-        Text(label),
-        const Spacer(),
-        Text(_formatAmount(amountCents),
-            style: AppTypography.body.copyWith(color: color)),
-      ],
     );
   }
 }
@@ -334,9 +441,10 @@ class _PendingTransactionTile extends ConsumerWidget {
   }
 }
 
-/// Icona colorata + etichetta di una categoria (redesign estetico —
-/// richiesta esplicita dell'utente: "icone colorate"), riusata ovunque il
-/// Bilancio elenca una transazione.
+/// Pillola colorata (icona + etichetta) di una categoria — redesign estetico
+/// 2.0: prima solo un'icona colorata su testo semplice, ora un rilievo
+/// leggero coerente con le altre superfici "chip" della app (sezioni in
+/// Chat), riusata ovunque il Bilancio elenca una transazione.
 class _CategoryBadge extends StatelessWidget {
   const _CategoryBadge({required this.category});
 
@@ -345,13 +453,25 @@ class _CategoryBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final meta = TransactionCategoryMeta.of(category);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(meta.icon, size: 14, color: meta.color),
-        const SizedBox(width: 2),
-        Text(meta.label),
-      ],
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 2),
+      decoration: BoxDecoration(
+        color: meta.color.withOpacity(0.14),
+        borderRadius: AppRadii.buttonRadius,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(meta.icon, size: 13, color: meta.color),
+          const SizedBox(width: 2),
+          Text(
+            meta.label,
+            style: AppTypography.caption
+                .copyWith(color: meta.color, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
     );
   }
 }
