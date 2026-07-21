@@ -136,6 +136,18 @@ Implementate, con dati reali via Supabase:
   mese prossimo" citando i dati reali, non inventati — vedi `docs/database/README.md`, Fase 3
   slice 10, per il dettaglio del secondo giro con Anthropic necessario per queste risposte.
 
+- **Redesign estetico 2.0 (seguito)** (richiesta esplicita dell'utente: grafico "stile Siri" con
+  profondità, Workspace "migliorati graficamente con profondità, colori", "la chat... le sezioni
+  in basso facciano da contorno") — il grafico a torta del Bilancio usa ora due gradienti dalla
+  palette `siriGlow` (non più verde/rosso) con un alone multicolore dietro la Card
+  (`AppShadows.siriGlow`, nuovo); `WorkspaceCard` sostituisce la Card piatta (elevation 0 nel tema
+  globale) con un Container sfumato + ombra colorata; la bottom nav ha un alone tenue centrato sul
+  pulsante Chat (la barra "emana" dal pulsante) e le 4 voci laterali sono più piccole da ferme —
+  il pulsante Chat stesso resta invariato. Corretto anche un rendering mancato: le emoji a colori
+  richiedono `flutter build web --web-renderer html` (limitazione nota di CanvasKit, il renderer di
+  default su desktop, che non carica i font emoji a colori) — il build precedente era stato fatto
+  senza quel flag, da qui l'assenza del colore.
+
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
 

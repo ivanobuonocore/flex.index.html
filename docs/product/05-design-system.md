@@ -43,6 +43,13 @@ ispirata a Planito): nuovo gradiente "hero" (`#2563EB` → `#7C3AED`, stessa fam
 glow del pulsante Chat), usato per l'AppBar di Chat/Bilancio, le bolle utente in Chat e il saldo
 in evidenza nel Bilancio — comune a entrambi i temi, come il gradiente del pulsante Chat.
 
+**Aggiornato di nuovo** (richiesta esplicita dell'utente: il grafico del Bilancio "con i colori
+che stai usando stile Siri"): il grafico a torta non usa più il verde/rosso semantico
+(entrate/uscite) ma due gradienti presi dalla stessa palette `siriGlow` (blu→ciano per le entrate,
+viola→rosa per le uscite) — le due fette restano distinguibili tra loro, ma la palette è quella
+del pulsante Chat, non quella semantica finanziaria usata altrove (icone entrata/uscita nelle
+liste, che restano verdi/rosse).
+
 ## Tipografia
 
 **Aggiornato** (redesign estetico — richiesta esplicita dell'utente: "utilizzando un font
