@@ -234,6 +234,14 @@ Implementate, con dati reali via Supabase:
   (Conferma/Scarta) subito sotto il messaggio, riusando `transactionFormControllerProvider` già
   esistente, senza dover aprire il Bilancio. Un id già deciso altrove (Bilancio o qui) smette
   semplicemente di comparire, filtrato per `status == pending` a ogni lettura.
+- **reminder (promemoria ricorrenti)** (richiesta esplicita dell'utente) — `create_reminder`
+  accetta un campo `recurrence` (`daily`/`weekly`/`monthly`, es. "ricordami ogni lunedì di
+  buttare la spazzatura"): `ai-chat` genera automaticamente le occorrenze successive (numero
+  fisso per frequenza, non deciso dal modello), condividendo un `recurrenceGroupId` — mostrato
+  come una piccola icona "ricorrente" nell'elenco Appuntamenti. Ogni occorrenza resta una riga
+  indipendente ed eliminabile singolarmente (nessuna "elimina tutta la serie" in questa slice).
+  Nessuna modifica a `send-due-reminders`/`pg_cron`, già configurati: continuano a vedere righe
+  indipendenti come sempre.
 
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):

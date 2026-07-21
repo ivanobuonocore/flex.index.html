@@ -198,6 +198,25 @@ class _ReminderListScreenState extends ConsumerState<ReminderListScreen> {
                                   ),
                                   subtitle:
                                       Text(_formatDateTime(event.startsAt)),
+                                  // Badge "ricorrente" (richiesta esplicita
+                                  // dell'utente: "promemoria ricorrenti") —
+                                  // ogni occorrenza resta una riga
+                                  // indipendente ed eliminabile singolarmente,
+                                  // il badge è solo informativo.
+                                  trailing: event.recurrenceGroupId != null
+                                      ? Tooltip(
+                                          message: 'Promemoria ricorrente',
+                                          child: Icon(
+                                            Icons.repeat,
+                                            size: 18,
+                                            color: isPast
+                                                ? Theme.of(context)
+                                                    .disabledColor
+                                                : AppColors
+                                                    .categoryAppuntamenti,
+                                          ),
+                                        )
+                                      : null,
                                 ),
                               ),
                             );

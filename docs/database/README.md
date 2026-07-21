@@ -642,6 +642,30 @@ deciso smette semplicemente di comparire, senza dover riscrivere il messaggio. V
 Postgres locale (stesso schema fittizio delle slice precedenti): insert e lettura della colonna
 confermati.
 
+## Fase 3 (slice 14) — Promemoria ricorrenti
+
+`20260722170000_calendar_events_recurrence.sql`: `calendar_events.recurrence_group_id uuid`
+(nullable, indice parziale `where recurrence_group_id is not null`). Nessuna logica RRULE/cron:
+`create_reminder` guadagna un campo `recurrence` (`none`/`daily`/`weekly`/`monthly`, richiesta
+esplicita dell'utente — "ogni lunedì", "ogni mese") e `ai-chat/index.ts` **espande** la
+ricorrenza in più righe indipendenti al momento della creazione (`expandOccurrences`), ciascuna
+col proprio `starts_at` e un `recurrence_group_id` condiviso (`crypto.randomUUID()`) —
+`send-due-reminders` (già configurata, non toccata da questa slice) continua a leggere
+`calendar_events` come eventi indipendenti, esattamente come faceva prima. Numero di occorrenze
+fisso per frequenza (14 giorni/14 settimane/12 mesi), non deciso dal modello: evita inserimenti
+incontrollati.
+
+Bug trovato e corretto durante lo sviluppo (verificato con uno script Node standalone, dato che
+Deno non è disponibile in questo sandbox): `Date.setUTCMonth` da solo trabocca sui mesi più corti
+— il 31 gennaio + 1 mese diventava il 3 marzo invece del 28 febbraio. La correzione passa sempre
+dal giorno 1 del mese di destinazione, poi sceglie `min(giorno originale, giorni nel mese di
+destinazione)`.
+
+`recurrenceGroupId` (`CalendarEvent` in `packages/domain`) è solo informativo in questa slice:
+mostra un'icona "ricorrente" nell'elenco Appuntamenti, ma eliminare un'occorrenza elimina solo
+quella riga — non l'intera serie (tenuto fuori scope per non appesantire questo giro). Verificato
+su Postgres locale: insert di più righe con lo stesso `recurrence_group_id` e lettura confermati.
+
 ## Fasi successive
 
 Memory, Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una

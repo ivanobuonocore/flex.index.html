@@ -116,8 +116,11 @@ futuro (es. "ricordami la visita dal dentista giovedì alle 15", "promemoria: ch
 domani alle 10"), usa lo strumento create_reminder per registrarlo — non limitarti a scriverlo
 in prosa. Usa la data odierna fornita nel contesto per risolvere date/orari relativi. Non usarlo
 per eventi già avvenuti, task senza un orario specifico, o richieste vaghe senza un momento
-preciso. Includi sempre, oltre all'uso dello strumento, una risposta testuale breve che confermi
-cosa hai registrato e quando.`;
+preciso. Se l'utente chiede esplicitamente una ripetizione (es. "ogni lunedì", "ogni giorno",
+"ogni mese"), valorizza il campo recurrence invece di creare più promemoria manualmente: le
+occorrenze successive vengono generate automaticamente. Includi sempre, oltre all'uso dello
+strumento, una risposta testuale breve che confermi cosa hai registrato, quando, e se è
+ricorrente.`;
 
 // Addendum al system prompt, solo quando è disponibile un Workspace per le Attività
 // (vedi `taskToolEnabled`): richiesta esplicita dell'utente, "Liste/checklist via
@@ -197,12 +200,24 @@ const QUERY_REMINDERS_TOOL = {
   },
 };
 
+// Numero di occorrenze generate per ciascuna frequenza (richiesta esplicita
+// dell'utente: "promemoria ricorrenti", es. "ogni lunedì", "ogni mese") — un limite
+// fisso, non deciso dal modello: evita inserimenti incontrollati se il modello
+// interpretasse "ricordamelo sempre" alla lettera. Corrisponde a orizzonti
+// paragonabili nel tempo (14 giorni, ~14 settimane, 12 mesi).
+const RECURRENCE_OCCURRENCES: Record<string, number> = {
+  daily: 14,
+  weekly: 14,
+  monthly: 12,
+};
+
 const CREATE_REMINDER_TOOL = {
   name: "create_reminder",
   description:
     "Crea un promemoria per un momento specifico nel futuro, quando l'utente chiede " +
     "esplicitamente di essere ricordato di qualcosa (es. 'ricordami la visita dal dentista " +
-    "giovedì alle 15'). Non usarlo per eventi già avvenuti o senza un orario preciso.",
+    "giovedì alle 15', 'ricordami ogni lunedì di buttare la spazzatura'). Non usarlo per " +
+    "eventi già avvenuti o senza un orario preciso.",
   input_schema: {
     type: "object",
     properties: {
@@ -213,14 +228,23 @@ const CREATE_REMINDER_TOOL = {
       starts_at: {
         type: "string",
         description:
-          "Data e ora del promemoria in formato ISO 8601 (es. '2026-07-24T15:00:00'), " +
-          "risolta rispetto alla data odierna fornita nel contesto.",
+          "Data e ora della PRIMA occorrenza del promemoria in formato ISO 8601 (es. " +
+          "'2026-07-24T15:00:00'), risolta rispetto alla data odierna fornita nel contesto.",
       },
       reminder_minutes_before: {
         type: "integer",
         description:
           "Minuti di anticipo per l'avviso rispetto a starts_at (facoltativo, default 0 " +
           "= avviso esattamente all'orario indicato).",
+      },
+      recurrence: {
+        type: "string",
+        enum: ["none", "daily", "weekly", "monthly"],
+        description:
+          "'none' (default) per un promemoria singolo. 'daily'/'weekly'/'monthly' se " +
+          "l'utente chiede esplicitamente una ripetizione (es. 'ogni giorno'/'ogni " +
+          "lunedì'/'ogni mese') — genera automaticamente le occorrenze successive, non " +
+          "serve calcolarle.",
       },
     },
     required: ["title", "starts_at"],
@@ -333,10 +357,22 @@ interface TransactionSuggestion {
   category: TransactionCategory;
 }
 
+type RecurrenceFrequency = "daily" | "weekly" | "monthly";
+
 interface ReminderSuggestion {
   title: string;
   startsAt: string;
   reminderMinutesBefore: number | null;
+  recurrence: RecurrenceFrequency | null;
+}
+
+interface ReminderRow {
+  workspace_id: string | null | undefined;
+  source_chat_id: string | undefined;
+  title: string;
+  starts_at: string;
+  reminder_minutes_before: number | null;
+  recurrence_group_id: string | null;
 }
 
 interface TaskSuggestion {
@@ -622,19 +658,40 @@ Deno.serve(async (req) => {
       : [];
 
     let reminderInsertFailed = false;
-    if (reminderSuggestions.length > 0) {
+    // Una riga per occorrenza (richiesta esplicita dell'utente: "promemoria
+    // ricorrenti") — un solo `recurrence_group_id` per suggerimento, condiviso da
+    // tutte le sue occorrenze, per poterle mostrare come un'unica serie in UI senza
+    // toccare send-due-reminders (che continua a vedere righe indipendenti).
+    const reminderRows: ReminderRow[] = reminderSuggestions.flatMap((r) => {
+      if (r.recurrence === null) {
+        const single: ReminderRow = {
+          workspace_id: body.remindersWorkspaceId,
+          source_chat_id: body.chatId,
+          title: r.title,
+          starts_at: r.startsAt,
+          reminder_minutes_before: r.reminderMinutesBefore,
+          recurrence_group_id: null,
+        };
+        return [single];
+      }
+      const recurrenceGroupId: string = crypto.randomUUID();
+      return expandOccurrences(new Date(r.startsAt), r.recurrence).map(
+        (occurrence): ReminderRow => ({
+          workspace_id: body.remindersWorkspaceId,
+          source_chat_id: body.chatId,
+          title: r.title,
+          starts_at: occurrence.toISOString(),
+          reminder_minutes_before: r.reminderMinutesBefore,
+          recurrence_group_id: recurrenceGroupId,
+        }),
+      );
+    });
+
+    if (reminderRows.length > 0) {
       const { error: reminderInsertError } = await supabase.from(
         "calendar_events",
       )
-        .insert(
-          reminderSuggestions.map((r) => ({
-            workspace_id: body.remindersWorkspaceId,
-            source_chat_id: body.chatId,
-            title: r.title,
-            starts_at: r.startsAt,
-            reminder_minutes_before: r.reminderMinutesBefore,
-          })),
-        );
+        .insert(reminderRows);
       if (reminderInsertError) {
         console.error(
           "ai-chat: errore insert calendar_events",
@@ -689,10 +746,17 @@ Deno.serve(async (req) => {
       finalReplyText = `Ho registrato ${suggestions.length} ${
         suggestions.length === 1 ? "transazione" : "transazioni"
       } in attesa di conferma nella sezione Bilancio.`;
-    } else if (!finalReplyText && reminderSuggestions.length > 0) {
+    } else if (!finalReplyText && reminderRows.length > 0) {
       // "Promemoria" è invariante in italiano: nessuna forma plurale distinta da gestire.
-      finalReplyText =
-        `Ho creato ${reminderSuggestions.length} promemoria nella sezione Appuntamenti.`;
+      // reminderRows conta le occorrenze reali (una ricorrenza ne genera più di una),
+      // non i suggerimenti logici del modello.
+      const hasRecurrence = reminderSuggestions.some((r) =>
+        r.recurrence !== null
+      );
+      finalReplyText = hasRecurrence
+        ? `Ho creato un promemoria ricorrente (${reminderRows.length} occorrenze) ` +
+          "nella sezione Appuntamenti."
+        : `Ho creato ${reminderRows.length} promemoria nella sezione Appuntamenti.`;
     } else if (!finalReplyText && taskSuggestions.length > 0) {
       finalReplyText = `Ho aggiunto ${taskSuggestions.length} ${
         taskSuggestions.length === 1 ? "elemento" : "elementi"
@@ -1293,6 +1357,12 @@ function sanitizeReminder(raw: unknown): ReminderSuggestion | null {
     reminderMinutesBeforeRaw === undefined || reminderMinutesBeforeRaw === null
       ? null
       : Math.round(Number(reminderMinutesBeforeRaw));
+  // Un valore diverso da "none"/daily/weekly/monthly (es. il modello non lo valorizza
+  // affatto) ricade su "nessuna ricorrenza", non blocca la registrazione del promemoria.
+  const recurrence = r.recurrence === "daily" ||
+      r.recurrence === "weekly" || r.recurrence === "monthly"
+    ? r.recurrence
+    : null;
 
   if (!title) return null;
   if (!startsAt || Number.isNaN(startsAtDate.getTime())) return null;
@@ -1306,7 +1376,51 @@ function sanitizeReminder(raw: unknown): ReminderSuggestion | null {
     title,
     startsAt: startsAtDate.toISOString(),
     reminderMinutesBefore,
+    recurrence,
   };
+}
+
+// Espande un promemoria ricorrente nelle sue occorrenze (richiesta esplicita
+// dell'utente: "promemoria ricorrenti") — una riga per occorrenza, non un'unica riga
+// con una regola di ripetizione: send-due-reminders (già configurata, non toccata da
+// questa slice) continua a leggere calendar_events come eventi indipendenti, ciascuno
+// col proprio starts_at/notified_at.
+function expandOccurrences(startsAt: Date, frequency: RecurrenceFrequency): Date[] {
+  const count = RECURRENCE_OCCURRENCES[frequency];
+  const occurrences: Date[] = [];
+
+  if (frequency === "daily" || frequency === "weekly") {
+    const stepDays = frequency === "daily" ? 1 : 7;
+    for (let i = 0; i < count; i++) {
+      const next = new Date(startsAt);
+      next.setUTCDate(next.getUTCDate() + i * stepDays);
+      occurrences.push(next);
+    }
+    return occurrences;
+  }
+
+  // "monthly": `setUTCMonth` da solo trabocca sui mesi più corti (es. il 31
+  // gennaio + 1 mese diventa il 3 marzo, non il 28 febbraio) — bug verificato
+  // manualmente prima di questa correzione. Si passa sempre dal giorno 1 del
+  // mese di destinazione, poi si sceglie il giorno più vicino a quello
+  // originale senza superare i giorni disponibili in quel mese.
+  const originalDay = startsAt.getUTCDate();
+  for (let i = 0; i < count; i++) {
+    const firstOfTargetMonth = new Date(startsAt);
+    firstOfTargetMonth.setUTCDate(1);
+    firstOfTargetMonth.setUTCMonth(firstOfTargetMonth.getUTCMonth() + i);
+    const daysInTargetMonth = new Date(
+      Date.UTC(
+        firstOfTargetMonth.getUTCFullYear(),
+        firstOfTargetMonth.getUTCMonth() + 1,
+        0,
+      ),
+    ).getUTCDate();
+    const next = new Date(firstOfTargetMonth);
+    next.setUTCDate(Math.min(originalDay, daysInTargetMonth));
+    occurrences.push(next);
+  }
+  return occurrences;
 }
 
 // Estrae le chiamate allo strumento manage_tasks dalla risposta Anthropic — stesso

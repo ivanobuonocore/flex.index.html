@@ -62,6 +62,37 @@ void main() {
   });
 
   testWidgets(
+      'un promemoria con recurrenceGroupId mostra il badge "ricorrente"',
+      (tester) async {
+    final fakeRepository = FakeCalendarEventRepository();
+    addTearDown(fakeRepository.dispose);
+
+    final recurring = CalendarEvent(
+      id: 'e1',
+      workspaceId: 'w1',
+      title: 'Buttare la spazzatura',
+      startsAt: DateTime.now().add(const Duration(days: 1)),
+      durationMinutes: 30,
+      createdAt: DateTime.now(),
+      recurrenceGroupId: 'group-1',
+    );
+    final single = CalendarEvent(
+      id: 'e2',
+      workspaceId: 'w1',
+      title: 'Dentista',
+      startsAt: DateTime.now().add(const Duration(days: 2)),
+      durationMinutes: 30,
+      createdAt: DateTime.now(),
+    );
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([recurring, single]);
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.repeat), findsOneWidget);
+  });
+
+  testWidgets(
       'selezionare un giorno nel calendario filtra l\'elenco a quel giorno',
       (tester) async {
     final fakeRepository = FakeCalendarEventRepository();

@@ -92,6 +92,7 @@ class SupabaseCalendarEventRepository implements CalendarEventRepository {
       notifiedAt: row['notified_at'] != null
           ? DateTime.parse(row['notified_at'] as String)
           : null,
+      recurrenceGroupId: row['recurrence_group_id'] as String?,
       deletedAt: row['deleted_at'] != null
           ? DateTime.parse(row['deleted_at'] as String)
           : null,

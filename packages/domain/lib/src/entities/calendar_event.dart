@@ -14,6 +14,7 @@ final class CalendarEvent {
     this.sourceTaskId,
     this.sourceChatId,
     this.notifiedAt,
+    this.recurrenceGroupId,
     this.deletedAt,
   });
 
@@ -33,6 +34,12 @@ final class CalendarEvent {
   /// notifica push è stata inviata — evita di inviarla due volte allo stesso
   /// evento (il cron gira ogni minuto).
   final DateTime? notifiedAt;
+
+  /// Accomuna le occorrenze di un promemoria ricorrente (richiesta esplicita
+  /// dell'utente: "ogni lunedì", "ogni mese") — `null` per un promemoria
+  /// singolo. Solo informativo in questa slice (mostra un badge "ricorrente"):
+  /// ogni occorrenza resta una riga indipendente, eliminabile singolarmente.
+  final String? recurrenceGroupId;
 
   /// Soft delete (Domain Model, "Principi del modello").
   final DateTime? deletedAt;
@@ -55,6 +62,7 @@ final class CalendarEvent {
       sourceChatId: sourceChatId,
       createdAt: createdAt,
       notifiedAt: notifiedAt,
+      recurrenceGroupId: recurrenceGroupId,
       deletedAt: deletedAt,
     );
   }
@@ -72,6 +80,7 @@ final class CalendarEvent {
       other.sourceChatId == sourceChatId &&
       other.createdAt == createdAt &&
       other.notifiedAt == notifiedAt &&
+      other.recurrenceGroupId == recurrenceGroupId &&
       other.deletedAt == deletedAt;
 
   @override
@@ -86,6 +95,7 @@ final class CalendarEvent {
         sourceChatId,
         createdAt,
         notifiedAt,
+        recurrenceGroupId,
         deletedAt,
       );
 
