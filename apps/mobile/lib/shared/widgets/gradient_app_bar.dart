@@ -28,8 +28,8 @@ class GradientAppBar extends StatelessWidget implements PreferredSizeWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        boxShadow:
-            AppShadows.glow(color: AppColors.heroGradient.first, isDark: isDark),
+        boxShadow: AppShadows.glow(
+            color: AppColors.heroGradient.first, isDark: isDark),
       ),
       child: AppBar(
         title: title,

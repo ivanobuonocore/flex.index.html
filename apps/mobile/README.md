@@ -125,6 +125,17 @@ Implementate, con dati reali via Supabase:
   inoltrare, un cron non è una richiesta autenticata). Vedi `docs/database/README.md` per il
   dettaglio (attivazione del cron, verifiche fatte e non fatte).
 
+- **Redesign estetico 2.0 + Q&A su dati reali in Chat** (richiesta esplicita dell'utente: "la chat
+  deve assumere una veste grafica prioritaria", "il Bilancio... deve essere molto tecnologica")
+  — Chat Home e Bilancio rivestiti con un gradiente "hero" condiviso (`GradientAppBar`, nuovo
+  widget in `shared/widgets/`), bolle utente e saldo con più profondità/ombre colorate, categorie
+  come pillole, grafico con il netto al centro del donut. Il pulsante di invio in Chat e il
+  pulsante Chat della bottom nav restano invariati (richiesta esplicita). In `ai-chat`, due nuovi
+  tool di sola lettura sempre attivi (`query_balance_summary`, `query_reminders`) permettono
+  all'assistente di rispondere a domande come "quanto ho speso questo mese" o "ho appuntamenti il
+  mese prossimo" citando i dati reali, non inventati — vedi `docs/database/README.md`, Fase 3
+  slice 10, per il dettaglio del secondo giro con Anthropic necessario per queste risposte.
+
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
 
@@ -157,6 +168,12 @@ Non ancora presenti: memory, settings, billing.
   rendering della bolla) è verificata; se Claude interpreta correttamente l'immagine non è
   verificabile senza chiave reale. Solo JPEG/PNG/GIF/WebP sono garantiti compatibili — formati
   come HEIC (comune su iPhone) possono far fallire il turno con un errore generico, non un crash.
+- Lo stesso per i due nuovi tool di sola lettura `query_balance_summary`/`query_reminders`: la
+  logica di aggregazione (esclusione del Bilancio condiviso, filtro periodo) è stata verificata
+  con `tsc --strict` (compilatore TypeScript reale, con shim locali per gli import `npm:`/i
+  globali `Deno.*` — un livello di verifica più solido della sola rilettura manuale usata nelle
+  slice precedenti), ma se il modello sceglie lo strumento giusto e il secondo giro con Anthropic
+  produce una risposta pertinente non è verificabile senza una chiamata reale.
 - Le notifiche push (`features/notifications`) hanno una parte web-only (`dart:js_interop` +
   `package:web`, isolata da import condizionale) non eseguibile in `flutter test` (nessun browser
   nel test runner): verificata con `flutter analyze` e un vero `flutter build web` con dart2js

@@ -12,6 +12,14 @@
 // si applicano identiche qui dentro — stesso principio "security invoker" già
 // verificato per search_workspace_content. Questa function non ha alcun modo di
 // leggere dati di un Workspace che l'utente non possiede.
+//
+// Oltre a estrarre transazioni/promemoria da un messaggio, può anche rispondere a
+// domande sui dati reali dell'utente ("quanto ho speso questo mese", "ho appuntamenti il
+// mese prossimo") tramite due strumenti di sola lettura (query_balance_summary,
+// query_reminders) sempre disponibili: quando il modello li usa, questa function esegue
+// la query sotto RLS e fa un secondo giro con Anthropic per ottenere una risposta in
+// prosa basata sul risultato reale (vedi buildSystemPrompt/QUERY_TOOL_INSTRUCTIONS e il
+// ramo `queryToolUseBlocks.length > 0` più sotto).
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -110,6 +118,65 @@ in prosa. Usa la data odierna fornita nel contesto per risolvere date/orari rela
 per eventi già avvenuti, task senza un orario specifico, o richieste vaghe senza un momento
 preciso. Includi sempre, oltre all'uso dello strumento, una risposta testuale breve che confermi
 cosa hai registrato e quando.`;
+
+// Addendum al system prompt, sempre presente (Fase 3, "Chat come Home" —
+// richiesta esplicita dell'utente: "qualsiasi domanda che riguardi le
+// informazioni al suo interno"): a differenza di extract_transactions/
+// create_reminder, questi due strumenti sono di sola lettura e non dipendono
+// da un Workspace attivo — funzionano in qualunque conversazione, perché
+// leggono sempre sotto RLS solo i dati del chiamante.
+const QUERY_TOOL_INSTRUCTIONS =
+  `Quando l'utente fa una domanda che richiede di conoscere i suoi dati reali (es. "quanto ho
+speso questo mese", "quanto ho speso in alimentari ad aprile", "ho appuntamenti il mese prossimo",
+"cosa ho in agenda questa settimana"), usa lo strumento query_balance_summary (spese/entrate/
+saldo) o query_reminders (promemoria/appuntamenti) invece di rispondere a memoria o inventare un
+numero (AI Constitution, "non inventare informazioni"). Risolvi il periodo richiesto in date
+concrete (period_start/period_end, formato YYYY-MM-DD) usando la data odierna fornita nel
+contesto. Dopo aver ricevuto il risultato dello strumento, rispondi sempre in prosa citando i dati
+reali restituiti.`;
+
+const QUERY_BALANCE_SUMMARY_TOOL = {
+  name: "query_balance_summary",
+  description:
+    "Restituisce il riepilogo di entrate/uscite confermate del Bilancio personale (esclude i " +
+    "Bilanci condivisi) per un periodo, con il dettaglio per categoria di spesa. Usalo per " +
+    "domande come 'quanto ho speso questo mese' o 'quanto ho speso in alimentari ad aprile'.",
+  input_schema: {
+    type: "object",
+    properties: {
+      period_start: {
+        type: "string",
+        description: "Inizio del periodo, formato YYYY-MM-DD (incluso).",
+      },
+      period_end: {
+        type: "string",
+        description: "Fine del periodo, formato YYYY-MM-DD (incluso).",
+      },
+    },
+    required: ["period_start", "period_end"],
+  },
+};
+
+const QUERY_REMINDERS_TOOL = {
+  name: "query_reminders",
+  description:
+    "Restituisce i promemoria/appuntamenti non cancellati in un periodo. Usalo per domande come " +
+    "'ho appuntamenti il mese prossimo' o 'cosa ho in agenda questa settimana'.",
+  input_schema: {
+    type: "object",
+    properties: {
+      period_start: {
+        type: "string",
+        description: "Inizio del periodo, formato YYYY-MM-DD (incluso).",
+      },
+      period_end: {
+        type: "string",
+        description: "Fine del periodo, formato YYYY-MM-DD (incluso).",
+      },
+    },
+    required: ["period_start", "period_end"],
+  },
+};
 
 const CREATE_REMINDER_TOOL = {
   name: "create_reminder",
@@ -350,14 +417,14 @@ Deno.serve(async (req) => {
         // questo il modello può comunque usarlo di sua iniziativa (vedi
         // commento su MAX_OUTPUT_TOKENS più sopra).
         thinking: { type: "disabled" },
-        ...((transactionToolEnabled || reminderToolEnabled)
-          ? {
-            tools: [
-              ...(transactionToolEnabled ? [EXTRACT_TRANSACTIONS_TOOL] : []),
-              ...(reminderToolEnabled ? [CREATE_REMINDER_TOOL] : []),
-            ],
-          }
-          : {}),
+        // query_balance_summary/query_reminders sono sempre presenti (a differenza di
+        // extract_transactions/create_reminder, che restano condizionati al Workspace attivo).
+        tools: [
+          ...(transactionToolEnabled ? [EXTRACT_TRANSACTIONS_TOOL] : []),
+          ...(reminderToolEnabled ? [CREATE_REMINDER_TOOL] : []),
+          QUERY_BALANCE_SUMMARY_TOOL,
+          QUERY_REMINDERS_TOOL,
+        ],
       }),
     });
 
@@ -372,7 +439,83 @@ Deno.serve(async (req) => {
     }
 
     const anthropicBody = await anthropicResponse.json();
-    const replyText = extractText(anthropicBody);
+    let replyText = extractText(anthropicBody);
+
+    // Se il modello ha usato uno dei due strumenti di sola lettura, serve un secondo
+    // giro di andata/ritorno con Anthropic: solo dopo aver eseguito la query e restituito
+    // il risultato reale, il modello può scrivere una risposta in prosa che lo citi (non
+    // può farlo nello stesso turno in cui chiede il dato). Un solo giro di follow-up,
+    // mai più di uno: la richiesta qui sotto non porta `tools`, quindi il modello non può
+    // chiedere un'altra chiamata.
+    const toolUseBlocks = extractToolUseBlocks(anthropicBody);
+    const queryToolUseBlocks = toolUseBlocks.filter((block) =>
+      block.name === "query_balance_summary" || block.name === "query_reminders"
+    );
+
+    if (queryToolUseBlocks.length > 0) {
+      const toolResults = await Promise.all(toolUseBlocks.map(async (block) => {
+        if (block.name === "query_balance_summary") {
+          const result = await queryBalanceSummary(supabase, block.input);
+          return {
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: JSON.stringify(result),
+          };
+        }
+        if (block.name === "query_reminders") {
+          const result = await queryReminders(supabase, block.input);
+          return {
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: JSON.stringify(result),
+          };
+        }
+        // extract_transactions/create_reminder: l'inserimento reale nel DB avviene più
+        // sotto, indipendentemente da questo secondo turno — qui serve solo un
+        // tool_result "di cortesia" per soddisfare il contratto dell'API Anthropic (ogni
+        // tool_use della risposta precedente deve avere un tool_result corrispondente).
+        return {
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: JSON.stringify({ status: "ricevuto" }),
+        };
+      }));
+
+      const followUpMessages: { role: string; content: unknown }[] = [
+        ...anthropicMessages,
+        { role: "assistant", content: anthropicBody.content },
+        { role: "user", content: toolResults },
+      ];
+
+      const followUpResponse = await fetch(ANTHROPIC_API_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": anthropicApiKey,
+          "anthropic-version": ANTHROPIC_VERSION,
+        },
+        body: JSON.stringify({
+          model: chat.ai_model,
+          max_tokens: MAX_OUTPUT_TOKENS,
+          system: systemPrompt,
+          messages: followUpMessages,
+          thinking: { type: "disabled" },
+        }),
+      });
+
+      if (!followUpResponse.ok) {
+        const detail = await followUpResponse.text();
+        console.error(
+          "ai-chat: errore Anthropic (follow-up)",
+          followUpResponse.status,
+          detail,
+        );
+        return jsonError("Il servizio AI non è disponibile al momento.", 502);
+      }
+
+      const followUpBody = await followUpResponse.json();
+      replyText = extractText(followUpBody) ?? replyText;
+    }
 
     const suggestions = transactionToolEnabled
       ? extractTransactionSuggestions(anthropicBody)
@@ -526,14 +669,21 @@ async function buildSystemPrompt(
     )
     : false;
 
+  // query_balance_summary/query_reminders sono sempre disponibili (Fase 3, "Chat come
+  // Home" — richiesta esplicita dell'utente: "qualsiasi domanda che riguardi le
+  // informazioni al suo interno"): a differenza di extract_transactions/create_reminder,
+  // non dipendono da un Workspace attivo — leggono sotto RLS solo i dati del chiamante,
+  // ovunque si trovi la conversazione.
+  const today = new Date().toISOString().slice(0, 10);
+  const alwaysOnInstructions = reminderToolEnabled
+    ? `${QUERY_TOOL_INSTRUCTIONS}\n\n${REMINDER_TOOL_INSTRUCTIONS}`
+    : QUERY_TOOL_INSTRUCTIONS;
+
   if (!workspaceId) {
     // Una Chat senza Workspace non ha dove collegare una transazione: niente strumento.
     return {
-      systemPrompt: reminderToolEnabled
-        ? `${ASSISTANT_PERSONA}\n\n${REMINDER_TOOL_INSTRUCTIONS}\n\nData odierna: ${
-          new Date().toISOString().slice(0, 10)
-        }.`
-        : ASSISTANT_PERSONA,
+      systemPrompt:
+        `${ASSISTANT_PERSONA}\n\n${alwaysOnInstructions}\n\nData odierna: ${today}.`,
       sourceReferences: [],
       transactionToolEnabled: false,
       reminderToolEnabled,
@@ -551,11 +701,8 @@ async function buildSystemPrompt(
     // senza contesto invece di fallire l'intero turno. Nessuno strumento transazioni:
     // non c'è un Workspace verificato a cui collegarle (difesa in profondità oltre a RLS).
     return {
-      systemPrompt: reminderToolEnabled
-        ? `${ASSISTANT_PERSONA}\n\n${REMINDER_TOOL_INSTRUCTIONS}\n\nData odierna: ${
-          new Date().toISOString().slice(0, 10)
-        }.`
-        : ASSISTANT_PERSONA,
+      systemPrompt:
+        `${ASSISTANT_PERSONA}\n\n${alwaysOnInstructions}\n\nData odierna: ${today}.`,
       sourceReferences: [],
       transactionToolEnabled: false,
       reminderToolEnabled,
@@ -603,9 +750,8 @@ async function buildSystemPrompt(
     (d: { id: string; name: string }) => ({ id: d.id, label: `- ${d.name}` }),
   );
 
-  // "Data odierna" dà al modello un riferimento affidabile per risolvere date
-  // relative ("questo mese", "il mese scorso") quando estrae le transazioni.
-  const today = new Date().toISOString().slice(0, 10);
+  // "Data odierna" (calcolata in testa alla function) dà al modello un riferimento
+  // affidabile per risolvere date relative ("questo mese", "il mese scorso").
   const sections: string[] = [
     `Data odierna: ${today}.`,
     `Workspace attivo: "${workspace.name}"${
@@ -626,9 +772,8 @@ async function buildSystemPrompt(
     );
   }
 
-  const toolInstructions = reminderToolEnabled
-    ? `${TRANSACTION_TOOL_INSTRUCTIONS}\n\n${REMINDER_TOOL_INSTRUCTIONS}`
-    : TRANSACTION_TOOL_INSTRUCTIONS;
+  const toolInstructions =
+    `${TRANSACTION_TOOL_INSTRUCTIONS}\n\n${alwaysOnInstructions}`;
   const systemPrompt =
     `${ASSISTANT_PERSONA}\n\n${toolInstructions}\n\n${sections.join("\n\n")}`;
   const sourceReferences = [...noteItems, ...taskItems, ...documentItems].map((
@@ -771,6 +916,194 @@ function extractText(anthropicBody: any): string | null {
     .join("\n")
     .trim();
   return text.length > 0 ? text : null;
+}
+
+// Tutti i blocchi tool_use di un turno, di qualunque strumento — a differenza di
+// extractTransactionSuggestions/extractReminderSuggestions (filtrati per un nome
+// specifico), serve qui per costruire un tool_result per OGNI tool_use quando si fa un
+// secondo giro con Anthropic (vedi il ramo `queryToolUseBlocks.length > 0` più sopra):
+// l'API rifiuta la richiesta se anche un solo tool_use resta senza risposta.
+// deno-lint-ignore no-explicit-any
+function extractToolUseBlocks(
+  anthropicBody: any,
+): { id: string; name: string; input: unknown }[] {
+  const blocks = anthropicBody?.content;
+  if (!Array.isArray(blocks)) return [];
+  return blocks
+    .filter((block: { type: string }) => block.type === "tool_use")
+    .map((block: { id: string; name: string; input: unknown }) => ({
+      id: block.id,
+      name: block.name,
+      input: block.input,
+    }));
+}
+
+interface BalanceSummaryResult {
+  periodStart: string;
+  periodEnd: string;
+  incomeCents: number;
+  expenseCents: number;
+  balanceCents: number;
+  byCategory: { category: string; expenseCents: number }[];
+  transactionCount: number;
+}
+
+// Categoria dei Bilanci condivisi (packages/domain/lib/src/shared_balance_category.dart):
+// duplicata qui perché questo progetto non condivide tipi tra Dart e TypeScript (stesso
+// principio già applicato a TRANSACTION_CATEGORIES) — se cambia va cambiata in entrambi i
+// posti.
+const SHARED_BALANCE_CATEGORY = "bilancio_condiviso";
+
+// Esegue query_balance_summary sotto RLS (stesso client con JWT del chiamante usato per
+// tutta la function: nessun privilegio aggiuntivo). Esclude sempre i Bilanci condivisi —
+// stessa esclusione già applicata lato client in BalanceOverviewScreen (Fase 3, "Bilancio
+// condiviso": due Bilanci separati, non un unico totale che li confonda) — replicata qui
+// perché questa function non ha altro modo di saperlo.
+async function queryBalanceSummary(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  rawInput: unknown,
+): Promise<BalanceSummaryResult | { error: string }> {
+  const input = (typeof rawInput === "object" && rawInput !== null)
+    ? rawInput as Record<string, unknown>
+    : {};
+  const periodStart = typeof input.period_start === "string"
+    ? input.period_start
+    : "";
+  const periodEnd = typeof input.period_end === "string"
+    ? input.period_end
+    : "";
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(periodStart) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd)
+  ) {
+    return { error: "Periodo non valido." };
+  }
+
+  const { data: workspaces, error: workspacesError } = await supabase
+    .from("workspaces")
+    .select("id, category");
+  if (workspacesError) {
+    console.error(
+      "ai-chat: errore query_balance_summary (workspaces)",
+      workspacesError,
+    );
+    return { error: "Non è stato possibile leggere i Workspace." };
+  }
+
+  const personalWorkspaceIds = (workspaces ?? [])
+    .filter((w: { category: string | null }) =>
+      w.category !== SHARED_BALANCE_CATEGORY
+    )
+    .map((w: { id: string }) => w.id);
+
+  if (personalWorkspaceIds.length === 0) {
+    return {
+      periodStart,
+      periodEnd,
+      incomeCents: 0,
+      expenseCents: 0,
+      balanceCents: 0,
+      byCategory: [],
+      transactionCount: 0,
+    };
+  }
+
+  const { data: transactions, error: transactionsError } = await supabase
+    .from("transactions")
+    .select("type, amount_cents, category")
+    .in("workspace_id", personalWorkspaceIds)
+    .eq("status", "confirmed")
+    .gte("occurred_at", periodStart)
+    .lte("occurred_at", periodEnd);
+
+  if (transactionsError) {
+    console.error(
+      "ai-chat: errore query_balance_summary (transactions)",
+      transactionsError,
+    );
+    return { error: "Non è stato possibile leggere le transazioni." };
+  }
+
+  let incomeCents = 0;
+  let expenseCents = 0;
+  const byCategoryMap = new Map<string, number>();
+  for (
+    const t of (transactions ??
+      []) as { type: string; amount_cents: number; category: string | null }[]
+  ) {
+    const amount = Number(t.amount_cents) || 0;
+    if (t.type === "income") {
+      incomeCents += amount;
+    } else {
+      expenseCents += amount;
+      const key = t.category ?? "altro";
+      byCategoryMap.set(key, (byCategoryMap.get(key) ?? 0) + amount);
+    }
+  }
+
+  return {
+    periodStart,
+    periodEnd,
+    incomeCents,
+    expenseCents,
+    balanceCents: incomeCents - expenseCents,
+    byCategory: [...byCategoryMap.entries()].map((
+      [category, categoryExpenseCents],
+    ) => ({ category, expenseCents: categoryExpenseCents })),
+    transactionCount: (transactions ?? []).length,
+  };
+}
+
+interface ReminderQueryResult {
+  periodStart: string;
+  periodEnd: string;
+  events: { title: string; startsAt: string }[];
+}
+
+// Esegue query_reminders sotto RLS: a differenza delle transazioni, i promemoria non
+// hanno un concetto di condivisione (RLS owner-only, vedi calendar_events), quindi nessun
+// filtro aggiuntivo da applicare qui oltre al periodo.
+async function queryReminders(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  rawInput: unknown,
+): Promise<ReminderQueryResult | { error: string }> {
+  const input = (typeof rawInput === "object" && rawInput !== null)
+    ? rawInput as Record<string, unknown>
+    : {};
+  const periodStart = typeof input.period_start === "string"
+    ? input.period_start
+    : "";
+  const periodEnd = typeof input.period_end === "string" ? input.period_end : "";
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(periodStart) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd)
+  ) {
+    return { error: "Periodo non valido." };
+  }
+
+  const { data: events, error } = await supabase
+    .from("calendar_events")
+    .select("title, starts_at")
+    .is("deleted_at", null)
+    .gte("starts_at", `${periodStart}T00:00:00`)
+    .lte("starts_at", `${periodEnd}T23:59:59`)
+    .order("starts_at", { ascending: true });
+
+  if (error) {
+    console.error("ai-chat: errore query_reminders", error);
+    return { error: "Non è stato possibile leggere i promemoria." };
+  }
+
+  return {
+    periodStart,
+    periodEnd,
+    events: (events ?? []).map((e: { title: string; starts_at: string }) => ({
+      title: e.title,
+      startsAt: e.starts_at,
+    })),
+  };
 }
 
 // Estrae le chiamate allo strumento extract_transactions dalla risposta Anthropic.

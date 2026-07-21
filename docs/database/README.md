@@ -529,6 +529,49 @@ già disponibile automaticamente **dentro** ogni Edge Function, non va configura
 (estensioni specifiche di Supabase), nessuna chiamata reale alla function. Verificato solo
 staticamente (rilettura manuale, nessun Deno disponibile).
 
+## Fase 3 (slice 10) — Q&A su dati reali in Chat
+
+Richiesta esplicita dell'utente: la Chat deve saper rispondere a "qualsiasi domanda che riguardi
+le informazioni al suo interno" (es. "quanto ho speso questo mese", "ho appuntamenti il mese
+prossimo"), non solo registrare transazioni/promemoria. Nessuna nuova tabella: legge solo
+`transactions`/`calendar_events` già esistenti.
+
+**Due nuovi tool Anthropic in `ai-chat`, sempre attivi** (a differenza di
+`extract_transactions`/`create_reminder`, non dipendono da un Workspace attivo — funzionano in
+qualunque Chat, perché leggono sotto RLS solo i dati del chiamante):
+
+- `query_balance_summary(period_start, period_end)` — somma entrate/uscite confermate nel
+  periodo, con dettaglio per categoria di spesa. **Esclude sempre i Bilanci condivisi**
+  (`SHARED_BALANCE_CATEGORY = 'bilancio_condiviso'`, duplicato da
+  `packages/domain/lib/src/shared_balance_category.dart` — stesso principio già applicato a
+  `TRANSACTION_CATEGORIES`, nessuna condivisione di tipi tra Dart e TypeScript in questo
+  progetto): stessa esclusione già applicata lato client in `BalanceOverviewScreen`, replicata
+  qui perché questa function non ha altro modo di saperlo.
+- `query_reminders(period_start, period_end)` — elenca i promemoria non cancellati nel periodo.
+  Nessun filtro aggiuntivo oltre a RLS: `calendar_events` non ha un concetto di condivisione
+  (owner-only).
+
+**Perché un secondo giro con Anthropic**: quando il modello chiama uno di questi due strumenti,
+non può scrivere la risposta in prosa nello stesso turno in cui chiede il dato — deve prima
+ricevere il risultato reale. `ai-chat` esegue quindi la query sotto RLS (stesso client con il JWT
+del chiamante usato per tutta la function, nessun privilegio aggiuntivo) e fa **una sola** seconda
+chiamata ad Anthropic con il risultato come `tool_result`, senza il parametro `tools` — il modello
+non può quindi chiedere un'altra chiamata, limitando esplicitamente il costo/la latenza aggiuntivi
+a un solo giro extra, e solo nei turni in cui serve davvero. Se lo stesso turno contiene anche un
+`tool_use` di `extract_transactions`/`create_reminder` (un messaggio può mescolare una domanda e
+una nuova spesa), riceve comunque un `tool_result` "di cortesia" — l'API Anthropic richiede una
+risposta per ogni `tool_use` del turno precedente — l'inserimento reale in `transactions`/
+`calendar_events` resta invariato, indipendente da questo secondo giro.
+
+**Verificato in questa sessione**: `tsc --strict --noUnusedLocals --noUnusedParameters` (compilatore
+TypeScript reale, non solo rilettura manuale come nelle slice precedenti — Deno stesso resta
+comunque non disponibile in questo sandbox) su `ai-chat/index.ts` con shim locali per gli import
+`npm:` e i globali `Deno.*`: nessun errore di sintassi o di tipo.
+
+**Non verificabile in questa sessione**: nessuna chiamata reale al provider Anthropic né al
+progetto Supabase reale dell'utente — il comportamento end-to-end (il modello sceglie lo strumento
+giusto, il secondo giro produce una risposta pertinente) va verificato in produzione.
+
 ## Fasi successive
 
 Memory, Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una

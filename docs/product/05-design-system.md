@@ -38,6 +38,11 @@ Arc Browser. L'obiettivo non è copiare nessuno, ma combinare le migliori idee i
 
 > ⚠️ Palette da consolidare con quella del Capitolo 3 (Blu Notte `#1E3A8A` / Azzurro `#38BDF8`).
 
+**Aggiornato** (redesign estetico 2.0 — richiesta esplicita dell'utente: "molto tecnologica",
+ispirata a Planito): nuovo gradiente "hero" (`#2563EB` → `#7C3AED`, stessa famiglia cromatica del
+glow del pulsante Chat), usato per l'AppBar di Chat/Bilancio, le bolle utente in Chat e il saldo
+in evidenza nel Bilancio — comune a entrambi i temi, come il gradiente del pulsante Chat.
+
 ## Tipografia
 
 **Aggiornato** (redesign estetico — richiesta esplicita dell'utente: "utilizzando un font
@@ -53,6 +58,10 @@ Radius standard: 16px. Card Premium: 24px. Pulsanti: 14px. Input: 16px.
 ## Ombre
 
 Leggere, diffuse, mai troppo evidenti. L'interfaccia deve sembrare "leggera".
+
+**Aggiornato** (redesign estetico 2.0): oltre all'ombra neutra di base, un alone colorato più
+profondo (`AppShadows.glow`) per le sole superfici "hero" in primo piano (AppBar, saldo nel
+Bilancio) — usarlo ovunque annullerebbe l'effetto di rilievo che dà a un singolo elemento.
 
 ## Icone
 
