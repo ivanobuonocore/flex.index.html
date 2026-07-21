@@ -165,6 +165,60 @@ void main() {
     expect(find.text('Stipendio'), findsNothing);
   });
 
+  testWidgets('toccare la pillola Entrate apre il dettaglio per categoria',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+
+    final salary = Transaction(
+      id: 't-salary',
+      workspaceId: 'w-personal',
+      type: TransactionType.income,
+      description: 'Stipendio',
+      amountCents: 100000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      category: TransactionCategory.stipendio,
+    );
+    final freelance = Transaction(
+      id: 't-freelance',
+      workspaceId: 'w-personal',
+      type: TransactionType.income,
+      description: 'Progetto extra',
+      amountCents: 20000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      category: TransactionCategory.altro,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([salary, freelance]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Entrate'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Entrate per categoria'), findsOneWidget);
+    expect(find.text('Stipendio'), findsOneWidget);
+    expect(find.text('Altro'), findsOneWidget);
+    expect(find.text('1000,00 €'), findsOneWidget);
+    expect(find.text('200,00 €'), findsOneWidget);
+  });
+
   testWidgets('se restano solo transazioni condivise mostra lo stato vuoto',
       (tester) async {
     final fakeTransaction = FakeTransactionRepository();

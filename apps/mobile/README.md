@@ -178,6 +178,32 @@ Implementate, con dati reali via Supabase:
   senza bisogno di alcuna modifica lato server. L'invio della notifica push resta quello già
   costruito in precedenza (`send-due-reminders` + `pg_cron`, già configurato dall'utente).
 
+- **Appuntamenti: giorno con impegni più caratteristico, "oggi" con un pallino, feedback al tocco
+  del grafico** (richiesta esplicita dell'utente) — nella cella del calendario il giorno di "oggi"
+  ora è solo un piccolo pallino sotto il numero (prima aveva un bordo colorato pieno, che lo
+  confondeva visivamente con i giorni con impegni); un giorno con almeno un promemoria ha invece
+  uno sfondo pieno tinto (`Color.alphaBlend`, deterministico anche sopra sfondi diversi in
+  light/dark) — più caratteristico di un semplice puntino. Il grafico a torta del Bilancio
+  (`_BalancePieChart`) ora è `Stateful`: toccando/passando il cursore su una fetta
+  (`PieTouchData.touchCallback`) il centro del donut mostra l'etichetta e l'importo di quella
+  fetta al posto del "Netto" e la fetta toccata si ingrandisce leggermente (`radius` maggiore) —
+  nessun nuovo widget esterno, solo stato locale.
+
+- **Bilancio: dettaglio per categoria; Appuntamenti: stato notifiche** (richiesta esplicita
+  dell'utente, "2 e 3" di una lista di migliorie proposte) — le pillole Entrate/Uscite dell'hero
+  del Bilancio ora sono toccabili (solo se l'importo non è zero): aprono un
+  `showModalBottomSheet` con l'elenco delle categorie di quel tipo, ordinate per importo
+  decrescente, con percentuale sul totale (nuova funzione pura `amountCentsByCategory` in
+  `transaction_controller.dart`, testata separatamente dal widget). In Appuntamenti, un banner
+  fisso sopra il calendario (`_NotificationStatusBanner`, gated su `AppEnv.vapidPublicKey`
+  esattamente come la card equivalente in Profilo — nessuna nuova infrastruttura) avvisa se le
+  notifiche non sono ancora attive o non sono supportate, con un pulsante "Attiva" quando
+  possibile: un promemoria creato in Chat compare comunque nel calendario, ma senza notifiche
+  attive l'utente non riceverebbe alcun avviso all'orario previsto — meglio dirlo subito. Nessun
+  test widget dedicato a questo banner (stessa scelta già fatta per la card equivalente in
+  Profilo): lo stato "attivo" dipende da `AppEnv.vapidPublicKey`, una costante di compilazione
+  (`String.fromEnvironment`) non sovrascrivibile nella normale esecuzione di `flutter test`.
+
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
 

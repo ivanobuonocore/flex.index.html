@@ -592,6 +592,13 @@ un'eventuale nuova dipendenza non sarebbe verificabile qui con `flutter pub get`
 `flutter test` — la griglia è stata scritta a mano con `GridView.count`, verificabile con gli
 stessi strumenti già usati in questa sessione.
 
+**Aggiornato**: il banner di stato notifiche in Appuntamenti (`_NotificationStatusBanner`,
+richiesta esplicita dell'utente) non introduce alcuno schema nuovo — riusa `push_subscriptions`
+(già esistente, Fase 3 "Promemoria via Chat") tramite gli stessi provider Riverpod già usati in
+Profilo. Allo stesso modo il dettaglio "per categoria" delle pillole Entrate/Uscite nel Bilancio è
+puro client-side: aggrega `transactions.category` già letta da `watchTransactions`, nessuna nuova
+colonna o funzione SQL.
+
 ## Fasi successive
 
 Memory, Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una

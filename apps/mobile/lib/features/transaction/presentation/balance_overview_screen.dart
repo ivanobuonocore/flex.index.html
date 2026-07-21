@@ -127,6 +127,10 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
           final income = totalIncomeCents(confirmed);
           final expense = totalExpenseCents(confirmed);
           final balance = balanceCents(confirmed);
+          final incomeByCategory = amountCentsByCategory(
+              confirmed.where((t) => t.type == TransactionType.income));
+          final expenseByCategory = amountCentsByCategory(
+              confirmed.where((t) => t.type == TransactionType.expense));
 
           return ListView(
             padding: const EdgeInsets.all(AppSpacing.md),
@@ -149,6 +153,8 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                 balanceCents: balance,
                 incomeCents: income,
                 expenseCents: expense,
+                incomeByCategory: incomeByCategory,
+                expenseByCategory: expenseByCategory,
               ),
               const SizedBox(height: AppSpacing.md),
               _BalancePieChart(incomeCents: income, expenseCents: expense),
@@ -242,11 +248,15 @@ class _BalanceHeroCard extends StatelessWidget {
     required this.balanceCents,
     required this.incomeCents,
     required this.expenseCents,
+    required this.incomeByCategory,
+    required this.expenseByCategory,
   });
 
   final int balanceCents;
   final int incomeCents;
   final int expenseCents;
+  final Map<TransactionCategory, int> incomeByCategory;
+  final Map<TransactionCategory, int> expenseByCategory;
 
   @override
   Widget build(BuildContext context) {
@@ -287,6 +297,13 @@ class _BalanceHeroCard extends StatelessWidget {
                   emoji: '💰',
                   label: 'Entrate',
                   amountCents: incomeCents,
+                  onTap: incomeCents == 0
+                      ? null
+                      : () => _showCategoryBreakdown(
+                            context,
+                            title: 'Entrate per categoria',
+                            byCategory: incomeByCategory,
+                          ),
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -295,6 +312,13 @@ class _BalanceHeroCard extends StatelessWidget {
                   emoji: '💸',
                   label: 'Uscite',
                   amountCents: expenseCents,
+                  onTap: expenseCents == 0
+                      ? null
+                      : () => _showCategoryBreakdown(
+                            context,
+                            title: 'Uscite per categoria',
+                            byCategory: expenseByCategory,
+                          ),
                 ),
               ),
             ],
@@ -311,56 +335,148 @@ class _BalanceHeroCard extends StatelessWidget {
 /// leggibilità. Un'emoji al posto dell'icona +/- (richiesta esplicita
 /// dell'utente: "non mi piacciono i segni + e - accanto a entrate e
 /// uscite"): 💰/💸 comunicano lo stesso a colpo d'occhio senza sembrare un
-/// segno matematico isolato.
+/// segno matematico isolato. Tocco opzionale (richiesta esplicita
+/// dell'utente: dettaglio per categoria) — `null` quando non c'è nulla da
+/// mostrare (importo a zero).
 class _HeroStatPill extends StatelessWidget {
   const _HeroStatPill({
     required this.emoji,
     required this.label,
     required this.amountCents,
+    this.onTap,
   });
 
   final String emoji;
   final String label;
   final int amountCents;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.14),
+    return Material(
+      color: Colors.transparent,
+      borderRadius: AppRadii.buttonRadius,
+      child: InkWell(
         borderRadius: AppRadii.buttonRadius,
-        border: Border.all(color: Colors.white.withOpacity(0.22)),
-      ),
-      child: Row(
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 18)),
-          const SizedBox(width: AppSpacing.xs),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  style: AppTypography.caption
-                      .copyWith(color: Colors.white.withOpacity(0.8)),
-                ),
-                Text(
-                  _formatAmount(amountCents),
-                  style: AppTypography.body.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.14),
+            borderRadius: AppRadii.buttonRadius,
+            border: Border.all(color: Colors.white.withOpacity(0.22)),
           ),
-        ],
+          child: Row(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 18)),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: AppTypography.caption
+                          .copyWith(color: Colors.white.withOpacity(0.8)),
+                    ),
+                    Text(
+                      _formatAmount(amountCents),
+                      style: AppTypography.body.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if (onTap != null)
+                Icon(Icons.chevron_right,
+                    color: Colors.white.withOpacity(0.7), size: 18),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+}
+
+/// Elenco delle categorie (ordinate per importo decrescente) di Entrate o
+/// Uscite del mese in evidenza — richiesta esplicita dell'utente: un
+/// dettaglio raggiungibile toccando le pillole Entrate/Uscite dell'hero.
+void _showCategoryBreakdown(
+  BuildContext context, {
+  required String title,
+  required Map<TransactionCategory, int> byCategory,
+}) {
+  final entries = byCategory.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  final total = entries.fold(0, (sum, e) => sum + e.value);
+
+  showModalBottomSheet(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md, 0, AppSpacing.md, AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: AppTypography.heading3),
+            const SizedBox(height: AppSpacing.sm),
+            for (final entry in entries) ...[
+              _CategoryBreakdownTile(
+                category: entry.key,
+                amountCents: entry.value,
+                percent: total == 0 ? 0 : entry.value / total * 100,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _CategoryBreakdownTile extends StatelessWidget {
+  const _CategoryBreakdownTile({
+    required this.category,
+    required this.amountCents,
+    required this.percent,
+  });
+
+  final TransactionCategory category;
+  final int amountCents;
+  final double percent;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = TransactionCategoryMeta.of(category);
+    return Row(
+      children: [
+        Icon(meta.icon, color: meta.color, size: 20),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(meta.label, style: AppTypography.body),
+        ),
+        Text(
+          '${percent.toStringAsFixed(0)}%',
+          style: AppTypography.caption.copyWith(
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Text(
+          _formatAmount(amountCents),
+          style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ],
     );
   }
 }

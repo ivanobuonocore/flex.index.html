@@ -51,6 +51,15 @@ viola, con un'ombra sagomata sul donut stesso (non solo un alone rettangolare in
 profondità richiesta. Il pulsante Chat resta l'unico punto dell'app con `siriGlow` (più colori,
 animato).
 
+**Aggiornato ancora** (richiesta esplicita dell'utente: feedback al tocco/cursore sul grafico, e
+un dettaglio raggiungibile dalle pillole Entrate/Uscite) — il grafico a torta del Bilancio
+risponde al tocco/hover di una fetta ingrandendola leggermente e sostituendo il "Netto" al centro
+con l'etichetta e l'importo di quella fetta; le pillole Entrate/Uscite dell'hero aprono, se
+toccate, un elenco delle categorie di quel tipo ordinate per importo. Nel calendario di
+Appuntamenti il giorno "oggi" è ora solo un piccolo pallino (non più un bordo pieno, che lo
+confondeva visivamente con i giorni con impegni): un giorno con almeno un promemoria ha invece uno
+sfondo pieno tinto, più caratteristico.
+
 ## Tipografia
 
 **Aggiornato** (redesign estetico — richiesta esplicita dell'utente: "utilizzando un font

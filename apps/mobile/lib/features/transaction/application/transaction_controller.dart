@@ -115,3 +115,16 @@ int totalExpenseCents(Iterable<Transaction> transactions) {
 int balanceCents(Iterable<Transaction> transactions) {
   return totalIncomeCents(transactions) - totalExpenseCents(transactions);
 }
+
+/// Somma degli importi (in centesimi) per categoria, tra le transazioni
+/// indicate — usata per il dettaglio "per categoria" del Bilancio (richiesta
+/// esplicita dell'utente: dettaglio al tocco di Entrate/Uscite). Il chiamante
+/// filtra prima per tipo (entrata/uscita); qui si aggrega soltanto.
+Map<TransactionCategory, int> amountCentsByCategory(
+    Iterable<Transaction> transactions) {
+  final totals = <TransactionCategory, int>{};
+  for (final t in transactions) {
+    totals[t.category] = (totals[t.category] ?? 0) + t.amountCents;
+  }
+  return totals;
+}
