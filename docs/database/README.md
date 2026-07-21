@@ -627,6 +627,21 @@ Quattro migliorie richieste esplicitamente dall'utente in un unico giro, verific
   nessuna modifica di schema, solo `NoteFormController.create` che ora inoltra `tags` (già
   accettato da `NoteRepository.createNote`) e una nuova striscia di filtro rapido lato client.
 
+## Fase 3 (slice 13) — Conferma/Scarta inline in Chat
+
+`20260722160000_message_pending_transaction_ids.sql`: `messages.pending_transaction_ids
+text[]`, stessa convenzione di `attachment_ids`/`source_references` (non un vero array di FK,
+nessun vincolo referenziale). `ai-chat/index.ts` cattura gli id restituiti dall'insert in
+`transactions` (`.select("id")`) e li salva sul messaggio dell'assistente appena creato — la Chat
+può così mostrare Conferma/Scarta subito sotto la risposta (richiesta esplicita dell'utente:
+"azioni rapide sulle transazioni pending direttamente in chat"), riusando lo stesso
+`transactionFormControllerProvider` già usato dal Bilancio. La colonna non viene aggiornata quando
+una transazione viene confermata/scartata altrove: il client filtra sempre per
+`status == pending` al momento della lettura (`transactionsProvider(null)`), quindi un id ormai
+deciso smette semplicemente di comparire, senza dover riscrivere il messaggio. Verificato su
+Postgres locale (stesso schema fittizio delle slice precedenti): insert e lettura della colonna
+confermati.
+
 ## Fasi successive
 
 Memory, Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una

@@ -91,6 +91,8 @@ class SupabaseMessageRepository implements MessageRepository {
       tokensUsed: row['tokens_used'] as int?,
       sourceReferences:
           (row['source_references'] as List<dynamic>).cast<String>(),
+      pendingTransactionIds:
+          (row['pending_transaction_ids'] as List<dynamic>).cast<String>(),
     );
   }
 

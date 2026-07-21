@@ -14,6 +14,7 @@ import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../../auth/application/session_controller.dart';
 import '../../document/application/document_controller.dart';
+import '../../transaction/application/transaction_controller.dart';
 import '../../workspace/application/workspace_category_meta.dart';
 import '../../workspace/application/workspace_controller.dart';
 import '../../workspace/presentation/widgets/section_preview.dart';
@@ -600,13 +601,13 @@ class _TypingBubble extends StatelessWidget {
   }
 }
 
-class _MessageBubble extends StatelessWidget {
+class _MessageBubble extends ConsumerWidget {
   const _MessageBubble({required this.message});
 
   final Message message;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isUser = message.role == MessageRole.user;
     // Bianco fisso per il testo dell'utente (non `onPrimary`, che in dark
@@ -673,16 +674,35 @@ class _MessageBubble extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-      child: Row(
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!isUser) ...[
-            const _AssistantAvatar(),
-            const SizedBox(width: AppSpacing.xs),
-          ],
-          Flexible(child: bubble),
+          Row(
+            mainAxisAlignment:
+                isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!isUser) ...[
+                const _AssistantAvatar(),
+                const SizedBox(width: AppSpacing.xs),
+              ],
+              Flexible(child: bubble),
+            ],
+          ),
+          // Conferma/Scarta subito sotto la risposta dell'assistente
+          // (richiesta esplicita dell'utente: "azioni rapide sulle
+          // transazioni pending direttamente in chat") — solo per i
+          // messaggi che hanno davvero generato transazioni ancora in
+          // attesa di conferma (un id può non esserlo più: già
+          // confermato/scartato da qui o dal Bilancio).
+          if (!isUser && message.pendingTransactionIds.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(
+                  left: 28 + AppSpacing.xs, top: AppSpacing.xs),
+              child: _PendingTransactionActions(
+                transactionIds: message.pendingTransactionIds,
+              ),
+            ),
         ],
       ),
     );
@@ -728,6 +748,109 @@ class _AssistantAvatar extends StatelessWidget {
       child: const Icon(Icons.auto_awesome, size: 15, color: Colors.white),
     );
   }
+}
+
+/// Conferma/Scarta inline per le Transazioni pending generate da un messaggio
+/// (richiesta esplicita dell'utente): riusa lo stesso
+/// `transactionFormControllerProvider` del Bilancio, nessuna nuova azione da
+/// costruire. Filtra sempre per `status == pending` al momento della
+/// lettura: un id già confermato/scartato (da qui o dal Bilancio) smette
+/// semplicemente di comparire, senza dover aggiornare il messaggio.
+class _PendingTransactionActions extends ConsumerWidget {
+  const _PendingTransactionActions({required this.transactionIds});
+
+  final List<String> transactionIds;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final transactions = ref.watch(transactionsProvider(null)).value ?? [];
+    final idSet = transactionIds.toSet();
+    final pending = transactions
+        .where((t) =>
+            idSet.contains(t.id) && t.status == TransactionStatus.pending)
+        .toList(growable: false);
+
+    if (pending.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final transaction in pending) ...[
+          _PendingTransactionActionTile(transaction: transaction),
+          const SizedBox(height: AppSpacing.xs),
+        ],
+      ],
+    );
+  }
+}
+
+class _PendingTransactionActionTile extends ConsumerWidget {
+  const _PendingTransactionActionTile({required this.transaction});
+
+  final Transaction transaction;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final isIncome = transaction.type == TransactionType.income;
+    final isBusy = ref.watch(transactionFormControllerProvider).isLoading;
+
+    return Container(
+      constraints:
+          BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: AppRadii.buttonRadius,
+        boxShadow: AppShadows.card(isDark: theme.brightness == Brightness.dark),
+      ),
+      child: Row(
+        children: [
+          Text(isIncome ? '💰' : '💸', style: const TextStyle(fontSize: 16)),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  transaction.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption
+                      .copyWith(fontWeight: FontWeight.w600),
+                ),
+                Text(_formatAmount(transaction.amountCents),
+                    style: AppTypography.caption),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.check_circle_outline, size: 20),
+            tooltip: 'Conferma',
+            onPressed: isBusy
+                ? null
+                : () => ref
+                    .read(transactionFormControllerProvider.notifier)
+                    .confirm(transaction.id),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 20),
+            tooltip: 'Scarta',
+            onPressed: isBusy
+                ? null
+                : () => ref
+                    .read(transactionFormControllerProvider.notifier)
+                    .delete(transaction.id),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatAmount(int amountCents) =>
+      '${(amountCents / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
 }
 
 /// Foto allegata a un messaggio: la UI conosce solo l'id del [Document]

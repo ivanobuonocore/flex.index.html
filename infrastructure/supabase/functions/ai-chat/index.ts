@@ -575,29 +575,39 @@ Deno.serve(async (req) => {
       : [];
 
     let transactionInsertFailed = false;
+    // Id delle transazioni appena inserite (richiesta esplicita dell'utente: "Conferma/
+    // Scarta inline in Chat") — salvati sul messaggio più sotto, per permettere alla
+    // Chat di mostrare le azioni rapide senza dover risalire al Bilancio.
+    let insertedTransactionIds: string[] = [];
     if (suggestions.length > 0) {
-      const { error: transactionInsertError } = await supabase.from(
-        "transactions",
-      )
-        .insert(
-          suggestions.map((s) => ({
-            workspace_id: body.workspaceId,
-            chat_id: body.chatId,
-            type: s.type,
-            description: s.description,
-            amount_cents: s.amountCents,
-            occurred_at: s.occurredAt,
-            status: "pending",
-            created_by_ai: true,
-            category: s.category,
-          })),
-        );
+      const { data: insertedTransactions, error: transactionInsertError } =
+        await supabase.from(
+          "transactions",
+        )
+          .insert(
+            suggestions.map((s) => ({
+              workspace_id: body.workspaceId,
+              chat_id: body.chatId,
+              type: s.type,
+              description: s.description,
+              amount_cents: s.amountCents,
+              occurred_at: s.occurredAt,
+              status: "pending",
+              created_by_ai: true,
+              category: s.category,
+            })),
+          )
+          .select("id");
       if (transactionInsertError) {
         console.error(
           "ai-chat: errore insert transactions",
           transactionInsertError,
         );
         transactionInsertFailed = true;
+      } else {
+        insertedTransactionIds = (insertedTransactions ?? []).map(
+          (t: { id: string }) => t.id,
+        );
       }
     }
 
@@ -700,6 +710,11 @@ Deno.serve(async (req) => {
       content: finalReplyText,
       tokens_used: anthropicBody?.usage?.output_tokens ?? null,
       source_references: sourceReferences,
+      // Se l'insert delle transazioni è fallito, non c'è nulla da confermare inline:
+      // la Chat mostra Conferma/Scarta solo per transazioni davvero salvate.
+      pending_transaction_ids: transactionInsertFailed
+        ? []
+        : insertedTransactionIds,
     });
 
     if (insertError) {

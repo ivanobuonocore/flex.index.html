@@ -228,6 +228,12 @@ Implementate, con dati reali via Supabase:
   `SegmentedButton` Sistema/Chiaro/Scuro; la preferenza (`AppThemeMode`) è salvata nei metadata di
   Supabase Auth (stesso meccanismo già usato per `name` alla registrazione), non una nuova
   tabella — si riflette in tutta l'app tramite `sessionControllerProvider`.
+- **chat (Conferma/Scarta inline)** (richiesta esplicita dell'utente: "azioni rapide sulle
+  transazioni pending direttamente in chat") — `messages.pending_transaction_ids` collega la
+  risposta dell'assistente alle Transazioni pending che ha generato: la Chat mostra due pulsanti
+  (Conferma/Scarta) subito sotto il messaggio, riusando `transactionFormControllerProvider` già
+  esistente, senza dover aprire il Bilancio. Un id già deciso altrove (Bilancio o qui) smette
+  semplicemente di comparire, filtrato per `status == pending` a ogni lettura.
 
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):

@@ -9,6 +9,7 @@ import 'package:pip_mobile/features/chat/application/message_controller.dart';
 import 'package:pip_mobile/features/reminder/presentation/reminder_list_screen.dart';
 import 'package:pip_mobile/main.dart';
 import 'package:pip_mobile/shared/widgets/loading_view.dart';
+import 'package:pip_shared/pip_shared.dart';
 
 import '../../../support/fake_auth_repository.dart';
 import '../../../support/fake_calendar_event_repository.dart';
@@ -854,5 +855,110 @@ void main() {
     final offsetAfter =
         tester.widget<ListView>(find.byType(ListView)).controller!.offset;
     expect(offsetAfter, offsetBefore);
+  });
+
+  testWidgets(
+      'un messaggio con transazioni pending mostra Conferma/Scarta inline',
+      (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final pendingTransaction = Transaction(
+      id: 't1',
+      workspaceId: 'w-bilancio',
+      type: TransactionType.expense,
+      description: 'Barbiere',
+      amountCents: 2300,
+      occurredAt: DateTime.utc(2026, 1, 1),
+      status: TransactionStatus.pending,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final aiMessage = Message(
+      id: 'm1',
+      chatId: 'c1',
+      role: MessageRole.ai,
+      content: 'Ho registrato una spesa in attesa di conferma.',
+      timestamp: DateTime.utc(2026, 1, 1),
+      pendingTransactionIds: const ['t1'],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(const []);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    // `transactionsProvider(null)` è un broadcast stream: se `emit` viene
+    // chiamato prima che il widget del messaggio (che lo sottoscrive per la
+    // prima volta) sia stato costruito, l'evento va perso — serve un pump
+    // intermedio perché il messaggio (e con esso `_PendingTransactionActions`)
+    // compaia prima di emettere le transazioni.
+    fakeMessage.emit([aiMessage]);
+    await tester.pump();
+    fakeTransaction.emit([pendingTransaction]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Barbiere'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
+
+    fakeTransaction.confirmResult = Result.ok(
+      pendingTransaction.copyWith(status: TransactionStatus.confirmed),
+    );
+    await tester.tap(find.byIcon(Icons.check_circle_outline));
+    await tester.pumpAndSettle();
+
+    expect(fakeTransaction.lastConfirmedId, 't1');
+
+    // Confermata: lo stream la riemette come `confirmed`, quindi il filtro
+    // per `pending` nel widget la nasconde da sola, senza bisogno di
+    // aggiornare il messaggio.
+    fakeTransaction.emit(
+      [pendingTransaction.copyWith(status: TransactionStatus.confirmed)],
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.check_circle_outline), findsNothing);
   });
 }
