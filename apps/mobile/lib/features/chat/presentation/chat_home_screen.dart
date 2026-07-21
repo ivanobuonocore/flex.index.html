@@ -10,6 +10,7 @@ import 'package:pip_shared/pip_shared.dart';
 
 import '../../../core/providers.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../../auth/application/session_controller.dart';
 import '../../document/application/document_controller.dart';
@@ -61,7 +62,7 @@ class _ChatHomeScreenState extends ConsumerState<ChatHomeScreen> {
     final chatAsync = ref.watch(singleChatProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text(_greeting(user?.name))),
+      appBar: GradientAppBar(title: Text(_greeting(user?.name))),
       body: chatAsync.when(
         loading: () {
           final cachedId = _lastKnownChatId;
@@ -126,7 +127,17 @@ class _ChatHomeBody extends ConsumerWidget {
         if (sections.isNotEmpty)
           Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
+              // Leggero gradiente verticale invece di un colore piatto
+              // (redesign estetico 2.0): stessa superficie di prima, solo con
+              // più profondità.
+              gradient: LinearGradient(
+                colors: [
+                  Theme.of(context).colorScheme.surface,
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
               boxShadow: AppShadows.card(
                 isDark: Theme.of(context).brightness == Brightness.dark,
               ),
@@ -160,7 +171,26 @@ class _ChatHomeBody extends ConsumerWidget {
             color: Theme.of(context).brightness == Brightness.light
                 ? const Color(0xFFECE5DD)
                 : const Color(0xFF0B141A),
-            child: _MessagesArea(chatId: chatId),
+            // Macchie di colore sfumate sullo sfondo (redesign estetico 2.0 —
+            // richiesta esplicita dell'utente: "molto tecnologica"): danno
+            // profondità a uno sfondo altrimenti piatto, senza interferire
+            // con la leggibilità delle bolle sopra (IgnorePointer: sono solo
+            // decorative, non devono intercettare lo scroll/i tap).
+            child: Stack(
+              children: [
+                Positioned(
+                  top: -60,
+                  right: -50,
+                  child: _GlowBlob(color: AppColors.heroGradient.first),
+                ),
+                Positioned(
+                  bottom: -80,
+                  left: -60,
+                  child: _GlowBlob(color: AppColors.heroGradient.last),
+                ),
+                _MessagesArea(chatId: chatId),
+              ],
+            ),
           ),
         ),
         _MessageInput(
@@ -195,23 +225,49 @@ class _SectionChip extends StatelessWidget {
     final icon = meta?.icon ?? Icons.folder_outlined;
 
     return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: Colors.transparent,
       borderRadius: AppRadii.buttonRadius,
       child: InkWell(
         borderRadius: AppRadii.buttonRadius,
         onTap: () => GoRouter.of(context).push('/workspace/${workspace.id}'),
-        child: Padding(
+        child: Container(
+          // Sfondo sfumato tenue nel colore della categoria + bordo sottile
+          // (redesign estetico 2.0): dà rilievo alla singola sezione senza
+          // la pesantezza di un alone diffuso (riservato agli elementi
+          // "hero", vedi AppShadows.glow).
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [tint.withOpacity(0.16), tint.withOpacity(0.04)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: AppRadii.buttonRadius,
+            border: Border.all(color: tint.withOpacity(0.25)),
+          ),
           padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 28,
-                height: 28,
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
-                    color: tint.withOpacity(0.15), shape: BoxShape.circle),
-                child: Icon(icon, size: 16, color: tint),
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [tint, tint.withOpacity(0.65)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: tint.withOpacity(0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Icon(icon, size: 16, color: Colors.white),
               ),
               const SizedBox(width: AppSpacing.xs),
               ConstrainedBox(
@@ -235,6 +291,30 @@ class _SectionChip extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Macchia di colore sfumata e decorativa (vedi commento sopra, nello sfondo
+/// della Chat) — `IgnorePointer` perché non deve mai intercettare tap/scroll.
+class _GlowBlob extends StatelessWidget {
+  const _GlowBlob({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: 220,
+        height: 220,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [color.withOpacity(0.16), color.withOpacity(0.0)],
           ),
         ),
       ),
@@ -470,11 +550,12 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isUser = message.role == MessageRole.user;
-    final bubbleColor = isUser
-        ? theme.colorScheme.primary
-        : theme.colorScheme.surfaceContainerHighest;
-    final textColor =
-        isUser ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface;
+    // Bianco fisso per il testo dell'utente (non `onPrimary`, che in dark
+    // mode è pensato per un primary chiaro, non per il gradiente scuro
+    // heroGradient usato qui sotto — vedi decoration della bolla): il
+    // gradiente è lo stesso in entrambi i temi (come siriGlow), quindi anche
+    // il contrasto del testo resta costante.
+    final textColor = isUser ? Colors.white : theme.colorScheme.onSurface;
 
     // Angolo "a coda", stile WhatsApp: un raggio molto più piccolo sull'angolo
     // rivolto verso il mittente, gli altri tre restano arrotondati normalmente.
@@ -493,7 +574,18 @@ class _MessageBubble extends StatelessWidget {
       padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
-        color: bubbleColor,
+        // Gradiente "premium" solo per le bolle dell'utente (redesign
+        // estetico 2.0): quelle dell'assistente restano una superficie
+        // piatta, per non perdere il contrasto visivo tra i due mittenti che
+        // già distingue la conversazione a colpo d'occhio.
+        color: isUser ? null : theme.colorScheme.surfaceContainerHighest,
+        gradient: isUser
+            ? const LinearGradient(
+                colors: AppColors.heroGradient,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : null,
         borderRadius: bubbleRadius,
         boxShadow: AppShadows.card(isDark: theme.brightness == Brightness.dark),
       ),
@@ -553,12 +645,28 @@ class _AssistantAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return CircleAvatar(
-      radius: 14,
-      backgroundColor: theme.colorScheme.secondaryContainer,
-      child: Icon(Icons.auto_awesome,
-          size: 16, color: theme.colorScheme.onSecondaryContainer),
+    // Gradiente al posto del secondaryContainer piatto (redesign estetico
+    // 2.0): stessa famiglia cromatica delle bolle dell'utente e dell'AppBar,
+    // così l'assistente è riconoscibile a colpo d'occhio ovunque compaia.
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(
+          colors: AppColors.heroGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.heroGradient.first.withOpacity(0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: const Icon(Icons.auto_awesome, size: 15, color: Colors.white),
     );
   }
 }
@@ -761,9 +869,20 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     final isSending =
         ref.watch(messageFormControllerProvider).isLoading || _isUploadingPhoto;
 
+    final theme = Theme.of(context);
     return SafeArea(
       top: false,
-      child: Padding(
+      // Barra "flottante" con angoli superiori arrotondati e ombra (redesign
+      // estetico 2.0): separa visivamente l'input dallo sfondo della Chat
+      // invece di un semplice padding trasparente.
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppRadii.cardPremium)),
+          boxShadow:
+              AppShadows.card(isDark: theme.brightness == Brightness.dark),
+        ),
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -811,8 +930,15 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                     controller: _controller,
                     minLines: 1,
                     maxLines: 4,
-                    decoration:
-                        const InputDecoration(hintText: 'Scrivi un messaggio…'),
+                    decoration: InputDecoration(
+                      hintText: 'Scrivi un messaggio…',
+                      // Sfondo del campo distinto da quello della barra
+                      // (entrambi altrimenti "surface"): senza questo, il
+                      // redesign 2.0 della barra flottante annullerebbe il
+                      // contrasto che rendeva il campo riconoscibile.
+                      filled: true,
+                      fillColor: theme.colorScheme.surfaceContainerHighest,
+                    ),
                     onSubmitted: (_) => _submit(),
                   ),
                 ),
