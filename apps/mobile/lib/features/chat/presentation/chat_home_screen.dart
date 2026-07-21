@@ -98,13 +98,24 @@ class _ChatHomeScreenState extends ConsumerState<ChatHomeScreen> {
   String _capitalize(String name) => name[0].toUpperCase() + name.substring(1);
 }
 
-class _ChatHomeBody extends ConsumerWidget {
+class _ChatHomeBody extends ConsumerStatefulWidget {
   const _ChatHomeBody({required this.chatId});
 
   final String chatId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ChatHomeBody> createState() => _ChatHomeBodyState();
+}
+
+class _ChatHomeBodyState extends ConsumerState<_ChatHomeBody> {
+  // Richiesta esplicita dell'utente: "la sezione che riporta le workspace
+  // vorrei fosse nascondibile" — non tocca i dati, solo quanto spazio la
+  // striscia occupa sopra la conversazione.
+  bool _sectionsCollapsed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final chatId = widget.chatId;
     final workspaces = ref.watch(workspacesProvider).value ?? const [];
     final sections = <Workspace>[
       for (final category in SystemWorkspaceCategory.all)
@@ -142,25 +153,62 @@ class _ChatHomeBody extends ConsumerWidget {
                 isDark: Theme.of(context).brightness == Brightness.dark,
               ),
             ),
-            padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-            // Più sottile e leggera della card completa usata nella tab
-            // Workspace (richiesta esplicita dell'utente: "più sottile ed
-            // esteticamente più bella ed intuitiva") — solo icona, nome e
-            // anteprima, senza il menu Rinomina/Elimina: qui è una scorciatoia
-            // di lettura, non il posto da cui gestire un Workspace.
-            child: SizedBox(
-              height: 56,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: sections.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(width: AppSpacing.sm),
-                itemBuilder: (context, index) {
-                  final section = sections[index];
-                  return _SectionChip(workspace: section);
-                },
-              ),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  onTap: () =>
+                      setState(() => _sectionsCollapsed = !_sectionsCollapsed),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Sezioni',
+                          style: AppTypography.caption
+                              .copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        Icon(
+                          _sectionsCollapsed
+                              ? Icons.expand_more
+                              : Icons.expand_less,
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Più sottile e leggera della card completa usata nella tab
+                // Workspace (richiesta esplicita dell'utente: "più sottile ed
+                // esteticamente più bella ed intuitiva") — solo icona, nome e
+                // anteprima, senza il menu Rinomina/Elimina: qui è una
+                // scorciatoia di lettura, non il posto da cui gestire un
+                // Workspace.
+                AnimatedCrossFade(
+                  duration: const Duration(milliseconds: 200),
+                  crossFadeState: _sectionsCollapsed
+                      ? CrossFadeState.showFirst
+                      : CrossFadeState.showSecond,
+                  firstChild: const SizedBox(width: double.infinity),
+                  secondChild: SizedBox(
+                    height: 56,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: sections.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(width: AppSpacing.sm),
+                      itemBuilder: (context, index) {
+                        final section = sections[index];
+                        return _SectionChip(workspace: section);
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+              ],
             ),
           ),
         Expanded(

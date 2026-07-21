@@ -127,13 +127,17 @@ cosa hai registrato e quando.`;
 // leggono sempre sotto RLS solo i dati del chiamante.
 const QUERY_TOOL_INSTRUCTIONS =
   `Quando l'utente fa una domanda che richiede di conoscere i suoi dati reali (es. "quanto ho
-speso questo mese", "quanto ho speso in alimentari ad aprile", "ho appuntamenti il mese prossimo",
-"cosa ho in agenda questa settimana"), usa lo strumento query_balance_summary (spese/entrate/
-saldo) o query_reminders (promemoria/appuntamenti) invece di rispondere a memoria o inventare un
-numero (AI Constitution, "non inventare informazioni"). Risolvi il periodo richiesto in date
-concrete (period_start/period_end, formato YYYY-MM-DD) usando la data odierna fornita nel
-contesto. Dopo aver ricevuto il risultato dello strumento, rispondi sempre in prosa citando i dati
-reali restituiti.`;
+speso questo mese", "quante entrate ci sono state", "quanto ho speso in alimentari ad aprile",
+"ho appuntamenti il mese prossimo", "cosa ho in agenda questa settimana"), usa lo strumento
+query_balance_summary (spese/entrate/saldo) o query_reminders (promemoria/appuntamenti) invece di
+rispondere a memoria o inventare un numero (AI Constitution, "non inventare informazioni").
+Risolvi il periodo richiesto in date concrete (period_start/period_end, formato YYYY-MM-DD)
+usando la data odierna fornita nel contesto. Dopo aver ricevuto il risultato dello strumento,
+rispondi SEMPRE dichiarando esplicitamente il totale richiesto in una frase diretta (es. "Hai
+speso 340,00€ questo mese" oppure "Hai avuto 3 entrate per un totale di 1.500,00€") — non
+limitarti a elencare le singole transazioni o i singoli promemoria: l'utente ha chiesto un
+riepilogo, non un elenco. Un elenco puntuale delle voci (poche righe) può seguire il totale come
+dettaglio aggiuntivo, ma il totale deve comparire per primo ed essere inequivocabile.`;
 
 const QUERY_BALANCE_SUMMARY_TOOL = {
   name: "query_balance_summary",
