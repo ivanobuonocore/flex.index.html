@@ -93,9 +93,15 @@ class _BottomBar extends StatelessWidget {
               child: Row(
                 children: [
                   _NavItem(
-                    icon: Icons.folder_outlined,
-                    selectedIcon: Icons.folder,
-                    label: 'Workspace',
+                    // Rinominato da "Workspace" a "Spazi" (richiesta esplicita
+                    // dell'utente: "trova un altro termine... e metti
+                    // un'immagine diversa"), solo l'etichetta e l'icona
+                    // visibili — nessuna classe/route interna rinominata
+                    // (WorkspaceCard, /workspace/:id, ecc. restano invariate:
+                    // una rinomina estesa non richiesta, solo cosmetica).
+                    icon: Icons.space_dashboard_outlined,
+                    selectedIcon: Icons.space_dashboard,
+                    label: 'Spazi',
                     color: AppColors.categoryDocumenti,
                     selected: currentIndex == 0,
                     onTap: () => onSelect(0),

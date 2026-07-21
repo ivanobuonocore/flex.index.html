@@ -121,14 +121,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   IconData _iconFor(SearchResultType type) => switch (type) {
-        SearchResultType.workspace => Icons.folder_outlined,
+        SearchResultType.workspace => Icons.space_dashboard_outlined,
         SearchResultType.note => Icons.sticky_note_2_outlined,
         SearchResultType.task => Icons.check_circle_outline,
         SearchResultType.document => Icons.insert_drive_file_outlined,
       };
 
+  // Etichetta "Spazio" (rinominato da "Workspace" — richiesta esplicita
+  // dell'utente), coerente con la tab "Spazi" e il titolo di
+  // WorkspaceListScreen.
   String _typeLabel(SearchResultType type) => switch (type) {
-        SearchResultType.workspace => 'Workspace',
+        SearchResultType.workspace => 'Spazio',
         SearchResultType.note => 'Nota',
         SearchResultType.task => 'Attività',
         SearchResultType.document => 'Documento',

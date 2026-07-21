@@ -20,7 +20,10 @@ class WorkspaceListScreen extends ConsumerWidget {
     final workspacesAsync = ref.watch(workspacesProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Workspace')),
+      // Titolo "Spazi" (rinominato da "Workspace" — richiesta esplicita
+      // dell'utente): il modello di dominio/le route restano "Workspace",
+      // solo l'etichetta mostrata cambia.
+      appBar: AppBar(title: const Text('Spazi')),
       floatingActionButton: FloatingActionButton(
         onPressed: () => showCreateWorkspaceSheet(context),
         child: const Icon(Icons.add),

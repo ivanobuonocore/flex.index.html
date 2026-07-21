@@ -72,7 +72,7 @@ void main() {
     fakeChat.emit(const []);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Workspace'));
+    await tester.tap(find.text('Spazi'));
     await tester.pumpAndSettle();
 
     // La Home Chat mostra anch'essa un'anteprima "Workspace recenti" (Slice
