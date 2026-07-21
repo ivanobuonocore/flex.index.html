@@ -599,6 +599,34 @@ Profilo. Allo stesso modo il dettaglio "per categoria" delle pillole Entrate/Usc
 puro client-side: aggrega `transactions.category` già letta da `watchTransactions`, nessuna nuova
 colonna o funzione SQL.
 
+## Fase 3 (slice 12) — Ricerca estesa a Transazioni/Promemoria, Liste via Chat, tema, tag Note
+
+Quattro migliorie richieste esplicitamente dall'utente in un unico giro, verificate insieme:
+
+- **Ricerca Universale** (`20260722150000_search_transactions_and_reminders.sql`): due nuovi
+  indici GIN (`transactions.description`, `calendar_events.title`) e `search_workspace_content`
+  ridefinita con due `union all` aggiuntivi. Solo le transazioni **confermate** compaiono (le
+  pending sono suggerimenti non ancora decisi dall'utente, AI Constitution Principio 1); i
+  promemoria non richiedono lo stesso filtro (non hanno uno stato pending/confirmed). Verificato
+  su Postgres locale con lo stesso schema fittizio (`auth`/`storage`/`supabase_realtime` stub) già
+  usato per le slice precedenti: RLS isolation confermata (un secondo utente non vede i risultati
+  del primo), transazione pending correttamente esclusa dal risultato.
+- **Liste/checklist via Chat** (Slice C del piano originale, mai realizzata finora): nuovo tool
+  `manage_tasks` in `ai-chat/index.ts`, stesso pattern di `create_reminder` — un `Task` per
+  elemento (`generated_by_ai: true`, `chat_id` valorizzato), nessuna migrazione (le colonne
+  esistevano già dalla slice Note/Task originale). Richiede un terzo id di sezione,
+  `tasksWorkspaceId` (Attività), aggiunto end-to-end accanto a `workspaceId`/
+  `remindersWorkspaceId` già esistenti (client → `SupabaseMessageRepository.sendMessage` →
+  `ai-chat` → `buildSystemPrompt`).
+- **Tema chiaro/scuro**: nessuna tabella nuova — la preferenza (`AppThemeMode` in
+  `packages/domain`) è salvata nei metadata di Supabase Auth (`auth.updateUser({data: {theme_mode:
+  ...}})`), stesso meccanismo già usato per `name` alla registrazione. Si riflette in
+  `watchCurrentUser` tramite l'evento `userUpdated` di `onAuthStateChange`, nessuno stato locale
+  duplicato.
+- **Tag sulle Note**: `notes.tags` esisteva già dalla migrazione originale (mai esposto in UI) —
+  nessuna modifica di schema, solo `NoteFormController.create` che ora inoltra `tags` (già
+  accettato da `NoteRepository.createNote`) e una nuova striscia di filtro rapido lato client.
+
 ## Fasi successive
 
 Memory, Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una

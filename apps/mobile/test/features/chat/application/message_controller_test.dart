@@ -64,6 +64,19 @@ void main() {
     expect(fakeRepository.lastRemindersWorkspaceId, 'w-appuntamenti');
   });
 
+  test('send inoltra tasksWorkspaceId al repository', () async {
+    final failure =
+        await container.read(messageFormControllerProvider.notifier).send(
+              chatId: chatId,
+              workspaceId: workspaceId,
+              content: 'Ciao',
+              tasksWorkspaceId: 'w-attivita',
+            );
+
+    expect(failure, isNull);
+    expect(fakeRepository.lastTasksWorkspaceId, 'w-attivita');
+  });
+
   test('send propaga il Failure del repository in caso di errore', () async {
     fakeRepository.sendResult = const Result.err(
       UnexpectedFailure('L\'assistente non è riuscito a rispondere. Riprova.'),

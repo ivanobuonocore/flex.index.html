@@ -132,6 +132,8 @@ class _ChatHomeBodyState extends ConsumerState<_ChatHomeBody> {
         _idForCategory(workspaces, SystemWorkspaceCategory.documenti);
     final appuntamentiId =
         _idForCategory(workspaces, SystemWorkspaceCategory.appuntamenti);
+    final attivitaId =
+        _idForCategory(workspaces, SystemWorkspaceCategory.attivita);
 
     return Column(
       children: [
@@ -246,6 +248,7 @@ class _ChatHomeBodyState extends ConsumerState<_ChatHomeBody> {
           transactionsWorkspaceId: bilancioId,
           documentsWorkspaceId: documentiId,
           remindersWorkspaceId: appuntamentiId,
+          tasksWorkspaceId: attivitaId,
         ),
       ],
     );
@@ -773,6 +776,7 @@ class _MessageInput extends ConsumerStatefulWidget {
     required this.transactionsWorkspaceId,
     required this.documentsWorkspaceId,
     required this.remindersWorkspaceId,
+    required this.tasksWorkspaceId,
   });
 
   final String chatId;
@@ -791,6 +795,12 @@ class _MessageInput extends ConsumerStatefulWidget {
   /// via Chat") — un promemoria riconosciuto in Chat va sempre lì, mai nella
   /// sezione Bilancio.
   final String? remindersWorkspaceId;
+
+  /// Sezione Attività dell'utente: passata come contesto all'Edge Function
+  /// `ai-chat` per abilitare `manage_tasks` (richiesta esplicita dell'utente:
+  /// "liste/checklist via Chat") — un elemento di lista riconosciuto in Chat
+  /// va sempre lì come Task, mai nella sezione Bilancio/Appuntamenti.
+  final String? tasksWorkspaceId;
 
   @override
   ConsumerState<_MessageInput> createState() => _MessageInputState();
@@ -876,6 +886,7 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
           content: content,
           attachmentIds: attachmentIds,
           remindersWorkspaceId: widget.remindersWorkspaceId,
+          tasksWorkspaceId: widget.tasksWorkspaceId,
         );
 
     if (!mounted) return;

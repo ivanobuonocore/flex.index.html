@@ -50,6 +50,8 @@ class SupabaseSearchRepository implements SearchRepository {
         'note' => SearchResultType.note,
         'task' => SearchResultType.task,
         'document' => SearchResultType.document,
+        'transaction' => SearchResultType.transaction,
+        'reminder' => SearchResultType.reminder,
         _ => throw ArgumentError('Tipo di risultato sconosciuto: $value'),
       };
 }

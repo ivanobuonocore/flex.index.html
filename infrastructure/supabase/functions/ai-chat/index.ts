@@ -119,6 +119,21 @@ per eventi già avvenuti, task senza un orario specifico, o richieste vaghe senz
 preciso. Includi sempre, oltre all'uso dello strumento, una risposta testuale breve che confermi
 cosa hai registrato e quando.`;
 
+// Addendum al system prompt, solo quando è disponibile un Workspace per le Attività
+// (vedi `taskToolEnabled`): richiesta esplicita dell'utente, "Liste/checklist via
+// Chat" (Slice C del piano originale, mai realizzata finora). Stesso ragionamento di
+// REMINDER_TOOL_INSTRUCTIONS: un elemento di lista non ha uno stato "pending/
+// confirmed" — è reversibile con un tocco (si elimina come qualsiasi Task), non un
+// dato finanziario da dover contare con cautela.
+const TASK_TOOL_INSTRUCTIONS =
+  `Quando l'utente chiede di aggiungere uno o più elementi a una lista/checklist (es.
+"aggiungi alla lista spesa: latte, pane, uova" oppure "segna da fare: chiamare il
+commercialista"), usa lo strumento manage_tasks per registrarli come Attività — non
+limitarti a scriverli in prosa. Un elemento per voce della lista, non un'unica Attività con
+tutti gli elementi nel titolo. Non usarlo per impegni con un orario preciso (usa
+create_reminder) o per spese/entrate (usa extract_transactions). Includi sempre, oltre
+all'uso dello strumento, una risposta testuale breve che confermi cosa hai aggiunto.`;
+
 // Addendum al system prompt, sempre presente (Fase 3, "Chat come Home" —
 // richiesta esplicita dell'utente: "qualsiasi domanda che riguardi le
 // informazioni al suo interno"): a differenza di extract_transactions/
@@ -212,6 +227,27 @@ const CREATE_REMINDER_TOOL = {
   },
 };
 
+const MANAGE_TASKS_TOOL = {
+  name: "manage_tasks",
+  description:
+    "Aggiunge uno o più elementi a una lista/checklist come Attività (es. 'aggiungi alla " +
+    "lista spesa: latte, pane, uova'). Un elemento per voce — non un'unica Attività con " +
+    "tutta la lista nel titolo.",
+  input_schema: {
+    type: "object",
+    properties: {
+      items: {
+        type: "array",
+        items: {
+          type: "string",
+          description: "Titolo breve di un singolo elemento, es. 'Latte'.",
+        },
+      },
+    },
+    required: ["items"],
+  },
+};
+
 const EXTRACT_TRANSACTIONS_TOOL = {
   name: "extract_transactions",
   description:
@@ -277,6 +313,9 @@ interface RequestBody {
   // `workspaceId` (sempre la sezione Bilancio, vedi apps/mobile ChatHomeScreen): un
   // promemoria non appartiene mai al Workspace delle transazioni.
   remindersWorkspaceId?: string | null;
+  // Sezione "Attività" — separata sia da `workspaceId` che da `remindersWorkspaceId`: un
+  // elemento di lista (manage_tasks) non appartiene né al Bilancio né agli Appuntamenti.
+  tasksWorkspaceId?: string | null;
 }
 
 interface ContextItem {
@@ -298,6 +337,10 @@ interface ReminderSuggestion {
   title: string;
   startsAt: string;
   reminderMinutesBefore: number | null;
+}
+
+interface TaskSuggestion {
+  title: string;
 }
 
 interface AnthropicTextBlock {
@@ -389,10 +432,12 @@ Deno.serve(async (req) => {
       sourceReferences,
       transactionToolEnabled,
       reminderToolEnabled,
+      taskToolEnabled,
     } = await buildSystemPrompt(
       supabase,
       body.workspaceId ?? null,
       body.remindersWorkspaceId ?? null,
+      body.tasksWorkspaceId ?? null,
     );
 
     const anthropicMessages = await buildAnthropicMessages(
@@ -422,10 +467,12 @@ Deno.serve(async (req) => {
         // commento su MAX_OUTPUT_TOKENS più sopra).
         thinking: { type: "disabled" },
         // query_balance_summary/query_reminders sono sempre presenti (a differenza di
-        // extract_transactions/create_reminder, che restano condizionati al Workspace attivo).
+        // extract_transactions/create_reminder/manage_tasks, che restano condizionati al
+        // Workspace attivo).
         tools: [
           ...(transactionToolEnabled ? [EXTRACT_TRANSACTIONS_TOOL] : []),
           ...(reminderToolEnabled ? [CREATE_REMINDER_TOOL] : []),
+          ...(taskToolEnabled ? [MANAGE_TASKS_TOOL] : []),
           QUERY_BALANCE_SUMMARY_TOOL,
           QUERY_REMINDERS_TOOL,
         ],
@@ -587,22 +634,46 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Un elemento di lista, come un promemoria, non ha stato pending/confirmed:
+    // reversibile con un tocco (si elimina come qualsiasi Task), inserito direttamente
+    // (richiesta esplicita dell'utente: "Liste/checklist via Chat").
+    const taskSuggestions = taskToolEnabled
+      ? extractTaskSuggestions(anthropicBody)
+        .map(sanitizeTask)
+        .filter((t): t is TaskSuggestion => t !== null)
+      : [];
+
+    let taskInsertFailed = false;
+    if (taskSuggestions.length > 0) {
+      const { error: taskInsertError } = await supabase.from("tasks").insert(
+        taskSuggestions.map((t) => ({
+          workspace_id: body.tasksWorkspaceId,
+          chat_id: body.chatId,
+          title: t.title,
+          generated_by_ai: true,
+        })),
+      );
+      if (taskInsertError) {
+        console.error("ai-chat: errore insert tasks", taskInsertError);
+        taskInsertFailed = true;
+      }
+    }
+
     // Il testo finale non deve mai affermare un successo che non c'è stato: se
-    // l'insert delle transazioni/dei promemoria fallisce, lo diciamo esplicitamente
-    // invece di lasciare che la risposta del modello (scritta prima di sapere se
-    // l'insert sarebbe riuscito) suggerisca il contrario.
+    // l'insert di transazioni/promemoria/elementi di lista fallisce, lo diciamo
+    // esplicitamente invece di lasciare che la risposta del modello (scritta prima di
+    // sapere se l'insert sarebbe riuscito) suggerisca il contrario. Elenco generico
+    // (non frasi cucite per ogni combinazione, come con solo due categorie): con tre
+    // categorie le combinazioni possibili sono 7, non 3.
+    const failedInserts: string[] = [];
+    if (transactionInsertFailed) failedInserts.push("le transazioni");
+    if (reminderInsertFailed) failedInserts.push("i promemoria");
+    if (taskInsertFailed) failedInserts.push("gli elementi della lista");
+
     let finalReplyText = replyText;
-    if (transactionInsertFailed && reminderInsertFailed) {
+    if (failedInserts.length > 0) {
       finalReplyText =
-        "Non sono riuscito a salvare né le transazioni né i promemoria rilevati: riprova." +
-        (replyText ? `\n\n${replyText}` : "");
-    } else if (transactionInsertFailed) {
-      finalReplyText =
-        "Non sono riuscito a salvare le transazioni rilevate: riprova." +
-        (replyText ? `\n\n${replyText}` : "");
-    } else if (reminderInsertFailed) {
-      finalReplyText =
-        "Non sono riuscito a salvare i promemoria rilevati: riprova." +
+        `Non sono riuscito a salvare: ${failedInserts.join(", ")}. Riprova.` +
         (replyText ? `\n\n${replyText}` : "");
     } else if (!finalReplyText && suggestions.length > 0) {
       finalReplyText = `Ho registrato ${suggestions.length} ${
@@ -612,6 +683,10 @@ Deno.serve(async (req) => {
       // "Promemoria" è invariante in italiano: nessuna forma plurale distinta da gestire.
       finalReplyText =
         `Ho creato ${reminderSuggestions.length} promemoria nella sezione Appuntamenti.`;
+    } else if (!finalReplyText && taskSuggestions.length > 0) {
+      finalReplyText = `Ho aggiunto ${taskSuggestions.length} ${
+        taskSuggestions.length === 1 ? "elemento" : "elementi"
+      } alla lista nella sezione Attività.`;
     }
 
     if (!finalReplyText) {
@@ -651,12 +726,14 @@ async function buildSystemPrompt(
   supabase: any,
   workspaceId: string | null,
   remindersWorkspaceId: string | null,
+  tasksWorkspaceId: string | null,
 ): Promise<
   {
     systemPrompt: string;
     sourceReferences: string[];
     transactionToolEnabled: boolean;
     reminderToolEnabled: boolean;
+    taskToolEnabled: boolean;
   }
 > {
   // Verificato indipendentemente da `workspaceId` (la sezione Bilancio): un
@@ -673,15 +750,31 @@ async function buildSystemPrompt(
     )
     : false;
 
+  // Stesso ragionamento di reminderToolEnabled, per la sezione Attività (Liste/
+  // checklist via Chat).
+  const taskToolEnabled = tasksWorkspaceId
+    ? Boolean(
+      (await supabase
+        .from("workspaces")
+        .select("id")
+        .eq("id", tasksWorkspaceId)
+        .maybeSingle()).data,
+    )
+    : false;
+
   // query_balance_summary/query_reminders sono sempre disponibili (Fase 3, "Chat come
   // Home" — richiesta esplicita dell'utente: "qualsiasi domanda che riguardi le
-  // informazioni al suo interno"): a differenza di extract_transactions/create_reminder,
-  // non dipendono da un Workspace attivo — leggono sotto RLS solo i dati del chiamante,
-  // ovunque si trovi la conversazione.
+  // informazioni al suo interno"): a differenza di extract_transactions/create_reminder/
+  // manage_tasks, non dipendono da un Workspace attivo — leggono sotto RLS solo i dati
+  // del chiamante, ovunque si trovi la conversazione.
   const today = new Date().toISOString().slice(0, 10);
-  const alwaysOnInstructions = reminderToolEnabled
-    ? `${QUERY_TOOL_INSTRUCTIONS}\n\n${REMINDER_TOOL_INSTRUCTIONS}`
-    : QUERY_TOOL_INSTRUCTIONS;
+  let alwaysOnInstructions = QUERY_TOOL_INSTRUCTIONS;
+  if (reminderToolEnabled) {
+    alwaysOnInstructions = `${alwaysOnInstructions}\n\n${REMINDER_TOOL_INSTRUCTIONS}`;
+  }
+  if (taskToolEnabled) {
+    alwaysOnInstructions = `${alwaysOnInstructions}\n\n${TASK_TOOL_INSTRUCTIONS}`;
+  }
 
   if (!workspaceId) {
     // Una Chat senza Workspace non ha dove collegare una transazione: niente strumento.
@@ -691,6 +784,7 @@ async function buildSystemPrompt(
       sourceReferences: [],
       transactionToolEnabled: false,
       reminderToolEnabled,
+      taskToolEnabled,
     };
   }
 
@@ -710,6 +804,7 @@ async function buildSystemPrompt(
       sourceReferences: [],
       transactionToolEnabled: false,
       reminderToolEnabled,
+      taskToolEnabled,
     };
   }
 
@@ -789,6 +884,7 @@ async function buildSystemPrompt(
     sourceReferences,
     transactionToolEnabled: true,
     reminderToolEnabled,
+    taskToolEnabled,
   };
 }
 
@@ -1196,6 +1292,37 @@ function sanitizeReminder(raw: unknown): ReminderSuggestion | null {
     startsAt: startsAtDate.toISOString(),
     reminderMinutesBefore,
   };
+}
+
+// Estrae le chiamate allo strumento manage_tasks dalla risposta Anthropic — stesso
+// pattern di extractReminderSuggestions, ma un singolo tool_use può contenere più
+// elementi (`items`, un array), non uno solo: appiattiti in una lista di oggetti
+// { title } per riusare la stessa forma di sanitizzazione per elemento.
+// deno-lint-ignore no-explicit-any
+function extractTaskSuggestions(anthropicBody: any): unknown[] {
+  const blocks = anthropicBody?.content;
+  if (!Array.isArray(blocks)) return [];
+  return blocks
+    .filter((block: { type: string; name?: string }) =>
+      block.type === "tool_use" && block.name === "manage_tasks"
+    )
+    // deno-lint-ignore no-explicit-any
+    .flatMap((block: any) =>
+      Array.isArray(block.input?.items)
+        ? block.input.items.map((item: unknown) => ({ title: item }))
+        : []
+    );
+}
+
+// Validazione difensiva, stesso principio di sanitizeReminder: un elemento non
+// stringa o vuoto (dopo trim) va scartato qui, non solo delegato al check
+// constraint `tasks_title_not_blank` del DB.
+function sanitizeTask(raw: unknown): TaskSuggestion | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const title = typeof r.title === "string" ? r.title.trim() : "";
+  if (!title) return null;
+  return { title };
 }
 
 function jsonError(message: string, status: number): Response {

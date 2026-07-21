@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pip_domain/pip_domain.dart';
@@ -217,6 +218,59 @@ void main() {
     expect(find.text('Altro'), findsOneWidget);
     expect(find.text('1000,00 €'), findsOneWidget);
     expect(find.text('200,00 €'), findsOneWidget);
+  });
+
+  testWidgets(
+      'il pulsante Condividi riepilogo apre il foglio con saldo e copia negli appunti',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+
+    // flutter_test non mocka Clipboard.setData di default (a differenza di
+    // altri canali comuni): senza questo handler la chiamata reale fallisce
+    // con MissingPluginException nell'ambiente di test.
+    TestWidgetsFlutterBinding.ensureInitialized()
+        .defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') return null;
+      return null;
+    });
+    addTearDown(() => TestWidgetsFlutterBinding.ensureInitialized()
+        .defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([personalIncome]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.ios_share_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Riepilogo Bilancio'), findsWidgets);
+    expect(find.textContaining('Saldo: +1000,00 €'), findsOneWidget);
+    expect(find.text('Copia negli appunti'), findsOneWidget);
+    expect(find.text('Invia via email'), findsOneWidget);
+
+    // Un singolo pump (non pumpAndSettle): lo SnackBar resta visibile per
+    // qualche secondo, pumpAndSettle farebbe avanzare il tempo fittizio del
+    // test fino a farlo scomparire di nuovo prima del controllo sotto.
+    await tester.tap(find.text('Copia negli appunti'));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Riepilogo copiato negli appunti.'), findsOneWidget);
   });
 
   testWidgets('se restano solo transazioni condivise mostra lo stato vuoto',

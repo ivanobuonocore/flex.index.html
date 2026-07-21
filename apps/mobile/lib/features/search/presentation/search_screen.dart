@@ -13,8 +13,10 @@ import '../application/search_controller.dart';
 
 /// Ricerca Universale (docs/product/06-information-architecture.md,
 /// "Ricerca"): una sola barra, risultati cross-tabella su Workspace, Note,
-/// Attività e Documenti. Chat/Memoria/Agenti arriveranno con le rispettive
-/// feature (Fase 3+) senza richiedere modifiche a questa schermata.
+/// Attività, Documenti, Transazioni confermate e Promemoria (richiesta
+/// esplicita dell'utente, questi ultimi due). Chat/Memoria/Agenti
+/// arriveranno con le rispettive feature (Fase 3+) senza richiedere
+/// modifiche a questa schermata.
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
@@ -51,6 +53,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         context.push('/workspace/${result.workspaceId}/tasks');
       case SearchResultType.document:
         context.push('/workspace/${result.workspaceId}/documents');
+      case SearchResultType.transaction:
+        context.push('/workspace/${result.workspaceId}/transactions');
+      case SearchResultType.reminder:
+        context.push('/workspace/${result.workspaceId}/reminders');
     }
   }
 
@@ -64,7 +70,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           controller: _queryController,
           autofocus: true,
           decoration: const InputDecoration(
-            hintText: 'Cerca in Workspace, Note, Attività, Documenti',
+            hintText:
+              'Cerca in Workspace, Note, Attività, Documenti, Transazioni, Promemoria',
             border: InputBorder.none,
           ),
           onChanged: _onChanged,
@@ -83,8 +90,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             return const EmptyState(
               icon: Icons.search,
               title: 'Cerca tra i tuoi contenuti',
-              message:
-                  'Workspace, note, attività e documenti: tutto in un unico posto.',
+              message: 'Workspace, note, attività, documenti, transazioni e '
+                  'promemoria: tutto in un unico posto.',
             );
           }
           if (results.isEmpty) {
@@ -125,6 +132,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         SearchResultType.note => Icons.sticky_note_2_outlined,
         SearchResultType.task => Icons.check_circle_outline,
         SearchResultType.document => Icons.insert_drive_file_outlined,
+        SearchResultType.transaction => Icons.receipt_long_outlined,
+        SearchResultType.reminder => Icons.notifications_outlined,
       };
 
   // Etichetta "Spazio" (rinominato da "Workspace" — richiesta esplicita
@@ -135,5 +144,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         SearchResultType.note => 'Nota',
         SearchResultType.task => 'Attività',
         SearchResultType.document => 'Documento',
+        SearchResultType.transaction => 'Transazione',
+        SearchResultType.reminder => 'Promemoria',
       };
 }

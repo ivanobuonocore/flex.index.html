@@ -1,9 +1,11 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
@@ -135,10 +137,29 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
           return ListView(
             padding: const EdgeInsets.all(AppSpacing.md),
             children: [
-              _MonthPicker(
-                selectedMonth: selectedMonth,
-                availableMonths: availableMonths,
-                onChanged: (month) => setState(() => _selectedMonth = month),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _MonthPicker(
+                    selectedMonth: selectedMonth,
+                    availableMonths: availableMonths,
+                    onChanged: (month) =>
+                        setState(() => _selectedMonth = month),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.ios_share_outlined),
+                    tooltip: 'Condividi riepilogo',
+                    onPressed: () => _showExportSheet(
+                      context,
+                      month: selectedMonth,
+                      balanceCents: balance,
+                      incomeCents: income,
+                      expenseCents: expense,
+                      incomeByCategory: incomeByCategory,
+                      expenseByCategory: expenseByCategory,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
@@ -868,3 +889,144 @@ String _formatSignedAmount(int amountCents) {
 
 String _formatDate(DateTime date) =>
     '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+
+/// Foglio "Condividi riepilogo" (richiesta esplicita dell'utente: un export
+/// mensile del Bilancio). Niente PDF: `pdf`/`printing`/`share_plus` sono
+/// pacchetti pub.dev che in questo ambiente di build non è stato possibile
+/// aggiungere e verificare — un riepilogo testuale con copia negli appunti e
+/// invio via email (`url_launcher`, già una dipendenza del progetto) copre
+/// lo stesso bisogno senza introdurre dipendenze nuove.
+void _showExportSheet(
+  BuildContext context, {
+  required DateTime month,
+  required int balanceCents,
+  required int incomeCents,
+  required int expenseCents,
+  required Map<TransactionCategory, int> incomeByCategory,
+  required Map<TransactionCategory, int> expenseByCategory,
+}) {
+  final summary = _buildSummaryText(
+    month: month,
+    balanceCents: balanceCents,
+    incomeCents: incomeCents,
+    expenseCents: expenseCents,
+    incomeByCategory: incomeByCategory,
+    expenseByCategory: expenseByCategory,
+  );
+
+  showModalBottomSheet(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (context) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md, 0, AppSpacing.md, AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Riepilogo ${_italianMonths[month.month - 1]} ${month.year}',
+                style: AppTypography.heading3),
+            const SizedBox(height: AppSpacing.sm),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280),
+              child: SingleChildScrollView(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withOpacity(0.05),
+                    borderRadius: AppRadii.standardRadius,
+                  ),
+                  child: Text(summary, style: AppTypography.caption),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            FilledButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: summary));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Riepilogo copiato negli appunti.')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.copy_outlined),
+              label: const Text('Copia negli appunti'),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            OutlinedButton.icon(
+              onPressed: () => _sendSummaryByEmail(context,
+                  month: month, body: summary),
+              icon: const Icon(Icons.email_outlined),
+              label: const Text('Invia via email'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> _sendSummaryByEmail(
+  BuildContext context, {
+  required DateTime month,
+  required String body,
+}) async {
+  final subject =
+      'Riepilogo Bilancio ${_italianMonths[month.month - 1]} ${month.year}';
+  final uri = Uri(
+    scheme: 'mailto',
+    query:
+        'subject=${Uri.encodeComponent(subject)}&body=${Uri.encodeComponent(body)}',
+  );
+  final launched = await launchUrl(uri);
+  if (!launched && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Non è stato possibile aprire un\'app email.')),
+    );
+  }
+}
+
+String _buildSummaryText({
+  required DateTime month,
+  required int balanceCents,
+  required int incomeCents,
+  required int expenseCents,
+  required Map<TransactionCategory, int> incomeByCategory,
+  required Map<TransactionCategory, int> expenseByCategory,
+}) {
+  final buffer = StringBuffer()
+    ..writeln(
+        'Riepilogo Bilancio — ${_italianMonths[month.month - 1]} ${month.year}')
+    ..writeln()
+    ..writeln('Saldo: ${_formatSignedAmount(balanceCents)}')
+    ..writeln('Entrate: ${_formatAmount(incomeCents)}')
+    ..writeln('Uscite: ${_formatAmount(expenseCents)}');
+
+  void writeCategoryLines(
+      String title, Map<TransactionCategory, int> byCategory) {
+    if (byCategory.isEmpty) return;
+    final entries = byCategory.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    buffer
+      ..writeln()
+      ..writeln('$title per categoria:');
+    for (final entry in entries) {
+      final meta = TransactionCategoryMeta.of(entry.key);
+      buffer.writeln('- ${meta.label}: ${_formatAmount(entry.value)}');
+    }
+  }
+
+  writeCategoryLines('Entrate', incomeByCategory);
+  writeCategoryLines('Uscite', expenseByCategory);
+
+  return buffer.toString();
+}

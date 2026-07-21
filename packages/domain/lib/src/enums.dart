@@ -1,6 +1,11 @@
 /// Piano di abbonamento dell'utente (Domain Model, entità User).
 enum UserPlan { free, pro, business }
 
+/// Preferenza di tema dell'utente (Domain Model, entità User — richiesta
+/// esplicita dell'utente: "tema chiaro/scuro"). `system` (default) segue il
+/// tema del dispositivo, come si comportava l'app prima di questa slice.
+enum AppThemeMode { system, light, dark }
+
 /// Stato di un Workspace (Domain Model, entità Workspace).
 enum WorkspaceStatus { active, archived }
 
@@ -24,8 +29,11 @@ enum MemoryLevel { global, workspace, conversation }
 enum MemoryOrigin { user, ai }
 
 /// Tipo di contenuto trovato dalla Ricerca Universale
-/// (docs/product/06-information-architecture.md, "Ricerca").
-enum SearchResultType { workspace, note, task, document }
+/// (docs/product/06-information-architecture.md, "Ricerca"). `transaction`/
+/// `reminder` aggiunti in una slice successiva (richiesta esplicita
+/// dell'utente): solo le Transazioni confermate compaiono in ricerca, non
+/// quelle in attesa di conferma (AI Constitution, Principio 1).
+enum SearchResultType { workspace, note, task, document, transaction, reminder }
 
 /// Stato di conferma di una Transazione (Domain Model, entità Transaction).
 /// Le transazioni suggerite dall'AI restano "pending" finché l'utente non le

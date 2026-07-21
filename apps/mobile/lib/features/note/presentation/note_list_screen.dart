@@ -10,27 +10,39 @@ import 'create_edit_note_sheet.dart';
 
 /// Elenco completo delle Note di un Workspace
 /// (docs/product/06-information-architecture.md, "Menu Workspace").
-class NoteListScreen extends ConsumerWidget {
+///
+/// `Stateful` da questa slice (richiesta esplicita dell'utente: "tag sulle
+/// Note resi visibili... filtro rapido per tag") per tenere il tag
+/// selezionato per il filtro rapido — `null` = nessun filtro, l'elenco
+/// completo di sempre.
+class NoteListScreen extends ConsumerStatefulWidget {
   const NoteListScreen({super.key, required this.workspaceId});
 
   final String workspaceId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final notesAsync = ref.watch(notesProvider(workspaceId));
+  ConsumerState<NoteListScreen> createState() => _NoteListScreenState();
+}
+
+class _NoteListScreenState extends ConsumerState<NoteListScreen> {
+  String? _filterTag;
+
+  @override
+  Widget build(BuildContext context) {
+    final notesAsync = ref.watch(notesProvider(widget.workspaceId));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Note')),
       floatingActionButton: FloatingActionButton(
         onPressed: () =>
-            showCreateEditNoteSheet(context, workspaceId: workspaceId),
+            showCreateEditNoteSheet(context, workspaceId: widget.workspaceId),
         child: const Icon(Icons.add),
       ),
       body: notesAsync.when(
         loading: () => const LoadingView(),
         error: (error, stackTrace) => ErrorView(
           message: 'Non è stato possibile caricare le note.',
-          onRetry: () => ref.invalidate(notesProvider(workspaceId)),
+          onRetry: () => ref.invalidate(notesProvider(widget.workspaceId)),
         ),
         data: (notes) {
           if (notes.isEmpty) {
@@ -39,56 +51,157 @@ class NoteListScreen extends ConsumerWidget {
               title: 'Nessuna nota ancora',
               message: 'Crea la tua prima nota in questo Workspace.',
               action: FilledButton(
-                onPressed: () =>
-                    showCreateEditNoteSheet(context, workspaceId: workspaceId),
+                onPressed: () => showCreateEditNoteSheet(context,
+                    workspaceId: widget.workspaceId),
                 child: const Text('Crea la prima nota'),
               ),
             );
           }
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            itemCount: notes.length,
-            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-            itemBuilder: (context, index) {
-              final note = notes[index];
-              return Dismissible(
-                key: ValueKey(note.id),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: AppColors.error,
-                    borderRadius: AppRadii.standardRadius,
-                  ),
-                  child: const Icon(Icons.delete_outline, color: Colors.white),
-                ),
-                onDismissed: (_) => ref
-                    .read(noteFormControllerProvider.notifier)
-                    .delete(note.id),
-                child: Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.sticky_note_2_outlined,
-                        color: AppColors.accentNote),
-                    title: Text(note.title,
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: note.content.isEmpty
-                        ? null
-                        : Text(note.content,
-                            maxLines: 2, overflow: TextOverflow.ellipsis),
-                    onTap: () => showCreateEditNoteSheet(
-                      context,
-                      workspaceId: workspaceId,
-                      note: note,
+          // Tutti i tag distinti tra le note di questo Workspace, per la
+          // striscia di filtro rapido — non solo quelli della nota corrente.
+          final allTags = <String>{for (final n in notes) ...n.tags}.toList()
+            ..sort();
+          final filterTag = _filterTag;
+          final visibleNotes = filterTag == null
+              ? notes
+              : notes.where((n) => n.tags.contains(filterTag)).toList();
+
+          return Column(
+            children: [
+              if (allTags.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
+                  child: SizedBox(
+                    height: 36,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: allTags.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(width: AppSpacing.xs),
+                      itemBuilder: (context, index) {
+                        final tag = allTags[index];
+                        final isSelected = tag == filterTag;
+                        return FilterChip(
+                          label: Text(tag),
+                          selected: isSelected,
+                          onSelected: (_) => setState(
+                            () => _filterTag = isSelected ? null : tag,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
-              );
-            },
+              Expanded(
+                child: visibleNotes.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Nessuna nota con questo tag.',
+                          style: AppTypography.body.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withOpacity(0.6),
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        itemCount: visibleNotes.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: AppSpacing.sm),
+                        itemBuilder: (context, index) {
+                          final note = visibleNotes[index];
+                          return Dismissible(
+                            key: ValueKey(note.id),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.md),
+                              decoration: BoxDecoration(
+                                color: AppColors.error,
+                                borderRadius: AppRadii.standardRadius,
+                              ),
+                              child: const Icon(Icons.delete_outline,
+                                  color: Colors.white),
+                            ),
+                            onDismissed: (_) => ref
+                                .read(noteFormControllerProvider.notifier)
+                                .delete(note.id),
+                            child: Card(
+                              child: ListTile(
+                                leading: const Icon(
+                                    Icons.sticky_note_2_outlined,
+                                    color: AppColors.accentNote),
+                                title: Text(note.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                subtitle: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (note.content.isNotEmpty)
+                                      Text(note.content,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis),
+                                    if (note.tags.isNotEmpty) ...[
+                                      const SizedBox(height: AppSpacing.xs),
+                                      Wrap(
+                                        spacing: AppSpacing.xs,
+                                        runSpacing: AppSpacing.xs,
+                                        children: [
+                                          for (final tag in note.tags)
+                                            _TagPill(label: tag),
+                                        ],
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                onTap: () => showCreateEditNoteSheet(
+                                  context,
+                                  workspaceId: widget.workspaceId,
+                                  note: note,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Pillola compatta per un tag nell'anteprima di una Nota — solo lettura, a
+/// differenza del [Chip] cancellabile nel form di creazione/modifica.
+class _TagPill extends StatelessWidget {
+  const _TagPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.accentNote.withOpacity(0.14),
+        borderRadius: AppRadii.buttonRadius,
+      ),
+      child: Text(
+        label,
+        style: AppTypography.caption.copyWith(
+          color: AppColors.accentNote,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

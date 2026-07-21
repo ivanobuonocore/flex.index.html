@@ -204,10 +204,35 @@ Implementate, con dati reali via Supabase:
   Profilo): lo stato "attivo" dipende da `AppEnv.vapidPublicKey`, una costante di compilazione
   (`String.fromEnvironment`) non sovrascrivibile nella normale esecuzione di `flutter test`.
 
+- **search (Transazioni + Promemoria)** (richiesta esplicita dell'utente) — la Ricerca
+  Universale ora trova anche le Transazioni confermate (le pending restano escluse, sono
+  suggerimenti non ancora decisi) e i Promemoria, oltre a Workspace/Note/Attività/Documenti già
+  esistenti. `search_workspace_content` estesa con due indici GIN in più, verificata su Postgres
+  locale (RLS isolation confermata, pending correttamente escluse).
+- **chat (Liste/checklist)** (Slice C del piano originale, mai realizzata finora — richiesta
+  esplicita dell'utente) — scrivere in Chat "aggiungi alla lista spesa: latte, pane" crea una
+  `Task` per elemento nella sezione Attività (tool `manage_tasks` in `ai-chat`, stesso pattern di
+  `create_reminder`: nessuno stato pending/confirmed, reversibile con un tocco). Nessuna
+  migrazione: le colonne (`generated_by_ai`, `chat_id`) esistevano già dalla slice Note/Task
+  originale.
+- **transaction (export riepilogo)** (richiesta esplicita dell'utente) — un pulsante "Condividi
+  riepilogo" nel Bilancio globale apre un foglio con saldo/entrate/uscite/categorie in testo,
+  con "Copia negli appunti" e "Invia via email" (`mailto:`, `url_launcher` già una dipendenza).
+  Niente vero PDF: `pdf`/`printing`/`share_plus` sono pacchetti pub.dev nuovi che questo sandbox
+  non può installare/verificare (pub.dev non è nella lista degli host raggiungibili dal proxy).
+- **note (tag visibili)** (richiesta esplicita dell'utente) — `Note.tags` esisteva già nel
+  dominio/nel repository ma nessuna schermata lo esponeva. Ora il form Nota ha un chip-input per
+  aggiungere/rimuovere tag, l'anteprima li mostra come pillole, e una striscia di `FilterChip`
+  sopra l'elenco filtra rapidamente per tag.
+- **profile (tema)** (richiesta esplicita dell'utente: "tema chiaro/scuro") — uno
+  `SegmentedButton` Sistema/Chiaro/Scuro; la preferenza (`AppThemeMode`) è salvata nei metadata di
+  Supabase Auth (stesso meccanismo già usato per `name` alla registrazione), non una nuova
+  tabella — si riflette in tutta l'app tramite `sessionControllerProvider`.
+
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
 
-- **profile** — identità account e logout ora; abbonamento, tema, memoria, privacy nelle fasi
+- **profile** — identità account, logout e tema ora; abbonamento, memoria, privacy nelle fasi
   successive.
 
 Non ancora presenti: memory, settings, billing.

@@ -10,8 +10,9 @@ import '../../notifications/application/push_notification_controller.dart';
 import '../../notifications/data/push_notification_service.dart';
 
 /// Profilo (docs/product/06-information-architecture.md, "Profilo"). In Fase
-/// 1: identità dell'account e logout. Abbonamento, tema, memoria, privacy e
-/// dispositivi arrivano con le rispettive feature (Fase 2+).
+/// 1: identità dell'account, logout e preferenza di tema. Abbonamento,
+/// memoria, privacy e dispositivi arrivano con le rispettive feature
+/// (Fase 2+).
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -58,6 +59,8 @@ class ProfileScreen extends ConsumerWidget {
                 trailing: Text(_planLabel(user?.plan)),
               ),
             ),
+            const SizedBox(height: AppSpacing.lg),
+            _ThemeModeCard(current: user?.themeMode ?? AppThemeMode.system),
             if (AppEnv.vapidPublicKey.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.lg),
               const _NotificationsCard(),
@@ -94,6 +97,66 @@ class ProfileScreen extends ConsumerWidget {
       case null:
         return 'Free';
     }
+  }
+}
+
+/// Preferenza di tema (richiesta esplicita dell'utente: "tema chiaro/scuro"),
+/// persistita nei metadata dell'identity provider (vedi
+/// [AuthRepository.updateThemeMode]) — nessuna nuova tabella, è una
+/// preferenza globale all'utente, non a un Workspace.
+class _ThemeModeCard extends ConsumerWidget {
+  const _ThemeModeCard({required this.current});
+
+  final AppThemeMode current;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isBusy = ref.watch(authControllerProvider).isLoading;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.dark_mode_outlined),
+                const SizedBox(width: AppSpacing.sm),
+                Text('Tema', style: AppTypography.heading3),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            SegmentedButton<AppThemeMode>(
+              segments: const [
+                ButtonSegment(
+                  value: AppThemeMode.system,
+                  label: Text('Sistema'),
+                  icon: Icon(Icons.brightness_auto_outlined),
+                ),
+                ButtonSegment(
+                  value: AppThemeMode.light,
+                  label: Text('Chiaro'),
+                  icon: Icon(Icons.light_mode_outlined),
+                ),
+                ButtonSegment(
+                  value: AppThemeMode.dark,
+                  label: Text('Scuro'),
+                  icon: Icon(Icons.dark_mode_outlined),
+                ),
+              ],
+              selected: {current},
+              onSelectionChanged: isBusy
+                  ? null
+                  : (selection) =>
+                      ref.read(authControllerProvider.notifier).updateThemeMode(
+                            selection.first,
+                          ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

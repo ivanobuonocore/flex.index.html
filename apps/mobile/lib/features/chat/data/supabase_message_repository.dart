@@ -33,6 +33,7 @@ class SupabaseMessageRepository implements MessageRepository {
     required String content,
     List<String> attachmentIds = const [],
     String? remindersWorkspaceId,
+    String? tasksWorkspaceId,
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty) {
@@ -61,6 +62,7 @@ class SupabaseMessageRepository implements MessageRepository {
           'chatId': chatId,
           'workspaceId': workspaceId,
           'remindersWorkspaceId': remindersWorkspaceId,
+          'tasksWorkspaceId': tasksWorkspaceId,
         },
       );
       if (response.status != 200) {
