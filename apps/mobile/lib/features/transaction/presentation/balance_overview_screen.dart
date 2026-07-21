@@ -329,59 +329,107 @@ class _BalancePieChart extends StatelessWidget {
 
     final incomePercent = incomeCents / total * 100;
     final expensePercent = expenseCents / total * 100;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: SizedBox(
-          height: 220,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              PieChart(
-                PieChartData(
-                  sectionsSpace: 4,
-                  centerSpaceRadius: 56,
-                  sections: [
-                    if (incomeCents > 0)
-                      PieChartSectionData(
-                        value: incomeCents.toDouble(),
-                        color: AppColors.success,
-                        title: '${incomePercent.toStringAsFixed(0)}%',
-                        radius: 64,
-                        titleStyle: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+    // Fette con un gradiente a due colori invece di un colore piatto, presi
+    // dalla stessa famiglia di AppColors.siriGlow (redesign estetico 2.0 —
+    // richiesta esplicita dell'utente: "i colori che stai usando stile
+    // Siri" al posto del verde/rosso semantico) — un colore per l'una,
+    // l'altro per la seconda, restano comunque distinguibili tra loro.
+    final incomeGradient = [AppColors.siriGlow[0], AppColors.siriGlow[3]];
+    final expenseGradient = [AppColors.siriGlow[1], AppColors.siriGlow[2]];
+
+    return Container(
+      // L'alone multicolore (AppShadows.siriGlow, non il glow a tinta unica
+      // usato per l'hero del saldo) dà profondità reale al grafico, non solo
+      // alle fette: coerente con "profondità" richiesta esplicitamente.
+      decoration: BoxDecoration(
+        borderRadius: AppRadii.standardRadius,
+        boxShadow: AppShadows.siriGlow(isDark: isDark),
+      ),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: SizedBox(
+            height: 220,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                PieChart(
+                  PieChartData(
+                    sectionsSpace: 4,
+                    centerSpaceRadius: 56,
+                    sections: [
+                      if (incomeCents > 0)
+                        PieChartSectionData(
+                          value: incomeCents.toDouble(),
+                          gradient: LinearGradient(
+                            colors: incomeGradient,
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          title: '${incomePercent.toStringAsFixed(0)}%',
+                          radius: 64,
+                          borderSide: BorderSide(
+                            color: Colors.white.withOpacity(0.3),
+                            width: 2,
+                          ),
+                          titleStyle: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    if (expenseCents > 0)
-                      PieChartSectionData(
-                        value: expenseCents.toDouble(),
-                        color: AppColors.error,
-                        title: '${expensePercent.toStringAsFixed(0)}%',
-                        radius: 64,
-                        titleStyle: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                      if (expenseCents > 0)
+                        PieChartSectionData(
+                          value: expenseCents.toDouble(),
+                          gradient: LinearGradient(
+                            colors: expenseGradient,
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          title: '${expensePercent.toStringAsFixed(0)}%',
+                          radius: 64,
+                          borderSide: BorderSide(
+                            color: Colors.white.withOpacity(0.3),
+                            width: 2,
+                          ),
+                          titleStyle: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                  ],
-                ),
-              ),
-              // Centro del donut: il netto del mese a colpo d'occhio, senza
-              // dover sommare mentalmente le due fette (redesign estetico
-              // 2.0 — richiesta esplicita dell'utente: "molto tecnologica").
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Netto', style: AppTypography.caption),
-                  Text(
-                    _formatSignedAmount(incomeCents - expenseCents),
-                    style: AppTypography.heading3,
+                    ],
                   ),
-                ],
-              ),
-            ],
+                ),
+                // Centro del donut: il netto del mese a colpo d'occhio, senza
+                // dover sommare mentalmente le due fette (redesign estetico
+                // 2.0 — richiesta esplicita dell'utente: "molto tecnologica").
+                // Un disco "sollevato" (colore + ombra proprie) invece di
+                // testo semplice sullo sfondo della Card: distingue
+                // nettamente il centro dalle fette sfumate intorno.
+                Container(
+                  width: 92,
+                  height: 92,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Theme.of(context).colorScheme.surface,
+                    boxShadow: AppShadows.card(isDark: isDark),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Netto', style: AppTypography.caption),
+                        Text(
+                          _formatSignedAmount(incomeCents - expenseCents),
+                          style: AppTypography.heading3,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

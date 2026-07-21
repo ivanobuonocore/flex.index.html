@@ -33,64 +33,98 @@ class WorkspaceCard extends ConsumerWidget {
     final tint = categoryMeta?.color ?? theme.colorScheme.primary;
     final iconData = categoryMeta?.icon ?? _iconFor(workspace.icon);
 
-    return Card(
-      child: InkWell(
+    // Sostituisce la Card piatta (elevation 0 nel tema globale) con un
+    // Container decorato: sfondo sfumato tenue nel colore della categoria +
+    // ombra colorata (redesign estetico 2.0 — richiesta esplicita
+    // dell'utente: "i Workspace... migliorati graficamente con
+    // profondità, colori"), stesso principio già applicato alle sezioni in
+    // Chat e all'hero del Bilancio, non una modifica al tema globale delle
+    // Card (che resterebbe piatto ovunque non serva questo rilievo).
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [tint.withOpacity(0.10), theme.colorScheme.surface],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: AppRadii.standardRadius,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: tint.withOpacity(0.12),
-                  borderRadius: AppRadii.buttonRadius,
-                ),
-                child: Icon(iconData, color: tint),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      workspace.name,
-                      style: theme.textTheme.headlineSmall,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+        boxShadow: AppShadows.glow(
+          color: tint,
+          isDark: theme.brightness == Brightness.dark,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: AppRadii.standardRadius,
+        child: InkWell(
+          borderRadius: AppRadii.standardRadius,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [tint, tint.withOpacity(0.65)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    const SizedBox(height: 2),
-                    subtitle ??
-                        (workspace.description != null &&
-                                workspace.description!.isNotEmpty
-                            ? Text(
-                                workspace.description!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall,
-                              )
-                            : const SizedBox.shrink()),
+                    borderRadius: AppRadii.buttonRadius,
+                    boxShadow: [
+                      BoxShadow(
+                        color: tint.withOpacity(0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Icon(iconData, color: Colors.white),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        workspace.name,
+                        style: theme.textTheme.headlineSmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      subtitle ??
+                          (workspace.description != null &&
+                                  workspace.description!.isNotEmpty
+                              ? Text(
+                                  workspace.description!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall,
+                                )
+                              : const SizedBox.shrink()),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<_WorkspaceCardAction>(
+                  icon: const Icon(Icons.more_vert),
+                  onSelected: (action) => _onAction(context, ref, action),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: _WorkspaceCardAction.rename,
+                      child: Text('Rinomina'),
+                    ),
+                    if (!isSystem)
+                      const PopupMenuItem(
+                        value: _WorkspaceCardAction.delete,
+                        child: Text('Elimina'),
+                      ),
                   ],
                 ),
-              ),
-              PopupMenuButton<_WorkspaceCardAction>(
-                icon: const Icon(Icons.more_vert),
-                onSelected: (action) => _onAction(context, ref, action),
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: _WorkspaceCardAction.rename,
-                    child: Text('Rinomina'),
-                  ),
-                  if (!isSystem)
-                    const PopupMenuItem(
-                      value: _WorkspaceCardAction.delete,
-                      child: Text('Elimina'),
-                    ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

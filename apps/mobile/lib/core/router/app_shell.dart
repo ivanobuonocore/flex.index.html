@@ -67,8 +67,22 @@ class _BottomBar extends StatelessWidget {
             child: Container(
               height: barBoxHeight,
               padding: EdgeInsets.only(bottom: bottomPadding),
+              // Alone tenue centrato sul pulsante Chat, non un colore piatto
+              // (redesign estetico 2.0 — richiesta esplicita dell'utente: "la
+              // chat... le sezioni in basso facciano da contorno"): la barra
+              // sembra "emanare" dal pulsante centrale invece di un
+              // contenitore neutro con 5 voci equivalenti — rinforza la
+              // gerarchia visiva senza cambiare il pulsante stesso né la
+              // navigazione.
               decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
+                gradient: RadialGradient(
+                  center: Alignment.topCenter,
+                  radius: 1.3,
+                  colors: [
+                    AppColors.siriGlow.first.withOpacity(isDark ? 0.14 : 0.08),
+                    theme.colorScheme.surface,
+                  ],
+                ),
                 boxShadow: AppShadows.card(isDark: isDark),
               ),
               child: Row(
@@ -153,6 +167,11 @@ class _NavItem extends StatelessWidget {
         ? AppColors.textSecondaryDark
         : AppColors.textSecondaryLight;
     final tint = selected ? color : unselectedColor;
+    // Più piccole da ferme, a piena dimensione solo se selezionate (redesign
+    // estetico 2.0 — richiesta esplicita dell'utente: "le sezioni in basso
+    // facciano da contorno" rispetto al pulsante Chat centrale): un peso
+    // visivo minore per le 4 voci laterali, non solo un colore più tenue.
+    final iconSize = selected ? 24.0 : 20.0;
 
     return Expanded(
       child: InkWell(
@@ -160,7 +179,7 @@ class _NavItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(selected ? selectedIcon : icon, color: tint),
+            Icon(selected ? selectedIcon : icon, color: tint, size: iconSize),
             const SizedBox(height: 2),
             Text(
               label,
