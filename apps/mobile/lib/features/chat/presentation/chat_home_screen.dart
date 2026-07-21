@@ -277,7 +277,15 @@ class _SectionChip extends StatelessWidget {
       borderRadius: AppRadii.buttonRadius,
       child: InkWell(
         borderRadius: AppRadii.buttonRadius,
-        onTap: () => GoRouter.of(context).push('/workspace/${workspace.id}'),
+        // La sezione Appuntamenti apre direttamente il calendario
+        // (richiesta esplicita dell'utente: "vorrei vedere il calendario"),
+        // non l'anteprima generica del Workspace — da lì era raggiungibile
+        // solo con un tocco in più su "vedi tutti".
+        onTap: () => GoRouter.of(context).push(
+          workspace.category == SystemWorkspaceCategory.appuntamenti
+              ? '/workspace/${workspace.id}/reminders'
+              : '/workspace/${workspace.id}',
+        ),
         child: Container(
           // Sfondo sfumato tenue nel colore della categoria + bordo sottile
           // (redesign estetico 2.0): dà rilievo alla singola sezione senza

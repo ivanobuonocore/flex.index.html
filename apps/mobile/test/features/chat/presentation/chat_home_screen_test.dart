@@ -6,10 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_mobile/core/providers.dart';
 import 'package:pip_mobile/features/chat/application/message_controller.dart';
+import 'package:pip_mobile/features/reminder/presentation/reminder_list_screen.dart';
 import 'package:pip_mobile/main.dart';
 import 'package:pip_mobile/shared/widgets/loading_view.dart';
 
 import '../../../support/fake_auth_repository.dart';
+import '../../../support/fake_calendar_event_repository.dart';
 import '../../../support/fake_chat_repository.dart';
 import '../../../support/fake_document_repository.dart';
 import '../../../support/fake_message_repository.dart';
@@ -107,6 +109,91 @@ void main() {
       find.textContaining('Scrivi il primo messaggio'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('toccare la sezione Appuntamenti apre direttamente il calendario',
+      (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeCalendarEvent = FakeCalendarEventRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeCalendarEvent.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final sections = [
+      for (final category in SystemWorkspaceCategory.all)
+        Workspace(
+          id: 'w-$category',
+          ownerId: 'u1',
+          name: category,
+          icon: 'folder',
+          status: WorkspaceStatus.active,
+          createdAt: DateTime.utc(2026, 1, 1),
+          category: category,
+        ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          calendarEventRepositoryProvider.overrideWithValue(fakeCalendarEvent),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(sections);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit(const []);
+    fakeTask.emit(const []);
+    fakeDocument.emit(const []);
+    fakeTransaction.emit(const []);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(SystemWorkspaceCategory.appuntamenti));
+    await tester.pump();
+    fakeCalendarEvent.emit(const []);
+    await tester.pumpAndSettle();
+
+    // Non la generica WorkspaceDetailScreen (dove il calendario sarebbe
+    // raggiungibile solo con un tocco in più su "vedi tutti"), ma
+    // direttamente ReminderListScreen col calendario mensile.
+    expect(find.byType(ReminderListScreen), findsOneWidget);
   });
 
   testWidgets('Il saluto scrive il nome dell\'utente con la maiuscola',
