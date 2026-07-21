@@ -331,21 +331,23 @@ class _BalancePieChart extends StatelessWidget {
     final expensePercent = expenseCents / total * 100;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Fette con un gradiente a due colori invece di un colore piatto, presi
-    // dalla stessa famiglia di AppColors.siriGlow (redesign estetico 2.0 —
-    // richiesta esplicita dell'utente: "i colori che stai usando stile
-    // Siri" al posto del verde/rosso semantico) — un colore per l'una,
-    // l'altro per la seconda, restano comunque distinguibili tra loro.
-    final incomeGradient = [AppColors.siriGlow[0], AppColors.siriGlow[3]];
-    final expenseGradient = [AppColors.siriGlow[1], AppColors.siriGlow[2]];
+    // Un'unica palette in tutta l'app (richiesta esplicita dell'utente: "usa
+    // una sola palette di colori blu che tende al viola") — stesso blu/viola
+    // dell'hero del saldo e dell'AppBar, non i quattro colori del pulsante
+    // Chat. Ogni fetta è un'unica tinta leggermente schiarita verso il
+    // centro (non un colore piatto): un tocco di profondità che resta
+    // comunque dentro la stessa famiglia cromatica — più sobrio di un
+    // gradiente a due tinte diverse per fetta.
+    final incomeColor = AppColors.heroGradient[0];
+    final expenseColor = AppColors.heroGradient[1];
 
     return Container(
-      // L'alone multicolore (AppShadows.siriGlow, non il glow a tinta unica
-      // usato per l'hero del saldo) dà profondità reale al grafico, non solo
-      // alle fette: coerente con "profondità" richiesta esplicitamente.
+      // Un solo alone, blu (AppShadows.glow, la stessa usata per l'hero del
+      // saldo e l'AppBar) invece del multicolore: profondità senza perdere
+      // la sobrietà richiesta ("più professionale").
       decoration: BoxDecoration(
         borderRadius: AppRadii.standardRadius,
-        boxShadow: AppShadows.siriGlow(isDark: isDark),
+        boxShadow: AppShadows.glow(color: incomeColor, isDark: isDark),
       ),
       child: Card(
         child: Padding(
@@ -357,21 +359,30 @@ class _BalancePieChart extends StatelessWidget {
               children: [
                 PieChart(
                   PieChartData(
-                    sectionsSpace: 4,
-                    centerSpaceRadius: 56,
+                    sectionsSpace: 6,
+                    // Anello più sottile (centro più ampio, fette più
+                    // strette) invece di una torta piena: lettura più
+                    // "dashboard premium" che "grafico a torta" classico.
+                    centerSpaceRadius: 64,
                     sections: [
                       if (incomeCents > 0)
                         PieChartSectionData(
                           value: incomeCents.toDouble(),
                           gradient: LinearGradient(
-                            colors: incomeGradient,
+                            colors: [
+                              incomeColor,
+                              Color.lerp(incomeColor, Colors.white, 0.25)!,
+                            ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
                           title: '${incomePercent.toStringAsFixed(0)}%',
-                          radius: 64,
+                          radius: 52,
                           borderSide: BorderSide(
-                            color: Colors.white.withOpacity(0.3),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surface
+                                .withOpacity(0.6),
                             width: 2,
                           ),
                           titleStyle: const TextStyle(
@@ -383,14 +394,20 @@ class _BalancePieChart extends StatelessWidget {
                         PieChartSectionData(
                           value: expenseCents.toDouble(),
                           gradient: LinearGradient(
-                            colors: expenseGradient,
+                            colors: [
+                              expenseColor,
+                              Color.lerp(expenseColor, Colors.white, 0.25)!,
+                            ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
                           title: '${expensePercent.toStringAsFixed(0)}%',
-                          radius: 64,
+                          radius: 52,
                           borderSide: BorderSide(
-                            color: Colors.white.withOpacity(0.3),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surface
+                                .withOpacity(0.6),
                             width: 2,
                           ),
                           titleStyle: const TextStyle(
@@ -402,17 +419,20 @@ class _BalancePieChart extends StatelessWidget {
                   ),
                 ),
                 // Centro del donut: il netto del mese a colpo d'occhio, senza
-                // dover sommare mentalmente le due fette (redesign estetico
-                // 2.0 — richiesta esplicita dell'utente: "molto tecnologica").
-                // Un disco "sollevato" (colore + ombra proprie) invece di
-                // testo semplice sullo sfondo della Card: distingue
-                // nettamente il centro dalle fette sfumate intorno.
+                // dover sommare mentalmente le due fette. Un disco
+                // "sollevato" con un sottile bordo blu (non colorato a caso:
+                // stessa tinta delle fette) invece di testo semplice
+                // sullo sfondo della Card.
                 Container(
-                  width: 92,
-                  height: 92,
+                  width: 100,
+                  height: 100,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Theme.of(context).colorScheme.surface,
+                    border: Border.all(
+                      color: incomeColor.withOpacity(0.25),
+                      width: 1.5,
+                    ),
                     boxShadow: AppShadows.card(isDark: isDark),
                   ),
                   child: Center(

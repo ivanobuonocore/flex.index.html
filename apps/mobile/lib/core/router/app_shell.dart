@@ -75,11 +75,16 @@ class _BottomBar extends StatelessWidget {
               // gerarchia visiva senza cambiare il pulsante stesso né la
               // navigazione.
               decoration: BoxDecoration(
+                // AppColors.heroGradient (blu → viola), non siriGlow: un'unica
+                // palette coerente in tutta l'app (richiesta esplicita
+                // dell'utente), il pulsante Chat resta l'unico punto con il
+                // gradiente animato a più colori.
                 gradient: RadialGradient(
                   center: Alignment.topCenter,
                   radius: 1.3,
                   colors: [
-                    AppColors.siriGlow.first.withOpacity(isDark ? 0.14 : 0.08),
+                    AppColors.heroGradient.first
+                        .withOpacity(isDark ? 0.14 : 0.08),
                     theme.colorScheme.surface,
                   ],
                 ),
