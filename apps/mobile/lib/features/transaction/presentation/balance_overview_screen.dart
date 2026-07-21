@@ -43,11 +43,23 @@ const _italianMonths = [
 /// questo filtro, le transazioni di un Bilancio condiviso (proprio o di cui
 /// si è membri) finirebbero comunque qui sotto RLS, dato che
 /// `watchTransactions(null)` non filtra per Workspace lato applicazione.
-class BalanceOverviewScreen extends ConsumerWidget {
+class BalanceOverviewScreen extends ConsumerStatefulWidget {
   const BalanceOverviewScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BalanceOverviewScreen> createState() =>
+      _BalanceOverviewScreenState();
+}
+
+class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
+  // `null` = mese corrente: non si fissa mai un mese esplicito di default,
+  // così la schermata segue il calendario reale finché l'utente non sceglie
+  // uno storico (richiesta esplicita dell'utente: "vorrei che il Bilancio
+  // avesse anche uno storico, una tendina dove poter scegliere il mese").
+  DateTime? _selectedMonth;
+
+  @override
+  Widget build(BuildContext context) {
     final transactionsAsync = ref.watch(transactionsProvider(null));
     final workspacesAsync = ref.watch(workspacesProvider);
 
@@ -78,10 +90,27 @@ class BalanceOverviewScreen extends ConsumerWidget {
           final transactions = allTransactions
               .where((t) => personalWorkspaceIds.contains(t.workspaceId))
               .toList(growable: false);
-          final confirmed = confirmedThisMonth(transactions, now: now);
+
+          // Ogni mese in cui esiste almeno una transazione confermata, più
+          // il mese corrente (sempre presente, anche senza storico ancora):
+          // popola la tendina dello storico.
+          final currentMonth = DateTime(now.year, now.month);
+          final availableMonths = <DateTime>{
+            currentMonth,
+            for (final t in transactions)
+              if (t.status == TransactionStatus.confirmed)
+                DateTime(t.occurredAt.year, t.occurredAt.month),
+          }.toList()
+            ..sort((a, b) => b.compareTo(a));
+          final selectedMonth = _selectedMonth ?? currentMonth;
+
+          final confirmed =
+              confirmedThisMonth(transactions, now: selectedMonth);
           final pending = pendingTransactions(transactions);
 
-          if (confirmed.isEmpty && pending.isEmpty) {
+          if (confirmed.isEmpty &&
+              pending.isEmpty &&
+              availableMonths.length <= 1) {
             return const EmptyState(
               icon: Icons.pie_chart_outline,
               title: 'Nessuna transazione ancora',
@@ -102,9 +131,10 @@ class BalanceOverviewScreen extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(AppSpacing.md),
             children: [
-              Text(
-                'Panoramica ${_italianMonths[now.month - 1]} ${now.year}',
-                style: AppTypography.heading3,
+              _MonthPicker(
+                selectedMonth: selectedMonth,
+                availableMonths: availableMonths,
+                onChanged: (month) => setState(() => _selectedMonth = month),
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
@@ -144,38 +174,63 @@ class BalanceOverviewScreen extends ConsumerWidget {
                   child: Text('Nessuna transazione confermata questo mese.'),
                 )
               else
-                for (final transaction in confirmed)
-                  Card(
-                    child: ListTile(
-                      leading: Icon(
-                        transaction.type == TransactionType.income
-                            ? Icons.add_circle_outline
-                            : Icons.remove_circle_outline,
-                        color: transaction.type == TransactionType.income
-                            ? AppColors.success
-                            : AppColors.error,
-                      ),
-                      title: Text(transaction.description,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '${workspaceNames[transaction.workspaceId] ?? "Workspace"} · '
-                            '${_formatDate(transaction.occurredAt)} · ',
-                          ),
-                          _CategoryBadge(category: transaction.category),
-                        ],
-                      ),
-                      trailing: Text(_formatAmount(transaction.amountCents)),
-                    ),
+                for (final transaction in confirmed) ...[
+                  _ConfirmedTransactionTile(
+                    transaction: transaction,
+                    workspaceName:
+                        workspaceNames[transaction.workspaceId] ?? 'Workspace',
                   ),
+                  const SizedBox(height: AppSpacing.xs),
+                ],
             ],
           );
         },
       ),
     );
   }
+}
+
+/// Tendina del mese di riferimento (redesign — richiesta esplicita
+/// dell'utente: "uno storico, una tendina dove poter scegliere il mese...
+/// che si colleghi al grafico"): [BalanceOverviewScreen] ricalcola hero,
+/// grafico ed elenco confermate sul mese scelto qui — le transazioni in
+/// attesa di conferma restano invece sempre visibili indipendentemente dal
+/// mese (non è filtrabile una cosa che deve ancora essere confermata).
+class _MonthPicker extends StatelessWidget {
+  const _MonthPicker({
+    required this.selectedMonth,
+    required this.availableMonths,
+    required this.onChanged,
+  });
+
+  final DateTime selectedMonth;
+  final List<DateTime> availableMonths;
+  final ValueChanged<DateTime> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<DateTime>(
+      initialValue: selectedMonth,
+      onSelected: onChanged,
+      itemBuilder: (context) => [
+        for (final month in availableMonths)
+          PopupMenuItem(value: month, child: Text(_label(month))),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Panoramica ${_label(selectedMonth)}',
+              style: AppTypography.heading3),
+          const SizedBox(width: AppSpacing.xs),
+          Icon(Icons.expand_more,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)),
+        ],
+      ),
+    );
+  }
+
+  String _label(DateTime month) =>
+      '${_italianMonths[month.month - 1]} ${month.year}';
 }
 
 /// Saldo del mese in evidenza, con gradiente "premium" (redesign estetico 2.0
@@ -229,7 +284,7 @@ class _BalanceHeroCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _HeroStatPill(
-                  icon: Icons.add_circle_outline,
+                  emoji: '💰',
                   label: 'Entrate',
                   amountCents: incomeCents,
                 ),
@@ -237,7 +292,7 @@ class _BalanceHeroCard extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: _HeroStatPill(
-                  icon: Icons.remove_circle_outline,
+                  emoji: '💸',
                   label: 'Uscite',
                   amountCents: expenseCents,
                 ),
@@ -253,15 +308,18 @@ class _BalanceHeroCard extends StatelessWidget {
 /// Pillola statistica dentro l'hero del saldo (Entrate/Uscite) — sfondo
 /// bianco traslucido, non un colore semantico proprio: sul gradiente
 /// heroGradient, il verde/rosso di AppColors.success/error perderebbe
-/// leggibilità.
+/// leggibilità. Un'emoji al posto dell'icona +/- (richiesta esplicita
+/// dell'utente: "non mi piacciono i segni + e - accanto a entrate e
+/// uscite"): 💰/💸 comunicano lo stesso a colpo d'occhio senza sembrare un
+/// segno matematico isolato.
 class _HeroStatPill extends StatelessWidget {
   const _HeroStatPill({
-    required this.icon,
+    required this.emoji,
     required this.label,
     required this.amountCents,
   });
 
-  final IconData icon;
+  final String emoji;
   final String label;
   final int amountCents;
 
@@ -277,7 +335,7 @@ class _HeroStatPill extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: Colors.white),
+          Text(emoji, style: const TextStyle(fontSize: 18)),
           const SizedBox(width: AppSpacing.xs),
           Expanded(
             child: Column(
@@ -357,6 +415,40 @@ class _BalancePieChart extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
+                // Ombra sagomata sul donut stesso, non solo il rettangolo
+                // della Card intorno (richiesta esplicita dell'utente: il
+                // grafico "con profondità ed effetti"): una copia scura e
+                // semi-trasparente dello stesso anello, spostata di pochi
+                // pixel, simula un rilievo reale sulla forma — l'alone della
+                // Card da solo resta rettangolare, non segue il cerchio.
+                Transform.translate(
+                  offset: const Offset(0, 6),
+                  child: Opacity(
+                    opacity: isDark ? 0.45 : 0.20,
+                    child: PieChart(
+                      PieChartData(
+                        sectionsSpace: 6,
+                        centerSpaceRadius: 64,
+                        sections: [
+                          if (incomeCents > 0)
+                            PieChartSectionData(
+                              value: incomeCents.toDouble(),
+                              color: Colors.black,
+                              radius: 52,
+                              showTitle: false,
+                            ),
+                          if (expenseCents > 0)
+                            PieChartSectionData(
+                              value: expenseCents.toDouble(),
+                              color: Colors.black,
+                              radius: 52,
+                              showTitle: false,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
                 PieChart(
                   PieChartData(
                     sectionsSpace: 6,
@@ -468,10 +560,9 @@ class _PendingTransactionTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Card(
       child: ListTile(
-        leading: Icon(
-          transaction.type == TransactionType.income
-              ? Icons.add_circle_outline
-              : Icons.remove_circle_outline,
+        leading: Text(
+          transaction.type == TransactionType.income ? '💰' : '💸',
+          style: const TextStyle(fontSize: 22),
         ),
         title: Text(transaction.description,
             maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -504,6 +595,75 @@ class _PendingTransactionTile extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Transazione confermata come "pillola" sopraelevata (richiesta esplicita
+/// dell'utente: "transazioni confermate racchiuse in pillola, sopraelevate")
+/// — angoli molto arrotondati + ombra, non la Card piatta di prima (elevation
+/// 0 nel tema globale).
+class _ConfirmedTransactionTile extends StatelessWidget {
+  const _ConfirmedTransactionTile(
+      {required this.transaction, required this.workspaceName});
+
+  final Transaction transaction;
+  final String workspaceName;
+
+  @override
+  Widget build(BuildContext context) {
+    final isIncome = transaction.type == TransactionType.income;
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: AppRadii.cardPremiumRadius,
+        boxShadow: AppShadows.card(isDark: theme.brightness == Brightness.dark),
+      ),
+      child: Row(
+        children: [
+          Text(isIncome ? '💰' : '💸', style: const TextStyle(fontSize: 22)),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  transaction.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      AppTypography.body.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '$workspaceName · ${_formatDate(transaction.occurredAt)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.caption,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    _CategoryBadge(category: transaction.category),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text(
+            _formatAmount(transaction.amountCents),
+            style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ],
       ),
     );
   }

@@ -8,6 +8,23 @@ import 'package:pip_mobile/features/transaction/presentation/balance_overview_sc
 import '../../../support/fake_transaction_repository.dart';
 import '../../../support/fake_workspace_repository.dart';
 
+// Duplicato dei nomi dei mesi usati (privati) in balance_overview_screen.dart:
+// serve solo a costruire l'etichetta attesa nella tendina del mese.
+const _italianMonths = [
+  'Gennaio',
+  'Febbraio',
+  'Marzo',
+  'Aprile',
+  'Maggio',
+  'Giugno',
+  'Luglio',
+  'Agosto',
+  'Settembre',
+  'Ottobre',
+  'Novembre',
+  'Dicembre',
+];
+
 /// Fase 3, "Bilancio condiviso" — richiesta esplicita dell'utente: due
 /// Bilanci separati, uno personale e uno condiviso, non un unico totale che
 /// li confonda. Il Bilancio globale (questa schermata, `transactionsProvider
@@ -90,6 +107,62 @@ void main() {
     expect(find.text('Stipendio'), findsOneWidget);
     expect(find.text('Spesa condivisa con Anna'), findsNothing);
     expect(find.textContaining('1000,00'), findsWidgets);
+  });
+
+  testWidgets('la tendina del mese filtra hero, grafico ed elenco confermate',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+
+    final lastMonth = DateTime(now.year, now.month - 1, 15);
+    final oldExpense = Transaction(
+      id: 't-old',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Spesa del mese scorso',
+      amountCents: 3000,
+      occurredAt: lastMonth,
+      status: TransactionStatus.confirmed,
+      createdAt: lastMonth,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([personalIncome, oldExpense]);
+    await tester.pumpAndSettle();
+
+    // Di default (mese corrente) si vede la transazione di questo mese.
+    await tester.scrollUntilVisible(find.text('Stipendio'), 300);
+    expect(find.text('Stipendio'), findsOneWidget);
+
+    // Torna in cima (la tendina del mese è nell'intestazione, scomparsa
+    // scorrendo per il controllo sopra) prima di aprirla.
+    await tester.drag(find.byType(ListView), const Offset(0, 2000));
+    await tester.pumpAndSettle();
+
+    // Apre la tendina e sceglie il mese scorso.
+    await tester.tap(find.byIcon(Icons.expand_more));
+    await tester.pumpAndSettle();
+    final label = '${_italianMonths[lastMonth.month - 1]} ${lastMonth.year}';
+    await tester.tap(find.text(label));
+    await tester.pumpAndSettle();
+
+    // Ora il mese scorso è selezionato: la transazione di questo mese non
+    // conta più nel totale/elenco, quella del mese scorso sì.
+    await tester.scrollUntilVisible(find.text('Spesa del mese scorso'), 300);
+    expect(find.text('Spesa del mese scorso'), findsOneWidget);
+    expect(find.text('Stipendio'), findsNothing);
   });
 
   testWidgets('se restano solo transazioni condivise mostra lo stato vuoto',
