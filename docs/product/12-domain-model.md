@@ -16,6 +16,12 @@ Relazioni: possiede Workspace, crea Chat, possiede Memorie, crea Task, utilizza 
 Campi: id, nome, descrizione, icona, categoria, stato, colore (facoltativo), data creazione.
 Relazioni: contiene Chat, Documenti, Task, Note, Calendario, Knowledge Base, Timeline, Memoria di Workspace.
 
+**Nota terminologica**: nell'interfaccia mostrata all'utente questa entità è etichettata "Spazi"
+(tab in basso, titolo schermata — richiesta esplicita dell'utente di un termine diverso da
+"Workspace"). Il nome del dominio, le classi (`Workspace`, `WorkspaceCard`, ecc.) e le route
+(`/workspace/:id`) restano invariati: è una rinomina solo del testo visibile, non un cambio di
+modello.
+
 ### Chat
 Campi: id, titolo, modello AI, data creazione, ultimo messaggio, stato.
 Relazioni: appartiene a un Workspace (opzionale), contiene Messaggi, può generare Task e Memorie.

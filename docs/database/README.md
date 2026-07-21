@@ -572,6 +572,26 @@ comunque non disponibile in questo sandbox) su `ai-chat/index.ts` con shim local
 progetto Supabase reale dell'utente — il comportamento end-to-end (il modello sceglie lo strumento
 giusto, il secondo giro produce una risposta pertinente) va verificato in produzione.
 
+**Aggiornato**: `QUERY_TOOL_INSTRUCTIONS` richiede ora esplicitamente che la risposta dichiari un
+totale in una frase diretta (es. "Hai speso 340,00€ questo mese") prima di un eventuale elenco di
+dettaglio — richiesta esplicita dell'utente: "non soltanto riportarmi le transazioni... ma farmi
+un totale". Nessun cambiamento di schema o di logica di query, solo del testo dell'istruzione.
+
+## Fase 3 (slice 11) — Calendario mensile per Appuntamenti (solo client)
+
+Richiesta esplicita dell'utente: "un calendario fatto a quadratini (giorni) dove su ogni giorno
+viene riportato l'appuntamento". Nessuna migrazione, nessun cambiamento lato Edge Function: legge
+lo stesso stream `calendar_events` già esistente (`watchEvents`), aggregando gli eventi per giorno
+solo lato client per disegnare la griglia mensile in `ReminderListScreen`. Un promemoria creato
+dalla Chat (tool `create_reminder`, invariato) compare quindi automaticamente nel calendario non
+appena la riga viene inserita — nessun collegamento nuovo da costruire.
+
+Nessuna nuova dipendenza pub (es. `table_calendar`): pub.dev non è nella lista degli host
+raggiungibili dal proxy di questo sandbox (solo npm/jsr/pypi/crates/proxy.golang.org), quindi
+un'eventuale nuova dipendenza non sarebbe verificabile qui con `flutter pub get`/`flutter analyze`/
+`flutter test` — la griglia è stata scritta a mano con `GridView.count`, verificabile con gli
+stessi strumenti già usati in questa sessione.
+
 ## Fasi successive
 
 Memory, Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una

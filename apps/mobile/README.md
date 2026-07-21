@@ -136,17 +136,47 @@ Implementate, con dati reali via Supabase:
   mese prossimo" citando i dati reali, non inventati — vedi `docs/database/README.md`, Fase 3
   slice 10, per il dettaglio del secondo giro con Anthropic necessario per queste risposte.
 
-- **Redesign estetico 2.0 (seguito)** (richiesta esplicita dell'utente: grafico "stile Siri" con
-  profondità, Workspace "migliorati graficamente con profondità, colori", "la chat... le sezioni
-  in basso facciano da contorno") — il grafico a torta del Bilancio usa ora due gradienti dalla
-  palette `siriGlow` (non più verde/rosso) con un alone multicolore dietro la Card
-  (`AppShadows.siriGlow`, nuovo); `WorkspaceCard` sostituisce la Card piatta (elevation 0 nel tema
-  globale) con un Container sfumato + ombra colorata; la bottom nav ha un alone tenue centrato sul
-  pulsante Chat (la barra "emana" dal pulsante) e le 4 voci laterali sono più piccole da ferme —
-  il pulsante Chat stesso resta invariato. Corretto anche un rendering mancato: le emoji a colori
-  richiedono `flutter build web --web-renderer html` (limitazione nota di CanvasKit, il renderer di
-  default su desktop, che non carica i font emoji a colori) — il build precedente era stato fatto
-  senza quel flag, da qui l'assenza del colore.
+- **Redesign estetico 2.0 (seguito, poi corretto)** — un primo giro ha provato una palette
+  multicolore ispirata al pulsante Chat (`AppShadows.siriGlow`) per grafico/Workspace/bottom nav;
+  **l'utente ha chiesto esplicitamente "una sola palette di colori blu che tende al viola"**, quindi
+  `AppShadows.siriGlow` è stata rimossa: ovunque tranne il pulsante Chat (invariato, l'unico con
+  gradiente animato a più colori) si usa solo `AppColors.heroGradient`. `WorkspaceCard` sostituisce
+  la Card piatta (elevation 0 nel tema globale) con superficie neutra + ombra neutra e una sottile
+  barra di accento a sinistra nel colore della categoria (non un alone colorato per categoria: "più
+  professionale"); la bottom nav ha un alone blu tenue centrato sul pulsante Chat, le 4 voci
+  laterali più piccole da ferme. Corretto anche un rendering mancato: le emoji a colori richiedono
+  `flutter build web --web-renderer html` (limitazione nota di CanvasKit, il renderer di default su
+  desktop, che non carica i font emoji a colori) — un build era stato fatto senza quel flag, da qui
+  l'assenza del colore.
+
+- **Bilancio: storico, pillole, profondità reale nel grafico** (richiesta esplicita dell'utente) —
+  tendina del mese di riferimento (sempre include il mese corrente, più ogni mese con almeno una
+  transazione confermata) che ricalcola hero/grafico/elenco confermate; le transazioni in attesa di
+  conferma restano non filtrate per mese, per design. Le icone +/- accanto a entrate/uscite sono
+  emoji (💰/💸). Le transazioni confermate sono ora "pillole" sopraelevate (angoli molto arrotondati
+  + ombra) invece della Card piatta. Il grafico ha un'ombra sagomata sul donut stesso (una copia
+  scura semi-trasparente dello stesso anello, leggermente spostata) oltre all'alone della Card, per
+  un rilievo che segue la forma circolare, non solo il rettangolo intorno.
+
+- **Chat: sezioni nascondibili, Q&A con totale esplicito, "Spazi"** — la striscia "Sezioni" in Chat
+  ha un'intestazione con freccia per comprimerla/espanderla (richiesta esplicita dell'utente:
+  "vorrei fosse nascondibile"). L'istruzione di `query_balance_summary`/`query_reminders` in
+  `ai-chat` ora richiede esplicitamente un totale dichiarato in una frase diretta, non un elenco di
+  transazioni (richiesta esplicita: "non soltanto riportarmi le transazioni... ma farmi un
+  totale"). "Workspace" è stato rinominato "Spazi" nell'etichetta della bottom nav e nel titolo
+  della schermata (icona `space_dashboard`) — nessuna classe/route interna rinominata, solo il
+  testo visibile.
+
+- **Appuntamenti: calendario mensile a quadratini** (richiesta esplicita dell'utente: "un
+  calendario fatto a quadratini (giorni) dove su ogni giorno viene riportato l'appuntamento") —
+  `ReminderListScreen` mostra ora un calendario mensile (nessuna nuova dipendenza pub: fatto a mano
+  con `GridView.count`, dato che pub.dev non è raggiungibile in questo sandbox per verificarne una
+  nuova) con un puntino sui giorni che hanno almeno un promemoria; toccare un giorno filtra
+  l'elenco sotto a quel giorno (toccarlo di nuovo toglie il filtro). Un promemoria scritto in Chat
+  (es. "lunedì prossimo devo andare dal barbiere") continua a passare dallo stesso tool
+  `create_reminder` di sempre: compare quindi automaticamente nel calendario non appena creato,
+  senza bisogno di alcuna modifica lato server. L'invio della notifica push resta quello già
+  costruito in precedenza (`send-due-reminders` + `pg_cron`, già configurato dall'utente).
 
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):

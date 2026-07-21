@@ -43,12 +43,13 @@ ispirata a Planito): nuovo gradiente "hero" (`#2563EB` → `#7C3AED`, stessa fam
 glow del pulsante Chat), usato per l'AppBar di Chat/Bilancio, le bolle utente in Chat e il saldo
 in evidenza nel Bilancio — comune a entrambi i temi, come il gradiente del pulsante Chat.
 
-**Aggiornato di nuovo** (richiesta esplicita dell'utente: il grafico del Bilancio "con i colori
-che stai usando stile Siri"): il grafico a torta non usa più il verde/rosso semantico
-(entrate/uscite) ma due gradienti presi dalla stessa palette `siriGlow` (blu→ciano per le entrate,
-viola→rosa per le uscite) — le due fette restano distinguibili tra loro, ma la palette è quella
-del pulsante Chat, non quella semantica finanziaria usata altrove (icone entrata/uscita nelle
-liste, che restano verdi/rosse).
+**Aggiornato di nuovo, poi corretto** (richiesta esplicita dell'utente: prima il grafico del
+Bilancio "con i colori che stai usando stile Siri" — palette multicolore `siriGlow` — poi "usa una
+sola palette di colori blu che tende al viola"): il grafico a torta usa ora solo `heroGradient`
+(blu/viola), non più la palette a quattro colori del pulsante Chat: entrate in blu, uscite in
+viola, con un'ombra sagomata sul donut stesso (non solo un alone rettangolare intorno) per la
+profondità richiesta. Il pulsante Chat resta l'unico punto dell'app con `siriGlow` (più colori,
+animato).
 
 ## Tipografia
 
@@ -95,6 +96,12 @@ barra, con un gradiente ispirato al "glow" di Siri quando si attiva — comunica
 il punto di partenza dell'app (coerente con "la funzione principale deve essere la chat", Fase 3
 slice 4), non una quinta scheda intercambiabile con le altre.
 
+**Aggiornato di nuovo**: "Workspace" è ora "Spazi" (etichetta e icona `space_dashboard`, richiesta
+esplicita dell'utente di un termine diverso — il modello di dominio e le route restano
+"Workspace", solo il testo visibile cambia). La barra ha inoltre un alone blu tenue centrato sul
+pulsante Chat (la barra "emana" dal pulsante) e le 4 voci laterali sono più piccole quando non
+selezionate — rinforza che la Chat è l'attività centrale, le altre sezioni un contorno.
+
 ## Floating Action Button
 
 Un solo pulsante per: Nuova chat, Nuovo Workspace, Nuova nota, Nuovo documento. L'utente sceglie cosa
@@ -108,6 +115,11 @@ Molto grande, espandibile, con: allegati, voce, fotocamera, invio.
 
 Mostra: nome, icona, ultima attività, numero documenti, numero attività, AI dedicata, stato. Con un
 colpo d'occhio l'utente capisce dove riprendere il lavoro.
+
+**Aggiornato** (richiesta esplicita dell'utente: "rendi tutto più professionale"): superficie
+neutra con ombra neutra (non un alone colorato per categoria, ritenuto poco professionale) e una
+sottile barra di accento a sinistra nel colore della categoria — la categoria resta riconoscibile
+senza che ogni card "urli" un colore diverso.
 
 ## Ricerca
 
