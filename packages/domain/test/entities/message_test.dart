@@ -39,7 +39,8 @@ void main() {
       expect(a.hashCode, equals(b.hashCode));
     });
 
-    test('pendingTransactionIds diverso distingue due messaggi altrimenti identici',
+    test(
+        'pendingTransactionIds diverso distingue due messaggi altrimenti identici',
         () {
       final withIds = Message(
         id: 'm1',
