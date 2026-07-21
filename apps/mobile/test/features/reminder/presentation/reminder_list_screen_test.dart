@@ -61,6 +61,59 @@ void main() {
     expect(find.text('Dentista'), findsOneWidget);
   });
 
+  testWidgets(
+      'selezionare un giorno nel calendario filtra l\'elenco a quel giorno',
+      (tester) async {
+    final fakeRepository = FakeCalendarEventRepository();
+    addTearDown(fakeRepository.dispose);
+
+    final now = DateTime.now();
+    // Un secondo giorno nello stesso mese di "oggi", per non dover cambiare
+    // mese nel calendario durante il test.
+    final otherDay = now.day <= 15 ? now.day + 10 : now.day - 10;
+
+    final eventToday = CalendarEvent(
+      id: 'e-today',
+      workspaceId: 'w1',
+      title: 'Dentista',
+      startsAt: DateTime(now.year, now.month, now.day, 10),
+      durationMinutes: 30,
+      createdAt: now,
+    );
+    final eventOtherDay = CalendarEvent(
+      id: 'e-other',
+      workspaceId: 'w1',
+      title: 'Barbiere',
+      startsAt: DateTime(now.year, now.month, otherDay, 9),
+      durationMinutes: 30,
+      createdAt: now,
+    );
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([eventToday, eventOtherDay]);
+    await tester.pumpAndSettle();
+
+    // Senza alcun giorno selezionato, l'elenco resta quello completo.
+    expect(find.text('Dentista'), findsOneWidget);
+    expect(find.text('Barbiere'), findsOneWidget);
+
+    // Tocca il giorno di "Barbiere" nel calendario: l'elenco si filtra a
+    // quel solo giorno (richiesta esplicita dell'utente: "su ogni giorno
+    // viene riportato l'appuntamento").
+    await tester.tap(find.text('$otherDay'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Barbiere'), findsOneWidget);
+    expect(find.text('Dentista'), findsNothing);
+
+    // Toccando di nuovo lo stesso giorno il filtro si toglie.
+    await tester.tap(find.text('$otherDay'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dentista'), findsOneWidget);
+    expect(find.text('Barbiere'), findsOneWidget);
+  });
+
   testWidgets('crea un nuovo promemoria dal pulsante +', (tester) async {
     final fakeRepository = FakeCalendarEventRepository();
     addTearDown(fakeRepository.dispose);
@@ -105,6 +158,13 @@ void main() {
 
     await pumpScreen(tester, fakeRepository);
     fakeRepository.emit([event]);
+    await tester.pumpAndSettle();
+
+    // Il calendario mensile in testa spinge l'elenco sotto la piega: va
+    // scorso per portare la riga nella viewport prima di poterci fare lo
+    // swipe, come farebbe l'utente.
+    await tester.drag(
+        find.byType(SingleChildScrollView), const Offset(0, -400));
     await tester.pumpAndSettle();
 
     await tester.drag(find.text('Dentista'), const Offset(-500, 0));
