@@ -242,14 +242,20 @@ Implementate, con dati reali via Supabase:
   indipendente ed eliminabile singolarmente (nessuna "elimina tutta la serie" in questa slice).
   Nessuna modifica a `send-due-reminders`/`pg_cron`, già configurati: continuano a vedere righe
   indipendenti come sempre.
+- **memory (prima slice minima)** (richiesta esplicita dell'utente) — solo il livello Globale:
+  l'AI salva una nota quando l'utente dice esplicitamente "ricorda che..." (tool `remember_fact`,
+  sempre disponibile come le query di sola lettura), e le memorie salvate vengono iniettate nel
+  system prompt di ogni turno futuro perché l'AI possa davvero usarle, non solo scriverle.
+  `MemoryListScreen` (Profilo → "Memoria") mostra e permette di cancellare, nessuna creazione
+  manuale — coerente con `MemoryRepository`, che non espone alcun metodo di creazione.
 
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
 
-- **profile** — identità account, logout e tema ora; abbonamento, memoria, privacy nelle fasi
+- **profile** — identità account, logout, tema e Memoria ora; abbonamento e privacy nelle fasi
   successive.
 
-Non ancora presenti: memory, settings, billing.
+Non ancora presenti: settings, billing.
 
 ## Limiti noti (dichiarati, non nascosti)
 

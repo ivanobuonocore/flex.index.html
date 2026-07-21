@@ -7,6 +7,7 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/chat/presentation/chat_home_screen.dart';
 import '../../features/document/presentation/document_list_screen.dart';
+import '../../features/memory/presentation/memory_list_screen.dart';
 import '../../features/note/presentation/note_list_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/reminder/presentation/reminder_list_screen.dart';
@@ -134,8 +135,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                  path: '/profile',
-                  builder: (context, state) => const ProfileScreen()),
+                path: '/profile',
+                builder: (context, state) => const ProfileScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'memories',
+                    builder: (context, state) => const MemoryListScreen(),
+                  ),
+                ],
+              ),
             ],
           ),
         ],

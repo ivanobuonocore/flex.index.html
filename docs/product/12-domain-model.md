@@ -46,6 +46,11 @@ Relazioni: appartiene a un Workspace, creata manualmente o dall'AI.
 ### Memory
 Campi: id, contenuto, livello (Globale/Workspace/Conversazione), origine (utente/AI), data aggiornamento.
 Relazioni: può appartenere a un User, a un Workspace, collegata a una Chat.
+Prima implementazione reale in Fase 3 (richiesta esplicita dell'utente: "l'AI salva una nota
+quando dico esplicitamente ricorda che..."). Solo il livello Globale è persistito e accessibile in
+questa slice (`memories` — migrazione, RLS, repository, tool AI `remember_fact`, schermata Profilo
+→ Memoria); Workspace e Conversazione restano modellati nello schema (colonne nullable, nessuna
+policy RLS) ma non ancora implementati, arriveranno con le rispettive feature.
 
 ### Transaction
 Aggiunta oltre allo scaffold originale (Fase 3, slice "Bilancio" — richiesta reale dell'utente,

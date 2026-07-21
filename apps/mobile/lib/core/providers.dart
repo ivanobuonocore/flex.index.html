@@ -6,6 +6,7 @@ import '../features/auth/data/supabase_auth_repository.dart';
 import '../features/chat/data/supabase_chat_repository.dart';
 import '../features/chat/data/supabase_message_repository.dart';
 import '../features/document/data/supabase_document_repository.dart';
+import '../features/memory/data/supabase_memory_repository.dart';
 import '../features/note/data/supabase_note_repository.dart';
 import '../features/notifications/data/supabase_push_subscription_repository.dart';
 import '../features/reminder/data/supabase_calendar_event_repository.dart';
@@ -70,4 +71,8 @@ final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
 final pushSubscriptionRepositoryProvider =
     Provider<PushSubscriptionRepository>((ref) {
   return SupabasePushSubscriptionRepository(ref.watch(supabaseClientProvider));
+});
+
+final memoryRepositoryProvider = Provider<MemoryRepository>((ref) {
+  return SupabaseMemoryRepository(ref.watch(supabaseClientProvider));
 });

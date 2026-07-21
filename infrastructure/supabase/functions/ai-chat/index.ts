@@ -35,6 +35,10 @@ const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_OUTPUT_TOKENS = 2048;
 const MAX_HISTORY_MESSAGES = 20;
 const MAX_CONTEXT_ITEMS = 5;
+// Memorie globali iniettate nel contesto (vedi buildSystemPrompt): un limite più
+// alto di MAX_CONTEXT_ITEMS perché sono frasi brevi e riguardano l'utente in
+// generale, non un singolo Workspace — restano utili anche se numerose.
+const MAX_MEMORY_ITEMS = 20;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -143,6 +147,20 @@ all'uso dello strumento, una risposta testuale breve che confermi cosa hai aggiu
 // create_reminder, questi due strumenti sono di sola lettura e non dipendono
 // da un Workspace attivo — funzionano in qualunque conversazione, perché
 // leggono sempre sotto RLS solo i dati del chiamante.
+// Addendum al system prompt, sempre presente come QUERY_TOOL_INSTRUCTIONS (Domain
+// Model, entità Memory — prima slice minima, richiesta esplicita dell'utente):
+// a differenza di extract_transactions/create_reminder/manage_tasks, non dipende da
+// un Workspace attivo — la Memoria è legata all'utente, non a un Workspace o una Chat
+// specifica (vedi MemoryLevel.global in packages/domain).
+const REMEMBER_FACT_TOOL_INSTRUCTIONS =
+  `Quando l'utente chiede esplicitamente di ricordare un'informazione per il futuro (es.
+"ricorda che...", "tieni a mente che...", "d'ora in poi ricordati che..."), usa lo strumento
+remember_fact per salvarla — non limitarti a scriverla in prosa. Scrivi il contenuto come un
+fatto autonomo in terza persona (es. "Preferisce il caffè la mattina"), senza includere "ricorda
+che" nel testo salvato. Non usarlo per impegni con una scadenza specifica (usa create_reminder) o
+per elementi di una lista (usa manage_tasks). Includi sempre, oltre all'uso dello strumento, una
+risposta testuale breve che confermi cosa hai memorizzato.`;
+
 const QUERY_TOOL_INSTRUCTIONS =
   `Quando l'utente fa una domanda che richiede di conoscere i suoi dati reali (es. "quanto ho
 speso questo mese", "quante entrate ci sono state", "quanto ho speso in alimentari ad aprile",
@@ -272,6 +290,27 @@ const MANAGE_TASKS_TOOL = {
   },
 };
 
+const REMEMBER_FACT_TOOL = {
+  name: "remember_fact",
+  description:
+    "Salva un'informazione che l'utente chiede esplicitamente di ricordare per le " +
+    "conversazioni future (es. 'ricorda che sono vegetariano', 'ricorda che il mio " +
+    "compleanno è il 3 marzo'). Non usarlo per impegni con una scadenza specifica " +
+    "(usa create_reminder) o per elementi di una lista (usa manage_tasks).",
+  input_schema: {
+    type: "object",
+    properties: {
+      content: {
+        type: "string",
+        description:
+          "L'informazione da ricordare, in una frase breve e autonoma in terza persona " +
+          "(es. 'È vegetariano', non 'Ricorda che è vegetariano').",
+      },
+    },
+    required: ["content"],
+  },
+};
+
 const EXTRACT_TRANSACTIONS_TOOL = {
   name: "extract_transactions",
   description:
@@ -379,6 +418,10 @@ interface TaskSuggestion {
   title: string;
 }
 
+interface MemorySuggestion {
+  content: string;
+}
+
 interface AnthropicTextBlock {
   type: "text";
   text: string;
@@ -430,6 +473,12 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
+
+    // Serve solo per valorizzare memories.user_id all'inserimento (remember_fact):
+    // nessun privilegio aggiuntivo, `getUser` legge lo stesso JWT già usato per
+    // ogni altra query di questa function.
+    const { data: userData } = await supabase.auth.getUser();
+    const currentUserId: string | null = userData?.user?.id ?? null;
 
     const { data: chat, error: chatError } = await supabase
       .from("chats")
@@ -509,6 +558,7 @@ Deno.serve(async (req) => {
           ...(transactionToolEnabled ? [EXTRACT_TRANSACTIONS_TOOL] : []),
           ...(reminderToolEnabled ? [CREATE_REMINDER_TOOL] : []),
           ...(taskToolEnabled ? [MANAGE_TASKS_TOOL] : []),
+          REMEMBER_FACT_TOOL,
           QUERY_BALANCE_SUMMARY_TOOL,
           QUERY_REMINDERS_TOOL,
         ],
@@ -726,16 +776,51 @@ Deno.serve(async (req) => {
       }
     }
 
+    // A differenza di transazioni/promemoria/attività, remember_fact non è mai
+    // condizionato a un Workspace (sempre disponibile, vedi buildSystemPrompt) — quindi
+    // nessun "*ToolEnabled" da controllare qui, solo l'esito dell'estrazione.
+    const memorySuggestions = extractMemorySuggestions(anthropicBody)
+      .map(sanitizeMemory)
+      .filter((m): m is MemorySuggestion => m !== null);
+
+    let memoryInsertFailed = false;
+    if (memorySuggestions.length > 0) {
+      if (!currentUserId) {
+        // Non dovrebbe capitare (l'Authorization header è verificato all'ingresso), ma
+        // senza un user_id non c'è un owner valido da scrivere: meglio segnalarlo che
+        // violare silenziosamente memories_owner_matches_level.
+        console.error(
+          "ai-chat: remember_fact senza currentUserId, insert saltato",
+        );
+        memoryInsertFailed = true;
+      } else {
+        const { error: memoryInsertError } = await supabase.from("memories")
+          .insert(
+            memorySuggestions.map((m) => ({
+              content: m.content,
+              level: "global",
+              origin: "ai",
+              user_id: currentUserId,
+            })),
+          );
+        if (memoryInsertError) {
+          console.error("ai-chat: errore insert memories", memoryInsertError);
+          memoryInsertFailed = true;
+        }
+      }
+    }
+
     // Il testo finale non deve mai affermare un successo che non c'è stato: se
-    // l'insert di transazioni/promemoria/elementi di lista fallisce, lo diciamo
-    // esplicitamente invece di lasciare che la risposta del modello (scritta prima di
-    // sapere se l'insert sarebbe riuscito) suggerisca il contrario. Elenco generico
-    // (non frasi cucite per ogni combinazione, come con solo due categorie): con tre
-    // categorie le combinazioni possibili sono 7, non 3.
+    // l'insert di transazioni/promemoria/elementi di lista/memorie fallisce, lo
+    // diciamo esplicitamente invece di lasciare che la risposta del modello (scritta
+    // prima di sapere se l'insert sarebbe riuscito) suggerisca il contrario. Elenco
+    // generico (non frasi cucite per ogni combinazione): con quattro categorie le
+    // combinazioni possibili sono 15, non 3.
     const failedInserts: string[] = [];
     if (transactionInsertFailed) failedInserts.push("le transazioni");
     if (reminderInsertFailed) failedInserts.push("i promemoria");
     if (taskInsertFailed) failedInserts.push("gli elementi della lista");
+    if (memoryInsertFailed) failedInserts.push("le informazioni da ricordare");
 
     let finalReplyText = replyText;
     if (failedInserts.length > 0) {
@@ -761,6 +846,10 @@ Deno.serve(async (req) => {
       finalReplyText = `Ho aggiunto ${taskSuggestions.length} ${
         taskSuggestions.length === 1 ? "elemento" : "elementi"
       } alla lista nella sezione Attività.`;
+    } else if (!finalReplyText && memorySuggestions.length > 0) {
+      finalReplyText = memorySuggestions.length === 1
+        ? "Ho memorizzato questa informazione."
+        : `Ho memorizzato ${memorySuggestions.length} informazioni.`;
     }
 
     if (!finalReplyText) {
@@ -841,13 +930,14 @@ async function buildSystemPrompt(
     )
     : false;
 
-  // query_balance_summary/query_reminders sono sempre disponibili (Fase 3, "Chat come
-  // Home" — richiesta esplicita dell'utente: "qualsiasi domanda che riguardi le
-  // informazioni al suo interno"): a differenza di extract_transactions/create_reminder/
-  // manage_tasks, non dipendono da un Workspace attivo — leggono sotto RLS solo i dati
-  // del chiamante, ovunque si trovi la conversazione.
+  // query_balance_summary/query_reminders/remember_fact sono sempre disponibili (Fase
+  // 3, "Chat come Home" — richiesta esplicita dell'utente: "qualsiasi domanda che
+  // riguardi le informazioni al suo interno"): a differenza di extract_transactions/
+  // create_reminder/manage_tasks, non dipendono da un Workspace attivo — leggono/
+  // scrivono sotto RLS solo i dati del chiamante, ovunque si trovi la conversazione.
   const today = new Date().toISOString().slice(0, 10);
-  let alwaysOnInstructions = QUERY_TOOL_INSTRUCTIONS;
+  let alwaysOnInstructions =
+    `${QUERY_TOOL_INSTRUCTIONS}\n\n${REMEMBER_FACT_TOOL_INSTRUCTIONS}`;
   if (reminderToolEnabled) {
     alwaysOnInstructions = `${alwaysOnInstructions}\n\n${REMINDER_TOOL_INSTRUCTIONS}`;
   }
@@ -855,11 +945,29 @@ async function buildSystemPrompt(
     alwaysOnInstructions = `${alwaysOnInstructions}\n\n${TASK_TOOL_INSTRUCTIONS}`;
   }
 
+  // Memorie globali dell'utente (Domain Model, entità Memory — prima slice minima):
+  // iniettate nel contesto indipendentemente dal Workspace attivo, così l'AI può
+  // davvero usarle nelle risposte, non solo salvarle (altrimenti la feature sarebbe
+  // "sola scrittura").
+  const { data: memoryRows } = await supabase
+    .from("memories")
+    .select("content")
+    .eq("level", "global")
+    .order("updated_at", { ascending: false })
+    .limit(MAX_MEMORY_ITEMS);
+  const memoryItems: string[] = (memoryRows ?? []).map(
+    (m: { content: string }) => `- ${m.content}`,
+  );
+  const memoriesSection = memoryItems.length > 0
+    ? `Cose da ricordare su questo utente:\n${memoryItems.join("\n")}`
+    : null;
+
   if (!workspaceId) {
     // Una Chat senza Workspace non ha dove collegare una transazione: niente strumento.
     return {
-      systemPrompt:
-        `${ASSISTANT_PERSONA}\n\n${alwaysOnInstructions}\n\nData odierna: ${today}.`,
+      systemPrompt: `${ASSISTANT_PERSONA}\n\n${alwaysOnInstructions}\n\nData odierna: ${today}.${
+        memoriesSection ? `\n\n${memoriesSection}` : ""
+      }`,
       sourceReferences: [],
       transactionToolEnabled: false,
       reminderToolEnabled,
@@ -878,8 +986,9 @@ async function buildSystemPrompt(
     // senza contesto invece di fallire l'intero turno. Nessuno strumento transazioni:
     // non c'è un Workspace verificato a cui collegarle (difesa in profondità oltre a RLS).
     return {
-      systemPrompt:
-        `${ASSISTANT_PERSONA}\n\n${alwaysOnInstructions}\n\nData odierna: ${today}.`,
+      systemPrompt: `${ASSISTANT_PERSONA}\n\n${alwaysOnInstructions}\n\nData odierna: ${today}.${
+        memoriesSection ? `\n\n${memoriesSection}` : ""
+      }`,
       sourceReferences: [],
       transactionToolEnabled: false,
       reminderToolEnabled,
@@ -932,10 +1041,13 @@ async function buildSystemPrompt(
   // affidabile per risolvere date relative ("questo mese", "il mese scorso").
   const sections: string[] = [
     `Data odierna: ${today}.`,
+  ];
+  if (memoriesSection) sections.push(memoriesSection);
+  sections.push(
     `Workspace attivo: "${workspace.name}"${
       workspace.description ? ` — ${workspace.description}` : ""
     }`,
-  ];
+  );
   if (noteItems.length > 0) {
     sections.push(`Note recenti:\n${noteItems.map((i) => i.label).join("\n")}`);
   }
@@ -1452,6 +1564,31 @@ function sanitizeTask(raw: unknown): TaskSuggestion | null {
   const title = typeof r.title === "string" ? r.title.trim() : "";
   if (!title) return null;
   return { title };
+}
+
+// Estrae le chiamate allo strumento remember_fact dalla risposta Anthropic — stesso
+// pattern di extractReminderSuggestions (un blocco tool_use per fatto da ricordare).
+// deno-lint-ignore no-explicit-any
+function extractMemorySuggestions(anthropicBody: any): unknown[] {
+  const blocks = anthropicBody?.content;
+  if (!Array.isArray(blocks)) return [];
+  return blocks
+    .filter((block: { type: string; name?: string }) =>
+      block.type === "tool_use" && block.name === "remember_fact"
+    )
+    // deno-lint-ignore no-explicit-any
+    .map((block: any) => block.input);
+}
+
+// Validazione difensiva, stesso principio di sanitizeTask: un contenuto non stringa o
+// vuoto (dopo trim) va scartato qui, non solo delegato al check constraint
+// `memories_content_not_blank` del DB.
+function sanitizeMemory(raw: unknown): MemorySuggestion | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const content = typeof r.content === "string" ? r.content.trim() : "";
+  if (!content) return null;
+  return { content };
 }
 
 function jsonError(message: string, status: number): Response {

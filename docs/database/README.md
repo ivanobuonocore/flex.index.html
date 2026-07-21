@@ -666,10 +666,41 @@ mostra un'icona "ricorrente" nell'elenco Appuntamenti, ma eliminare un'occorrenz
 quella riga — non l'intera serie (tenuto fuori scope per non appesantire questo giro). Verificato
 su Postgres locale: insert di più righe con lo stesso `recurrence_group_id` e lettura confermati.
 
+## Fase 3 (slice 15) — Memoria: prima slice minima
+
+Prima persistenza reale dell'entità `Memory` (Domain Model — mai costruita finora, uno dei
+pilastri di prodotto citati in CLAUDE.md). Scope volutamente ridotto (richiesta esplicita
+dell'utente): solo il livello **Globale** (legato all'utente, non a un Workspace o una Chat).
+
+`20260722180000_memories.sql`: tabella `public.memories` (id, content, level, origin, user_id/
+workspace_id/chat_id — tutte nullable, con un check `memories_owner_matches_level` che rispecchia
+l'`assert` del costruttore Dart `Memory`), `memories_content_not_blank`, RLS con tre policy
+(`select`/`insert`/`delete`) tutte ristrette a `level = 'global' and user_id = auth.uid()` —
+Workspace e Conversazione restano colonne nullable senza policy, arriveranno con le rispettive
+feature senza un'altra migrazione. Verificato su Postgres locale: un utente non vede né può
+cancellare la memoria di un altro, un insert cross-user o a livello workspace/conversation viene
+respinto dalla RLS, i check constraint su contenuto vuoto e owner mancante funzionano.
+
+`ai-chat/index.ts`: nuovo tool `remember_fact`, **sempre disponibile** (come
+`query_balance_summary`/`query_reminders`, non condizionato a un Workspace — la Memoria è legata
+all'utente). Nessun meccanismo pending/confirmed: come i promemoria/le liste, è reversibile con un
+tocco (si cancella dalla schermata Memoria), non un dato finanziario da dover contare con cautela.
+Le memorie esistenti vengono anche **iniettate nel system prompt** di ogni turno
+(`buildSystemPrompt`, sezione "Cose da ricordare su questo utente", fino a 20 più recenti) —
+altrimenti la feature sarebbe di sola scrittura: l'AI deve poterle effettivamente usare nelle
+risposte future, non solo salvarle.
+
+Mobile: `features/memory/` (data/application/presentation) con lo stesso pattern di
+`features/reminder/` — `SupabaseMemoryRepository` (solo `watchGlobalMemories`/`deleteMemory`,
+nessuna creazione manuale: le memorie nascono solo dall'AI), `MemoryListScreen` raggiungibile da
+Profilo → "Memoria" (`/profile/memories`), nessun pulsante "+" per lo stesso motivo.
+
 ## Fasi successive
 
-Memory, Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una
-migrazione: arriveranno con le rispettive feature (`docs/product/26-execution-blueprint.md`).
+Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:
+arriveranno con le rispettive feature (`docs/product/26-execution-blueprint.md`). Memory ha ora
+una migrazione, ma solo per il livello Globale (vedi slice 15 sopra) — Workspace e Conversazione
+restano da implementare.
 
 Note tecniche aperte dal Domain Model, da risolvere prima di quelle migrazioni:
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
@@ -10,9 +11,8 @@ import '../../notifications/application/push_notification_controller.dart';
 import '../../notifications/data/push_notification_service.dart';
 
 /// Profilo (docs/product/06-information-architecture.md, "Profilo"). In Fase
-/// 1: identità dell'account, logout e preferenza di tema. Abbonamento,
-/// memoria, privacy e dispositivi arrivano con le rispettive feature
-/// (Fase 2+).
+/// 1: identità dell'account, logout, preferenza di tema e Memoria.
+/// Abbonamento e privacy arrivano con le rispettive feature (Fase 2+).
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -61,6 +61,18 @@ class ProfileScreen extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.lg),
             _ThemeModeCard(current: user?.themeMode ?? AppThemeMode.system),
+            const SizedBox(height: AppSpacing.lg),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.psychology_outlined),
+                title: const Text('Memoria'),
+                subtitle: const Text(
+                    'Cosa l\'assistente ricorda di te, tra una conversazione '
+                    'e l\'altra.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/profile/memories'),
+              ),
+            ),
             if (AppEnv.vapidPublicKey.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.lg),
               const _NotificationsCard(),
