@@ -6,6 +6,7 @@ import 'package:pip_domain/pip_domain.dart';
 import '../../../core/env/app_env.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/skeleton_list.dart';
 import '../../notifications/application/push_notification_controller.dart';
 import '../../notifications/data/push_notification_service.dart';
@@ -64,7 +65,7 @@ class _ReminderListScreenState extends ConsumerState<ReminderListScreen> {
     final eventsAsync = ref.watch(calendarEventsProvider(widget.workspaceId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Appuntamenti')),
+      appBar: const GradientAppBar(title: Text('Appuntamenti')),
       floatingActionButton: FloatingActionButton(
         onPressed: () =>
             showCreateReminderSheet(context, workspaceId: widget.workspaceId),

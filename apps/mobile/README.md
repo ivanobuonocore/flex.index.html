@@ -540,6 +540,25 @@ Non ancora presenti: settings, billing.
   creati/modificati direttamente su Google. **Limite noto**: `deleteSeries` (cancellare un'intera
   serie ricorrente) non sincronizza oggi la cancellazione con Google — richiederebbe di risalire a
   ogni singolo id della serie, fuori scopo per questa integrazione.
+- **Migliorie grafiche: redesign estetico 2.0 esteso a tutte le schermate** (richiesta esplicita
+  dell'utente) — Chat Home, Bilancio (globale e di Workspace) e Onboarding avevano già il
+  gradiente `AppColors.heroGradient`/`AppShadows.glow`/`AppRadii.cardPremiumRadius`; le schermate
+  rimaste "Material piatto" lo riusano ora (nessun nuovo token, solo applicazione dei widget già
+  esistenti): `GradientAppBar` al posto di `AppBar` in Note/Attività/Documenti/Ricerca/
+  Spazi/Bilancio condiviso/Bilancio di Workspace/Appuntamenti; `SkeletonList` al posto di
+  `LoadingView` in Spazi e Bilancio condiviso (unica coppia di liste principali rimasta sul vecchio
+  spinner pieno, tutte le altre già migrate nella slice #112). `transaction_report_screen.dart`
+  (Bilancio di un singolo Workspace) guadagna lo stesso trattamento "hero" già usato dal Bilancio
+  globale (`_BalanceHeroCard` locale al file, saldo su gradiente + pillole Entrate/Uscite
+  traslucide): prima le due schermate di Bilancio erano visivamente incoerenti tra loro. In
+  Profilo, l'header con nome/email/avatar è ora un riquadro con lo stesso gradiente hero e
+  l'avatar ha `AppShadows.glow` — prima un `CircleAvatar` su sfondo piatto. **Scelta di scopo
+  deliberata**: `search_screen.dart` usa ancora `LoadingView()` (non `SkeletonList`) — il pass
+  grafico originale nominava esplicitamente solo Spazi e Bilancio condiviso per quel cambio,
+  Ricerca ne era rimasta fuori anche se tecnicamente nella stessa condizione; corretto solo
+  l'`AppBar`. Nessuna modifica di logica in questa slice: solo widget di presentazione, verificato
+  che l'intera suite di test esistente (208 in `apps/mobile`, 40 in `packages/domain`) continuasse
+  a passare invariata.
 
 ## Setup locale
 

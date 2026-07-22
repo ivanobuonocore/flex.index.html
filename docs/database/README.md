@@ -1150,6 +1150,37 @@ di pg_cron/pg_net per `pull-google-calendar-events` (richiederebbero un progetto
 con il provider Google abilitato — passi manuali documentati in
 `infrastructure/supabase/README.md`).
 
+## Fase 3 (slice 32) — Migliorie grafiche: redesign estetico 2.0 su tutte le schermate
+
+Richiesta esplicita dell'utente, nessuna migrazione né Edge Function: solo widget di
+presentazione lato mobile. Chat Home, Bilancio (globale e di Workspace) e Onboarding avevano già
+il gradiente `AppColors.heroGradient`/`AppShadows.glow`/`AppRadii.cardPremiumRadius`, introdotti
+nel redesign originale (slice 78-91 di Fase 3); le schermate rimaste "Material piatto" (`AppBar`
+semplice, o `LoadingView` invece di `SkeletonList`) lo riusano ora, senza introdurre nuovi token:
+`GradientAppBar` (già esistente) sostituisce `AppBar` in `note_list_screen.dart`,
+`task_list_screen.dart`, `document_list_screen.dart`, `search_screen.dart`,
+`workspace_list_screen.dart`, `shared_balance_screen.dart`, `transaction_report_screen.dart`
+(preservando la sua `actions: [...]` esistente) e `reminder_list_screen.dart`. `SkeletonList`
+(già esistente) sostituisce `LoadingView` in `workspace_list_screen.dart` e
+`shared_balance_screen.dart` — l'unica coppia di liste principali rimasta sul vecchio spinner
+pieno dopo la slice #112; lo spinner interno di `_ManageSharedBalanceSheetState` (elenco membri
+in un bottom sheet, non lo stato di caricamento della schermata) resta volutamente invariato.
+
+`transaction_report_screen.dart` guadagna anche una `_BalanceHeroCard` locale al file (stessa
+struttura di quella già in `balance_overview_screen.dart`: gradiente, saldo in bianco, due
+pillole traslucide Entrate/Uscite) al posto della `Card` piatta precedente — prima il Bilancio di
+un singolo Workspace e il Bilancio globale erano visivamente incoerenti tra loro nonostante
+mostrino lo stesso tipo di dato. In `profile_screen.dart`, l'header con avatar/nome/email diventa
+un riquadro con lo stesso gradiente hero e l'avatar ha `AppShadows.glow` (prima un `CircleAvatar`
+su sfondo piatto).
+
+**Scelta di scopo deliberata**: `search_screen.dart` mantiene `LoadingView()` (non `SkeletonList`)
+— il pass grafico nominava esplicitamente solo Spazi e Bilancio condiviso per quel cambio, pur
+essendo Ricerca tecnicamente nella stessa condizione; onorato lo scopo letterale invece di
+estenderlo motu proprio. Nessun test esistente cercava `find.byType(AppBar)` in nessuno degli 8
+file toccati (verificato prima di procedere): `flutter analyze` pulito, `dart format` stabile,
+intera suite di test (208 in `apps/mobile`, 40 in `packages/domain`) verde senza modifiche.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

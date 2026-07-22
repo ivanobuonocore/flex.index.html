@@ -8,6 +8,7 @@ import 'package:pip_domain/pip_domain.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../application/search_controller.dart';
 
@@ -65,7 +66,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final resultsAsync = ref.watch(searchControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: GradientAppBar(
         title: TextField(
           controller: _queryController,
           autofocus: true,

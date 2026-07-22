@@ -9,7 +9,8 @@ import 'package:pip_shared/pip_shared.dart';
 import '../../../core/providers.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
-import '../../../shared/widgets/loading_view.dart';
+import '../../../shared/widgets/gradient_app_bar.dart';
+import '../../../shared/widgets/skeleton_list.dart';
 import '../../auth/application/session_controller.dart';
 import '../application/workspace_sharing_controller.dart';
 
@@ -29,14 +30,14 @@ class SharedBalanceScreen extends ConsumerWidget {
     final userId = ref.watch(sessionControllerProvider).value?.id;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Bilancio condiviso')),
+      appBar: const GradientAppBar(title: Text('Bilancio condiviso')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCreateSheet(context),
         icon: const Icon(Icons.add),
         label: const Text('Crea'),
       ),
       body: sharedBalancesAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const SkeletonList(),
         error: (error, stackTrace) => ErrorView(
           message: 'Non è stato possibile caricare i Bilanci condivisi.',
           onRetry: () => ref.invalidate(sharedBalancesProvider),

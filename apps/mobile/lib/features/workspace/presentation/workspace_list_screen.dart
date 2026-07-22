@@ -6,7 +6,8 @@ import 'package:pip_domain/pip_domain.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
-import '../../../shared/widgets/loading_view.dart';
+import '../../../shared/widgets/gradient_app_bar.dart';
+import '../../../shared/widgets/skeleton_list.dart';
 import '../application/workspace_controller.dart';
 import 'create_workspace_sheet.dart';
 import 'widgets/workspace_card.dart';
@@ -24,13 +25,13 @@ class WorkspaceListScreen extends ConsumerWidget {
       // Titolo "Spazi" (rinominato da "Workspace" — richiesta esplicita
       // dell'utente): il modello di dominio/le route restano "Workspace",
       // solo l'etichetta mostrata cambia.
-      appBar: AppBar(title: const Text('Spazi')),
+      appBar: const GradientAppBar(title: Text('Spazi')),
       floatingActionButton: FloatingActionButton(
         onPressed: () => showCreateWorkspaceSheet(context),
         child: const Icon(Icons.add),
       ),
       body: workspacesAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const SkeletonList(),
         error: (error, stackTrace) => ErrorView(
           message: 'Non è stato possibile caricare i tuoi Workspace.',
           onRetry: () => ref.invalidate(workspacesProvider),

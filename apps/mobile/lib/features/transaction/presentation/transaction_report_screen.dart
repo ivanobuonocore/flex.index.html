@@ -5,6 +5,7 @@ import 'package:pip_domain/pip_domain.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/skeleton_list.dart';
 import '../../recurring_transaction/presentation/recurring_transaction_list_sheet.dart';
 import '../../workspace/application/workspace_sharing_controller.dart';
@@ -47,7 +48,7 @@ class TransactionReportScreen extends ConsumerWidget {
         WorkspaceRole.viewer;
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: GradientAppBar(
         title: const Text('Bilancio'),
         actions: [
           IconButton(
@@ -101,38 +102,11 @@ class TransactionReportScreen extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(AppSpacing.md),
             children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Saldo ${_italianMonths[now.month - 1]} ${now.year}',
-                        style: AppTypography.caption,
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(_formatSignedAmount(balance),
-                          style: AppTypography.heading1),
-                      const SizedBox(height: AppSpacing.sm),
-                      Row(
-                        children: [
-                          Icon(Icons.add_circle_outline,
-                              size: 16,
-                              color: Theme.of(context).colorScheme.primary),
-                          const SizedBox(width: AppSpacing.xs),
-                          Text('Entrate: ${_formatAmount(income)}'),
-                          const SizedBox(width: AppSpacing.md),
-                          Icon(Icons.remove_circle_outline,
-                              size: 16,
-                              color: Theme.of(context).colorScheme.error),
-                          const SizedBox(width: AppSpacing.xs),
-                          Text('Uscite: ${_formatAmount(expense)}'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+              _BalanceHeroCard(
+                month: now,
+                balanceCents: balance,
+                incomeCents: income,
+                expenseCents: expense,
               ),
               if (pending.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
@@ -291,3 +265,135 @@ String _formatSignedAmount(int amountCents) {
 
 String _formatDate(DateTime date) =>
     '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+
+/// Saldo del mese in evidenza, stesso trattamento gradiente "premium" già
+/// usato in balance_overview_screen.dart (redesign estetico 2.0) — le due
+/// schermate di Bilancio (globale e di un singolo Workspace) restavano
+/// visivamente incoerenti tra loro prima di questa slice.
+class _BalanceHeroCard extends StatelessWidget {
+  const _BalanceHeroCard({
+    required this.month,
+    required this.balanceCents,
+    required this.incomeCents,
+    required this.expenseCents,
+  });
+
+  final DateTime month;
+  final int balanceCents;
+  final int incomeCents;
+  final int expenseCents;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: AppColors.heroGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: AppRadii.cardPremiumRadius,
+        boxShadow: AppShadows.glow(
+          color: AppColors.heroGradient.first,
+          isDark: isDark,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Saldo ${_italianMonths[month.month - 1]} ${month.year}',
+            style: AppTypography.caption
+                .copyWith(color: Colors.white.withOpacity(0.85)),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            _formatSignedAmount(balanceCents),
+            style: AppTypography.heading1.copyWith(color: Colors.white),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: _HeroStatPill(
+                  emoji: '💰',
+                  label: 'Entrate',
+                  amountCents: incomeCents,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _HeroStatPill(
+                  emoji: '💸',
+                  label: 'Uscite',
+                  amountCents: expenseCents,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Pillola statistica dentro l'hero del saldo (Entrate/Uscite) — sfondo
+/// bianco traslucido, stesso trattamento di `_HeroStatPill` in
+/// balance_overview_screen.dart (senza tocco per il dettaglio per categoria:
+/// questa schermata non ha un breakdown per categoria separato dall'elenco
+/// già visibile sotto).
+class _HeroStatPill extends StatelessWidget {
+  const _HeroStatPill({
+    required this.emoji,
+    required this.label,
+    required this.amountCents,
+  });
+
+  final String emoji;
+  final String label;
+  final int amountCents;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: AppRadii.buttonRadius,
+        border: Border.all(color: Colors.white.withOpacity(0.22)),
+      ),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 18)),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: AppTypography.caption
+                      .copyWith(color: Colors.white.withOpacity(0.8)),
+                ),
+                Text(
+                  _formatAmount(amountCents),
+                  style: AppTypography.body.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

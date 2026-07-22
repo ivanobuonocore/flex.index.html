@@ -5,6 +5,7 @@ import 'package:pip_domain/pip_domain.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/skeleton_list.dart';
 import '../../workspace/application/workspace_sharing_controller.dart';
 import '../application/note_controller.dart';
@@ -40,7 +41,7 @@ class _NoteListScreenState extends ConsumerState<NoteListScreen> {
         WorkspaceRole.viewer;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Note')),
+      appBar: const GradientAppBar(title: Text('Note')),
       floatingActionButton: isViewer
           ? null
           : FloatingActionButton(

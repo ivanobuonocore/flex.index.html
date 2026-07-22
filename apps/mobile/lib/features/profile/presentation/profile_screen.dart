@@ -30,28 +30,65 @@ class ProfileScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.md),
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: theme.colorScheme.primary.withOpacity(0.12),
-                  child: Text(
-                    _initials(user?.name),
-                    style: AppTypography.heading3
-                        .copyWith(color: theme.colorScheme.primary),
-                  ),
+            // Header con lo stesso gradiente hero già usato in Chat/Bilancio
+            // (redesign estetico 2.0), avatar con AppShadows.glow — prima un
+            // semplice CircleAvatar su sfondo piatto, incoerente con il resto
+            // dell'app già migrato.
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: AppColors.heroGradient,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(user?.name ?? '—', style: AppTypography.heading3),
-                      Text(user?.email ?? '', style: AppTypography.caption),
-                    ],
-                  ),
+                borderRadius: AppRadii.cardPremiumRadius,
+                boxShadow: AppShadows.glow(
+                  color: AppColors.heroGradient.first,
+                  isDark: theme.brightness == Brightness.dark,
                 ),
-              ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: AppShadows.glow(
+                        color: AppColors.heroGradient.first,
+                        isDark: theme.brightness == Brightness.dark,
+                      ),
+                    ),
+                    child: CircleAvatar(
+                      radius: 28,
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      child: Text(
+                        _initials(user?.name),
+                        style: AppTypography.heading3
+                            .copyWith(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user?.name ?? '—',
+                          style: AppTypography.heading3
+                              .copyWith(color: Colors.white),
+                        ),
+                        Text(
+                          user?.email ?? '',
+                          style: AppTypography.caption
+                              .copyWith(color: Colors.white.withOpacity(0.85)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: AppSpacing.lg),
             Card(
