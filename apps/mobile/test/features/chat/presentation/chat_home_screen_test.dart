@@ -197,6 +197,106 @@ void main() {
     expect(find.byType(ReminderListScreen), findsOneWidget);
   });
 
+  testWidgets(
+      'i badge su Appuntamenti e sul pulsante Chat mostrano i conteggi giusti',
+      (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeCalendarEvent = FakeCalendarEventRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeCalendarEvent.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final sections = [
+      for (final category in SystemWorkspaceCategory.all)
+        Workspace(
+          id: 'w-$category',
+          ownerId: 'u1',
+          name: category,
+          icon: 'folder',
+          status: WorkspaceStatus.active,
+          createdAt: DateTime.utc(2026, 1, 1),
+          category: category,
+        ),
+    ];
+    final now = DateTime.now();
+    final reminderToday = CalendarEvent(
+      id: 'e1',
+      workspaceId: 'w-${SystemWorkspaceCategory.appuntamenti}',
+      title: 'Dentista',
+      startsAt: now,
+      durationMinutes: 30,
+      createdAt: now,
+    );
+    final pendingTransaction = Transaction(
+      id: 't1',
+      workspaceId: 'w-${SystemWorkspaceCategory.bilancio}',
+      type: TransactionType.expense,
+      description: 'Suggerita dall\'AI',
+      amountCents: 1000,
+      occurredAt: now,
+      status: TransactionStatus.pending,
+      createdAt: now,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          calendarEventRepositoryProvider.overrideWithValue(fakeCalendarEvent),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(sections);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit(const []);
+    fakeTask.emit(const []);
+    fakeDocument.emit(const []);
+    fakeTransaction.emit([pendingTransaction]);
+    fakeCalendarEvent.emit([reminderToday]);
+    await tester.pumpAndSettle();
+
+    // "1" compare due volte: badge su Appuntamenti (promemoria di oggi) e
+    // badge sul pulsante Chat (transazione ancora da confermare).
+    expect(find.text('1'), findsNWidgets(2));
+  });
+
   testWidgets('Il saluto scrive il nome dell\'utente con la maiuscola',
       (tester) async {
     final fakeAuth = FakeAuthRepository();

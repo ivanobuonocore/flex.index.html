@@ -1,8 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
+
+import '../../features/transaction/application/transaction_controller.dart';
 
 /// Bottom Navigation a 5 sezioni (redesign estetico — richiesta esplicita
 /// dell'utente: "inseriscila al centro al posto di 'ricerca'... mettila in
@@ -13,13 +16,25 @@ import 'package:pip_design_system/pip_design_system.dart';
 /// quando selezionate, coerente con "icone colorate" in tutta l'interfaccia.
 /// Ogni tab preserva il proprio stack di navigazione grazie a
 /// `StatefulShellRoute.indexedStack`.
-class AppShell extends StatelessWidget {
+class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Badge sul pulsante Chat (richiesta esplicita dell'utente: "badge sulla
+    // tab... Chat"): conta le transazioni suggerite dall'AI ancora da
+    // confermare/scartare (AI Constitution, Principio 1) — è lì, dentro la
+    // Chat, che si confermano o scartano (task #93), quindi è la cosa più
+    // sensata da segnalare su questo pulsante, non un concetto di "messaggio
+    // non letto" che qui non esiste (la Chat è sempre la Home).
+    final pendingTransactionsCount =
+        ref.watch(transactionsProvider(null)).maybeWhen(
+              data: (transactions) => pendingTransactions(transactions).length,
+              orElse: () => 0,
+            );
+
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: _BottomBar(
@@ -28,6 +43,7 @@ class AppShell extends StatelessWidget {
           index,
           initialLocation: index == navigationShell.currentIndex,
         ),
+        pendingTransactionsCount: pendingTransactionsCount,
       ),
     );
   }
@@ -37,10 +53,15 @@ const _barHeight = 64.0;
 const _chatButtonSize = 60.0;
 
 class _BottomBar extends StatelessWidget {
-  const _BottomBar({required this.currentIndex, required this.onSelect});
+  const _BottomBar({
+    required this.currentIndex,
+    required this.onSelect,
+    required this.pendingTransactionsCount,
+  });
 
   final int currentIndex;
   final ValueChanged<int> onSelect;
+  final int pendingTransactionsCount;
 
   @override
   Widget build(BuildContext context) {
@@ -145,6 +166,7 @@ class _BottomBar extends StatelessWidget {
               child: _SiriChatButton(
                 selected: currentIndex == 2,
                 onTap: () => onSelect(2),
+                pendingCount: pendingTransactionsCount,
               ),
             ),
           ),
@@ -215,10 +237,18 @@ class _NavItem extends StatelessWidget {
 /// movimento", richiesta esplicita) il gradiente ruota di continuo finché il
 /// cursore resta sopra.
 class _SiriChatButton extends StatefulWidget {
-  const _SiriChatButton({required this.selected, required this.onTap});
+  const _SiriChatButton({
+    required this.selected,
+    required this.onTap,
+    required this.pendingCount,
+  });
 
   final bool selected;
   final VoidCallback onTap;
+
+  /// Transazioni suggerite dall'AI ancora da confermare/scartare — badge
+  /// (richiesta esplicita dell'utente: "badge sulla tab... Chat").
+  final int pendingCount;
 
   @override
   State<_SiriChatButton> createState() => _SiriChatButtonState();
@@ -264,30 +294,37 @@ class _SiriChatButtonState extends State<_SiriChatButton>
           child: AnimatedBuilder(
             animation: _rotation,
             builder: (context, child) {
-              return Container(
-                width: _chatButtonSize,
-                height: _chatButtonSize,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: SweepGradient(
-                    colors: [...AppColors.siriGlow, AppColors.siriGlow.first],
-                    transform: GradientRotation(_rotation.value * 2 * math.pi),
-                  ),
-                  boxShadow: [
-                    for (final color in AppColors.siriGlow)
-                      BoxShadow(
-                        color: color.withOpacity(
-                          (_hovering ? glowIntensity * 1.4 : glowIntensity) /
-                              AppColors.siriGlow.length,
+              return Badge(
+                isLabelVisible: widget.pendingCount > 0,
+                label: Text('${widget.pendingCount}'),
+                backgroundColor: AppColors.error,
+                child: Container(
+                  width: _chatButtonSize,
+                  height: _chatButtonSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: SweepGradient(
+                      colors: [...AppColors.siriGlow, AppColors.siriGlow.first],
+                      transform:
+                          GradientRotation(_rotation.value * 2 * math.pi),
+                    ),
+                    boxShadow: [
+                      for (final color in AppColors.siriGlow)
+                        BoxShadow(
+                          color: color.withOpacity(
+                            (_hovering ? glowIntensity * 1.4 : glowIntensity) /
+                                AppColors.siriGlow.length,
+                          ),
+                          blurRadius:
+                              _hovering ? 28 : (widget.selected ? 24 : 16),
+                          spreadRadius:
+                              _hovering ? 3 : (widget.selected ? 2 : 0),
                         ),
-                        blurRadius:
-                            _hovering ? 28 : (widget.selected ? 24 : 16),
-                        spreadRadius: _hovering ? 3 : (widget.selected ? 2 : 0),
-                      ),
-                  ],
+                    ],
+                  ),
+                  child: const Icon(Icons.chat_bubble_rounded,
+                      color: Colors.white, size: 28),
                 ),
-                child: const Icon(Icons.chat_bubble_rounded,
-                    color: Colors.white, size: 28),
               );
             },
           ),

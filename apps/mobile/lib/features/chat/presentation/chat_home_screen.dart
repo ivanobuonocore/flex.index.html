@@ -14,6 +14,7 @@ import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../../auth/application/session_controller.dart';
 import '../../document/application/document_controller.dart';
+import '../../reminder/application/calendar_event_controller.dart';
 import '../../transaction/application/transaction_controller.dart';
 import '../../workspace/application/workspace_category_meta.dart';
 import '../../workspace/application/workspace_controller.dart';
@@ -265,16 +266,28 @@ class _ChatHomeBodyState extends ConsumerState<_ChatHomeBody> {
 
 /// Sezione fissa nella striscia in testa alla Chat: solo icona colorata,
 /// nome e anteprima viva — nessun menu (quello resta nella tab Workspace).
-class _SectionChip extends StatelessWidget {
+class _SectionChip extends ConsumerWidget {
   const _SectionChip({required this.workspace});
 
   final Workspace workspace;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final meta = WorkspaceCategoryMeta.of(workspace.category);
     final tint = meta?.color ?? Theme.of(context).colorScheme.primary;
     final icon = meta?.icon ?? Icons.folder_outlined;
+
+    // Badge coi promemoria di oggi (richiesta esplicita dell'utente: "badge
+    // sulla tab Appuntamenti") — solo per la sezione Appuntamenti, non
+    // osserva `calendarEventsProvider` per le altre (nessuna sottoscrizione
+    // in più senza motivo).
+    final remindersToday =
+        workspace.category == SystemWorkspaceCategory.appuntamenti
+            ? ref.watch(calendarEventsProvider(workspace.id)).maybeWhen(
+                  data: (events) => remindersDueToday(events).length,
+                  orElse: () => 0,
+                )
+            : 0;
 
     return Material(
       color: Colors.transparent,
@@ -309,25 +322,30 @@ class _SectionChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [tint, tint.withOpacity(0.65)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: tint.withOpacity(0.35),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
+              Badge(
+                isLabelVisible: remindersToday > 0,
+                label: Text('$remindersToday'),
+                backgroundColor: AppColors.error,
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [tint, tint.withOpacity(0.65)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                  ],
+                    boxShadow: [
+                      BoxShadow(
+                        color: tint.withOpacity(0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, size: 16, color: Colors.white),
                 ),
-                child: Icon(icon, size: 16, color: Colors.white),
               ),
               const SizedBox(width: AppSpacing.xs),
               ConstrainedBox(

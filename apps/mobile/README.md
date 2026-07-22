@@ -300,6 +300,15 @@ Implementate, con dati reali via Supabase:
   the tree", riprodotto deterministicamente da un test widget). Corretto con una rimozione
   ottimistica locale (`Set<String>` di id appena scorsi, filtrati dalla lista finché il repository
   non conferma).
+- **badge su Appuntamenti e sul pulsante Chat** (richiesta esplicita dell'utente: "badge sulla tab
+  Appuntamenti/Chat") — adattato alla navigazione reale del progetto (5 tab: Spazi/Bilancio/Chat
+  centrale/Ricerca/Profilo, Appuntamenti è una sezione fissa, non una tab a sé). Il chip
+  "Appuntamenti" nella striscia "Sezioni" in Chat mostra un badge col numero di promemoria di oggi
+  (`remindersDueToday`, in `section_preview.dart` — anche l'anteprima testuale era ancora ferma al
+  placeholder "Presto disponibile" di prima che i Promemoria esistessero, corretta insieme).
+  Il pulsante Chat centrale mostra un badge con le transazioni suggerite dall'AI ancora da
+  confermare/scartare (`pendingTransactions`, già esistente) — non un concetto di "messaggio non
+  letto", che non esiste dato che la Chat è sempre la Home.
 - **export (dati completi)** (richiesta esplicita dell'utente) — Profilo → "Esporta i miei dati":
   un JSON con Note/Attività/Documenti (solo metadata, non i file)/Promemoria/Memoria di ogni
   Workspace, più Transazioni e Memoria globale. Lettura one-shot (`.first` su ogni stream, non
