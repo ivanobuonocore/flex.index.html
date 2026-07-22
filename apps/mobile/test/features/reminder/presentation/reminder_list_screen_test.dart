@@ -244,6 +244,37 @@ void main() {
   });
 
   testWidgets(
+      'un promemoria creato dalla Chat mostra l\'icona "creato dalla Chat" '
+      '(Knowledge Graph "lite")', (tester) async {
+    final fakeRepository = FakeCalendarEventRepository();
+    addTearDown(fakeRepository.dispose);
+
+    final fromChat = CalendarEvent(
+      id: 'e1',
+      workspaceId: 'w1',
+      title: 'Dentista',
+      startsAt: DateTime.now().add(const Duration(days: 1)),
+      durationMinutes: 30,
+      createdAt: DateTime.now(),
+      sourceChatId: 'chat-1',
+    );
+    final manual = CalendarEvent(
+      id: 'e2',
+      workspaceId: 'w1',
+      title: 'Barbiere',
+      startsAt: DateTime.now().add(const Duration(days: 2)),
+      durationMinutes: 30,
+      createdAt: DateTime.now(),
+    );
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([fromChat, manual]);
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.forum_outlined), findsOneWidget);
+  });
+
+  testWidgets(
       'annullare la scelta su un promemoria ricorrente non elimina nulla',
       (tester) async {
     final fakeRepository = FakeCalendarEventRepository();

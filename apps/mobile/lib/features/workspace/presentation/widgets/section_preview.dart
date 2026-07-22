@@ -76,7 +76,7 @@ class _AttivitaPreview extends ConsumerWidget {
       loading: () => const SizedBox.shrink(),
       error: (_, __) => const SizedBox.shrink(),
       data: (tasks) {
-        final open = tasks.where((t) => t.status != TaskStatus.done).length;
+        final open = openTasks(tasks).length;
         return _PreviewText(
           open == 0 ? 'Nessuna attività aperta' : '$open attività aperte',
         );

@@ -1207,6 +1207,48 @@ sostituisce comunque il vero fix operativo**: se il sintomo persiste, la causa r
 migrazione non ancora applicata al progetto Supabase reale — va comunque eseguito `npx supabase db
 push` per allineare lo schema e ottenere il comportamento completo (chip inline inclusi).
 
+## Fase 3 (slice 33) — "Oggi" in Chat Home + Knowledge Graph "lite"
+
+Nessuna migrazione: entrambe le feature riusano interamente lo schema/i provider esistenti.
+
+**"Oggi"**: dopo aver chiesto all'utente se ribaltare la decisione già presa in
+`docs/product/06-information-architecture.md` (una tab "Today" separata era stata scartata,
+il suo contenuto fuso in cima alla Chat Home) o arricchire quanto già presente, l'utente ha scelto
+la seconda opzione. Nuovo blocco `_TodayHighlights` in `chat_home_screen.dart`: prossimo impegno di
+oggi, attività aperte, proiezione di fine mese — tre righe, ciascuna condizionale, costruite
+riusando `calendarEventsProvider`/`tasksProvider`/`transactionsProvider` e le funzioni pure già
+esistenti (`remindersDueToday`, `confirmedThisMonth`/`totalExpenseCents`/
+`projectedMonthEndExpenseCents`), più una nuova `openTasks` in `task_controller.dart` (condivisa
+con `_AttivitaPreview` per eliminare una duplicazione già presente).
+
+**Knowledge Graph "lite"**: scope deliberatamente ridotto rispetto a `docs/product/
+19-knowledge-graph.md` — verificato con grep mirato quali collegamenti tra entità hanno un
+percorso di scrittura realmente attivo prima di costruirci sopra UI: `Transaction.documentId`
+(scontrino allegato) e `CalendarEvent.sourceChatId` (scritto da `create_reminder` in `ai-chat`)
+sono vivi; `Task.documentId`/`Task.chatId`/`CalendarEvent.sourceTaskId` esistono nel dominio ma
+non vengono mai scritti da nessun punto del codice — esclusi, mostrerebbero sempre il caso vuoto.
+Note non ha alcun campo di collegamento (richiederebbe una nuova migrazione) — esclusa per scelta
+esplicita dell'utente, per non ripetere il problema delle migrazioni non applicate avuto in questa
+stessa sessione (vedi sopra). Implementato: `linkedDocumentIdsProvider` (derivato da
+`transactionsProvider`, nessuna nuova query) per un badge "Collegato a una transazione" in
+`document_list_screen.dart`; un'icona "creato dalla Chat" in `reminder_list_screen.dart` quando
+`CalendarEvent.sourceChatId` non è nullo; `buildSystemPrompt` (`ai-chat/index.ts`) annota i
+documenti allegati in una conversazione nel contesto iniettato.
+
+**Bug scoperto durante l'implementazione (non in produzione, dai nuovi test di questa slice)**:
+`AsyncValue.value` rilancia l'eccezione originale su uno stato di errore invece di restituire
+`null` — un pattern (`ref.watch(provider).value ?? const []`) già usato altrove in questa sessione
+in buona fede ma sbagliato per un provider che può davvero fallire (es. un repository non
+sovrascritto in un test, o un Workspace non ancora bootstrappato in produzione). Corretto in
+`_TodayHighlights` e `linkedDocumentIdsProvider` con `.asData?.value`, che ritorna `null` in modo
+sicuro su qualunque stato diverso da dati — nessun impatto sul codice pre-esistente di questa
+sessione, dove quel pattern non ha mai incontrato uno stato di errore reale nei test esistenti.
+
+Verificato: `flutter analyze`/`dart format --set-exit-if-changed`/`flutter test` (230 test,
+`apps/mobile`) verdi; `deno check`/`lint`/`fmt` su `ai-chat/index.ts` (stessi 2 problemi
+pre-esistenti e non correlati già documentati altrove in questo file, confermato che il diff di
+questa slice non li tocca).
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

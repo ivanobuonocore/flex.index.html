@@ -600,6 +600,51 @@ Non ancora presenti: settings, billing.
   proattivo", non verificabile con un test automatico (dipende dal comportamento reale del
   modello). Rimosso anche l'unico test che assumeva i tre chip fissi
   (`chat_home_screen_test.dart`).
+- **"Oggi" in Chat Home** (richiesta esplicita dell'utente, dopo aver confermato la scelta di
+  arricchire la Chat Home esistente invece di una tab dedicata — `docs/product/
+  06-information-architecture.md` aveva già scartato una tab "Today" separata in passato) — nuovo
+  blocco `_TodayHighlights` in `chat_home_screen.dart`, sopra la striscia "Sezioni": prossimo
+  impegno di oggi (`calendarEventsProvider` + `remindersDueToday`, già in
+  `section_preview.dart`), attività aperte (`tasksProvider` + una nuova funzione pura
+  `openTasks` in `task_controller.dart`, condivisa anche da `_AttivitaPreview` per non duplicare
+  lo stesso filtro), proiezione di fine mese (`transactionsProvider` + `confirmedThisMonth`/
+  `totalExpenseCents`/`projectedMonthEndExpenseCents`, già in `transaction_controller.dart`) —
+  nessuna nuova query, solo provider già esistenti riletti nello stesso punto. Ogni riga compare
+  solo se ha qualcosa da dire; se tutte e tre sono vuote il blocco non occupa spazio (stesso
+  principio di `_NotificationStatusBanner`). Ogni riga è toccabile e porta alla schermata
+  pertinente (`context.push`, stesso pattern già usato da `search_screen.dart` per le route
+  annidate di un Workspace).
+- **Knowledge Graph "lite"** (richiesta esplicita dell'utente, scope ridotto rispetto alla visione
+  completa di `docs/product/19-knowledge-graph.md` — nessuna migrazione, nessun grafo/
+  embeddings/vettori, solo collegamenti che esistono già nello schema e vengono già scritti oggi)
+  — due superfici:
+  - **Documenti → Transazioni**: nuovo provider derivato `linkedDocumentIdsProvider` in
+    `document_controller.dart`, che osserva `transactionsProvider` (già la fonte di verità per
+    `Transaction.documentId`) e ne deriva l'insieme dei documenti referenziati — nessuna nuova
+    query. `document_list_screen.dart` mostra un badge "Collegato a una transazione" quando un
+    documento è in quell'insieme.
+  - **Promemoria creati dalla Chat**: `CalendarEvent.sourceChatId` è già scritto da
+    `create_reminder` nell'Edge Function `ai-chat` — nessun nuovo provider, è un campo diretto
+    sull'entità. `reminder_list_screen.dart` mostra un'icona "creato dalla Chat" accanto (non al
+    posto) all'icona "ricorrente" già esistente.
+  - **Contesto AI**: `buildSystemPrompt` (`ai-chat/index.ts`) amplia la `select` sui documenti per
+    includere `chat_id` e annota "(allegato in una conversazione)" quando presente — coerente con
+    `docs/product/13-prompt-engineering.md` ("documenti collegati").
+  - **Esclusioni esplicite**: `Task.documentId`/`Task.chatId`/`CalendarEvent.sourceTaskId` esistono
+    nel dominio ma non vengono mai scritti da nessun punto del codice attuale (verificato con
+    grep mirato prima di implementare) — costruirci sopra UI oggi mostrerebbe sempre il caso
+    vuoto, quindi esclusi da questa slice. Note non ha alcun campo di collegamento (richiederebbe
+    una nuova migrazione) — esclusa per scelta esplicita dell'utente, per non ripetere il
+    problema delle migrazioni non applicate avuto in questa stessa sessione.
+  - **Bug scoperto e corretto durante l'implementazione**: `ref.watch(provider).value` su un
+    `AsyncValue` in stato di errore **rilancia l'eccezione originale** invece di restituire
+    `null` (a differenza di quanto usato altrove in buona fede in questa sessione) — un
+    `calendarEventRepositoryProvider`/`transactionRepositoryProvider` non sovrascritto in un test,
+    o un Workspace non ancora bootstrappato in produzione, faceva fallire l'intera Chat Home
+    invece di limitarsi a non mostrare quella riga. Corretto usando `.asData?.value` (che invece
+    ritorna `null` in modo sicuro su qualunque stato diverso da dati) sia in `_TodayHighlights` sia
+    in `linkedDocumentIdsProvider` — scoperto grazie ai nuovi test widget di questa stessa slice,
+    non in produzione.
 
 ## Setup locale
 

@@ -1233,7 +1233,7 @@ async function buildSystemPrompt(
         .limit(MAX_CONTEXT_ITEMS),
       supabase
         .from("documents")
-        .select("id, name")
+        .select("id, name, chat_id")
         .eq("workspace_id", workspaceId)
         .is("deleted_at", null)
         .order("uploaded_at", { ascending: false })
@@ -1252,8 +1252,15 @@ async function buildSystemPrompt(
       label: `- ${t.title} (${t.status})`,
     }),
   );
+  // `chat_id` (Knowledge Graph "lite" — richiesta esplicita dell'utente): un
+  // Documento allegato durante una conversazione lo dice esplicitamente nel
+  // contesto, coerente con docs/product/13-prompt-engineering.md
+  // ("propone collegamenti con altri contenuti del Workspace").
   const documentItems: ContextItem[] = (documents ?? []).map(
-    (d: { id: string; name: string }) => ({ id: d.id, label: `- ${d.name}` }),
+    (d: { id: string; name: string; chat_id: string | null }) => ({
+      id: d.id,
+      label: `- ${d.name}${d.chat_id ? " (allegato in una conversazione)" : ""}`,
+    }),
   );
 
   // "Data odierna" (calcolata in testa alla function) dà al modello un riferimento

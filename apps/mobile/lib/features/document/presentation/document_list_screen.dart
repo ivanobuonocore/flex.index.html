@@ -77,6 +77,11 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   Widget build(BuildContext context) {
     final documentsAsync = ref.watch(documentsProvider(widget.workspaceId));
     final isUploading = ref.watch(documentFormControllerProvider).isLoading;
+    // Knowledge Graph "lite" (richiesta esplicita dell'utente): quali
+    // Documenti di questo Workspace sono referenziati da una Transazione
+    // (es. uno scontrino allegato) — derivato, nessuna nuova query.
+    final linkedDocumentIds =
+        ref.watch(linkedDocumentIdsProvider(widget.workspaceId));
 
     return Scaffold(
       appBar: const GradientAppBar(title: Text('Documenti')),
@@ -204,6 +209,28 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(_formatSize(document.sizeBytes)),
+                                    if (linkedDocumentIds
+                                        .contains(document.id)) ...[
+                                      const SizedBox(height: AppSpacing.xs),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                              Icons.receipt_long_outlined,
+                                              size: 14,
+                                              color:
+                                                  AppColors.categoryBilancio),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            'Collegato a una transazione',
+                                            style: AppTypography.caption
+                                                .copyWith(
+                                                    color: AppColors
+                                                        .categoryBilancio),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                     if (document.tags.isNotEmpty) ...[
                                       const SizedBox(height: AppSpacing.xs),
                                       Wrap(

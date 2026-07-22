@@ -300,6 +300,194 @@ void main() {
     expect(find.text('1'), findsNWidgets(2));
   });
 
+  testWidgets(
+      'il blocco "Oggi" mostra il prossimo impegno e le attività aperte '
+      'quando presenti', (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeCalendarEvent = FakeCalendarEventRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeCalendarEvent.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final sections = [
+      for (final category in SystemWorkspaceCategory.all)
+        Workspace(
+          id: 'w-$category',
+          ownerId: 'u1',
+          name: category,
+          icon: 'folder',
+          status: WorkspaceStatus.active,
+          createdAt: DateTime.utc(2026, 1, 1),
+          category: category,
+        ),
+    ];
+    final now = DateTime.now();
+    final eventToday = CalendarEvent(
+      id: 'e1',
+      workspaceId: 'w-${SystemWorkspaceCategory.appuntamenti}',
+      title: 'Dentista',
+      startsAt: now,
+      durationMinutes: 30,
+      createdAt: now,
+    );
+    final openTask = Task(
+      id: 'task-1',
+      workspaceId: 'w-${SystemWorkspaceCategory.attivita}',
+      title: 'Comprare il latte',
+      status: TaskStatus.todo,
+      priority: TaskPriority.medium,
+      createdAt: now,
+    );
+    final doneTask = Task(
+      id: 'task-2',
+      workspaceId: 'w-${SystemWorkspaceCategory.attivita}',
+      title: 'Fatto ieri',
+      status: TaskStatus.done,
+      priority: TaskPriority.medium,
+      createdAt: now,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          calendarEventRepositoryProvider.overrideWithValue(fakeCalendarEvent),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(sections);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit(const []);
+    fakeTask.emit([openTask, doneTask]);
+    fakeDocument.emit(const []);
+    fakeTransaction.emit(const []);
+    fakeCalendarEvent.emit([eventToday]);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Prossimo: Dentista alle'), findsOneWidget);
+    expect(find.text('1 attività da fare'), findsOneWidget);
+  });
+
+  testWidgets(
+      'il blocco "Oggi" non mostra nulla quando non c\'è nessun impegno, '
+      'attività aperta o transazione questo mese', (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeCalendarEvent = FakeCalendarEventRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeCalendarEvent.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final sections = [
+      for (final category in SystemWorkspaceCategory.all)
+        Workspace(
+          id: 'w-$category',
+          ownerId: 'u1',
+          name: category,
+          icon: 'folder',
+          status: WorkspaceStatus.active,
+          createdAt: DateTime.utc(2026, 1, 1),
+          category: category,
+        ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          calendarEventRepositoryProvider.overrideWithValue(fakeCalendarEvent),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(sections);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit(const []);
+    fakeTask.emit(const []);
+    fakeDocument.emit(const []);
+    fakeTransaction.emit(const []);
+    fakeCalendarEvent.emit(const []);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Prossimo:'), findsNothing);
+    expect(find.textContaining('attività da fare'), findsNothing);
+    expect(find.textContaining('Proiezione fine mese'), findsNothing);
+  });
+
   testWidgets('Il saluto scrive il nome dell\'utente con la maiuscola',
       (tester) async {
     final fakeAuth = FakeAuthRepository();

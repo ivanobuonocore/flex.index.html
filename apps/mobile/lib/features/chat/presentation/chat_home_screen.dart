@@ -16,6 +16,7 @@ import '../../../shared/widgets/loading_view.dart';
 import '../../auth/application/session_controller.dart';
 import '../../document/application/document_controller.dart';
 import '../../reminder/application/calendar_event_controller.dart';
+import '../../task/application/task_controller.dart';
 import '../../transaction/application/transaction_controller.dart';
 import '../../workspace/application/workspace_category_meta.dart';
 import '../../workspace/application/workspace_controller.dart';
@@ -140,6 +141,11 @@ class _ChatHomeBodyState extends ConsumerState<_ChatHomeBody> {
 
     return Column(
       children: [
+        _TodayHighlights(
+          bilancioId: bilancioId,
+          appuntamentiId: appuntamentiId,
+          attivitaId: attivitaId,
+        ),
         if (sections.isNotEmpty)
           Container(
             decoration: BoxDecoration(
@@ -262,6 +268,163 @@ class _ChatHomeBodyState extends ConsumerState<_ChatHomeBody> {
       if (workspace.category == category) return workspace.id;
     }
     return null;
+  }
+}
+
+/// Blocco "Oggi" (richiesta esplicita dell'utente, dopo aver scartato una tab
+/// dedicata — `docs/product/06-information-architecture.md` l'aveva già
+/// esclusa in passato): riusa solo provider/funzioni pure già esistenti,
+/// nessuna nuova query. Ogni riga compare solo se ha qualcosa da mostrare; se
+/// non c'è nulla (nessun impegno oggi, nessuna attività aperta, nessuna
+/// transazione questo mese) il blocco non occupa spazio — stesso principio
+/// già usato per `_NotificationStatusBanner` in `reminder_list_screen.dart`.
+class _TodayHighlights extends ConsumerWidget {
+  const _TodayHighlights({
+    required this.bilancioId,
+    required this.appuntamentiId,
+    required this.attivitaId,
+  });
+
+  final String? bilancioId;
+  final String? appuntamentiId;
+  final String? attivitaId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = DateTime.now();
+
+    CalendarEvent? nextEventToday;
+    if (appuntamentiId != null) {
+      // `.asData?.value`, non `.value`: quest'ultimo rilancia l'eccezione
+      // originale su uno stato di errore (es. `calendarEventRepositoryProvider`
+      // non sovrascritto nei test, o un Workspace non ancora bootstrappato) —
+      // il blocco "Oggi" deve solo non mostrare quella riga, mai far fallire
+      // l'intera Chat Home per un provider secondario.
+      final events =
+          ref.watch(calendarEventsProvider(appuntamentiId!)).asData?.value ??
+              const [];
+      final today = remindersDueToday(events)
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      nextEventToday = today.isEmpty ? null : today.first;
+    }
+
+    var openTasksCount = 0;
+    if (attivitaId != null) {
+      final tasks =
+          ref.watch(tasksProvider(attivitaId!)).asData?.value ?? const [];
+      openTasksCount = openTasks(tasks).length;
+    }
+
+    int? projectedCents;
+    if (bilancioId != null) {
+      final transactions =
+          ref.watch(transactionsProvider(bilancioId!)).asData?.value ??
+              const [];
+      final confirmed = confirmedThisMonth(transactions, now: now);
+      if (confirmed.isNotEmpty) {
+        projectedCents = projectedMonthEndExpenseCents(
+          spentSoFarCents: totalExpenseCents(confirmed),
+          now: now,
+        );
+      }
+    }
+
+    final rows = <Widget>[
+      if (nextEventToday != null)
+        _TodayRow(
+          icon: Icons.event_outlined,
+          text: 'Prossimo: ${nextEventToday.title} alle '
+              '${_formatEventTime(nextEventToday.startsAt)}',
+          onTap: () => context.push('/workspace/$appuntamentiId/reminders'),
+        ),
+      if (openTasksCount > 0)
+        _TodayRow(
+          icon: Icons.checklist_outlined,
+          text: openTasksCount == 1
+              ? '1 attività da fare'
+              : '$openTasksCount attività da fare',
+          onTap: () => context.push('/workspace/$attivitaId/tasks'),
+        ),
+      if (projectedCents != null)
+        _TodayRow(
+          icon: Icons.trending_up,
+          text: 'Proiezione fine mese: ${_formatEventAmount(projectedCents)}',
+          onTap: () => context.push('/balance'),
+        ),
+    ];
+
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+          AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: AppColors.heroGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: AppRadii.standardRadius,
+        boxShadow: AppShadows.glow(
+          color: AppColors.heroGradient.first,
+          isDark: Theme.of(context).brightness == Brightness.dark,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0) const SizedBox(height: AppSpacing.xs),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatEventTime(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  String _formatEventAmount(int amountCents) =>
+      '${(amountCents / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
+}
+
+class _TodayRow extends StatelessWidget {
+  const _TodayRow({required this.icon, required this.text, this.onTap});
+
+  final IconData icon;
+  final String text;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadii.buttonRadius,
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: Colors.white.withOpacity(0.9)),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.caption.copyWith(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

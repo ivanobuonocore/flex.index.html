@@ -218,24 +218,53 @@ class _ReminderListScreenState extends ConsumerState<ReminderListScreen> {
                                   subtitle:
                                       Text(_formatDateTime(event.startsAt)),
                                   // Badge "ricorrente" (richiesta esplicita
-                                  // dell'utente: "promemoria ricorrenti") —
-                                  // ogni occorrenza resta una riga
-                                  // indipendente ed eliminabile singolarmente,
-                                  // il badge è solo informativo.
-                                  trailing: event.recurrenceGroupId != null
-                                      ? Tooltip(
-                                          message: 'Promemoria ricorrente',
-                                          child: Icon(
-                                            Icons.repeat,
-                                            size: 18,
-                                            color: isPast
-                                                ? Theme.of(context)
-                                                    .disabledColor
-                                                : AppColors
-                                                    .categoryAppuntamenti,
-                                          ),
-                                        )
-                                      : null,
+                                  // dell'utente: "promemoria ricorrenti") e
+                                  // "creato dalla Chat" (Knowledge Graph
+                                  // "lite" — richiesta esplicita dell'utente:
+                                  // `sourceChatId` è già scritto da
+                                  // create_reminder in ai-chat, nessuna nuova
+                                  // query) — entrambe solo informative, ogni
+                                  // occorrenza resta comunque una riga
+                                  // indipendente ed eliminabile singolarmente.
+                                  trailing: (event.recurrenceGroupId == null &&
+                                          event.sourceChatId == null)
+                                      ? null
+                                      : Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (event.sourceChatId != null)
+                                              Tooltip(
+                                                message: 'Creato dalla Chat',
+                                                child: Icon(
+                                                  Icons.forum_outlined,
+                                                  size: 18,
+                                                  color: isPast
+                                                      ? Theme.of(context)
+                                                          .disabledColor
+                                                      : AppColors
+                                                          .categoryAppuntamenti,
+                                                ),
+                                              ),
+                                            if (event.recurrenceGroupId !=
+                                                null) ...[
+                                              const SizedBox(
+                                                  width: AppSpacing.xs),
+                                              Tooltip(
+                                                message:
+                                                    'Promemoria ricorrente',
+                                                child: Icon(
+                                                  Icons.repeat,
+                                                  size: 18,
+                                                  color: isPast
+                                                      ? Theme.of(context)
+                                                          .disabledColor
+                                                      : AppColors
+                                                          .categoryAppuntamenti,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
                                 ),
                               ),
                             );
