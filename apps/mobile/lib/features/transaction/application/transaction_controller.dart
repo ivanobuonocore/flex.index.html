@@ -195,3 +195,19 @@ List<MonthlyTotals> monthlyTotals(
     );
   }).toList(growable: false);
 }
+
+/// Estrapolazione lineare della spesa a fine mese (integrazione richiesta
+/// esplicitamente): proiezione di quanto già speso su tutti i giorni del
+/// mese, non un modello predittivo — ha senso solo per il mese in corso (il
+/// chiamante decide quando mostrarla, questa funzione non lo sa). `null` il
+/// primo giorno del mese: nessuna proiezione sensata da un solo giorno di
+/// dati (dividerebbe per un campione troppo piccolo, amplificando rumore).
+int? projectedMonthEndExpenseCents({
+  required int spentSoFarCents,
+  required DateTime now,
+}) {
+  final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+  final dayOfMonth = now.day;
+  if (dayOfMonth <= 1) return null;
+  return (spentSoFarCents / dayOfMonth * daysInMonth).round();
+}

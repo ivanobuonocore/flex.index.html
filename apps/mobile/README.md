@@ -443,6 +443,13 @@ Non ancora presenti: settings, billing.
   cambiare un Document dopo la creazione — non un `copyWith` generico, che non avrebbe senso dato
   che gli altri campi sono immutabili. Mai popolati dall'AI Engine: `extract_transactions` in
   `ai-chat` resta invariato.
+- **Previsione di fine mese nel Bilancio** (integrazione richiesta esplicitamente) — nuova
+  funzione pura `projectedMonthEndExpenseCents` in `transaction_controller.dart`: estrapolazione
+  lineare della spesa già sostenuta sui giorni restanti del mese (non un modello predittivo), `null`
+  il primo giorno del mese (nessuna proiezione sensata da un solo giorno di dati). Una nuova card
+  compare tra l'hero e il grafico a torta, solo quando il mese selezionato nella tendina è quello
+  corrente — su uno storico non avrebbe senso, ed è il chiamante (`BalanceOverviewScreen`) a
+  garantirlo, non la funzione pura.
 
 ## Setup locale
 

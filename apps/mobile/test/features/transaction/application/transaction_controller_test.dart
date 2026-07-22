@@ -307,4 +307,45 @@ void main() {
       expect(totals[1].expenseCents, 2300);
     });
   });
+
+  group('projectedMonthEndExpenseCents', () {
+    test('estrapola linearmente sui giorni del mese', () {
+      // 15 giugno (30 giorni nel mese): metà mese esatta, 500€ spesi -> 1000€
+      // proiettati a fine mese.
+      final projected = projectedMonthEndExpenseCents(
+        spentSoFarCents: 50000,
+        now: DateTime.utc(2026, 6, 15),
+      );
+
+      expect(projected, 100000);
+    });
+
+    test('il primo giorno del mese non produce una proiezione', () {
+      final projected = projectedMonthEndExpenseCents(
+        spentSoFarCents: 2000,
+        now: DateTime.utc(2026, 6, 1),
+      );
+
+      expect(projected, isNull);
+    });
+
+    test('attraversa correttamente mesi con un numero diverso di giorni', () {
+      // Febbraio 2026 (non bisestile, 28 giorni): al giorno 14, metà mese.
+      final projected = projectedMonthEndExpenseCents(
+        spentSoFarCents: 14000,
+        now: DateTime.utc(2026, 2, 14),
+      );
+
+      expect(projected, 28000);
+    });
+
+    test('a fine mese la proiezione coincide con lo speso reale', () {
+      final projected = projectedMonthEndExpenseCents(
+        spentSoFarCents: 30000,
+        now: DateTime.utc(2026, 6, 30),
+      );
+
+      expect(projected, 30000);
+    });
+  });
 }

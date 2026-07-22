@@ -174,6 +174,57 @@ void main() {
     expect(find.text('Stipendio'), findsNothing);
   });
 
+  testWidgets('la proiezione di fine mese compare solo per il mese corrente',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final lastMonth = DateTime(now.year, now.month - 1, 15);
+    final oldExpense = Transaction(
+      id: 't-old',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Spesa del mese scorso',
+      amountCents: 3000,
+      occurredAt: lastMonth,
+      status: TransactionStatus.confirmed,
+      createdAt: lastMonth,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([personalIncome, oldExpense]);
+    await tester.pumpAndSettle();
+
+    // Mese corrente (default): la card di proiezione può comparire (dipende
+    // dal giorno del mese reale, `null` solo il primo giorno) — qui si
+    // verifica solo che non compaia MAI su uno storico, la proprietà che
+    // conta davvero.
+    await tester.drag(find.byType(ListView), const Offset(0, 2000));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.expand_more));
+    await tester.pumpAndSettle();
+    final label = '${_italianMonths[lastMonth.month - 1]} ${lastMonth.year}';
+    await tester.tap(find.text(label));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Proiezione di fine mese'), findsNothing);
+  });
+
   testWidgets('toccare la pillola Entrate apre il dettaglio per categoria',
       (tester) async {
     final fakeTransaction = FakeTransactionRepository();

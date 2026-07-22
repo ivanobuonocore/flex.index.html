@@ -212,6 +212,19 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                   label: const Text('Categorie di spesa'),
                 ),
               ],
+              if (selectedMonth == currentMonth) ...[
+                Builder(builder: (context) {
+                  final projected = projectedMonthEndExpenseCents(
+                    spentSoFarCents: expense,
+                    now: now,
+                  );
+                  if (projected == null) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.sm),
+                    child: _ProjectedExpenseCard(projectedCents: projected),
+                  );
+                }),
+              ],
               const SizedBox(height: AppSpacing.md),
               _BalancePieChart(incomeCents: income, expenseCents: expense),
               const SizedBox(height: AppSpacing.lg),
@@ -391,6 +404,41 @@ class _BalanceHeroCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Previsione di fine mese (integrazione richiesta esplicitamente) — solo
+/// per il mese in corso, mai su uno storico (il chiamante lo garantisce
+/// mostrando questa card solo quando `selectedMonth == currentMonth`).
+class _ProjectedExpenseCard extends StatelessWidget {
+  const _ProjectedExpenseCard({required this.projectedCents});
+
+  final int projectedCents;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: AppRadii.standardRadius,
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.trending_up, size: 18),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              'Proiezione di fine mese: ${_formatAmount(projectedCents)}',
+              style: AppTypography.caption,
+            ),
           ),
         ],
       ),

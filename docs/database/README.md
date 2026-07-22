@@ -910,6 +910,12 @@ caricamento), quindi i tag sono l'unico campo modificabile dopo la creazione —
 foglio dedicato (`_EditTagsSheet` in `document_list_screen.dart`) invece di riusare una sheet di
 creazione/modifica come per Note/Transazioni.
 
+## Fase 3 (slice 26) — Previsione di fine mese nel Bilancio
+
+Richiesta esplicita dell'utente. Nessuna tabella nuova: `projectedMonthEndExpenseCents` è una
+funzione pura lato client (`transaction_controller.dart`) sui dati già letti da `transactions`,
+nessuna nuova query né colonna.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:
