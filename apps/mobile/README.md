@@ -335,6 +335,13 @@ Implementate, con dati reali via Supabase:
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
 
+- **onboarding leggero al primo accesso** (richiesta esplicita dell'utente) — nuova
+  `OnboardingScreen` (`/onboarding`), 3 schermate scorrevoli (`PageView`) sui pilastri dell'app
+  (Chat, Spazi, Memoria/conferma esplicita) con un pulsante "Salta" sempre visibile e "Inizia"
+  solo sull'ultima. `User.onboardingCompleted` (default `false`, persistito lato identity
+  provider come la preferenza di tema — nessuna nuova tabella) aggiunge un gate al redirect di
+  GoRouter: un utente autenticato che non l'ha ancora completato viene sempre indirizzato lì
+  prima di `/chat`, mai più dopo averla completata o saltata.
 - **profile** — identità account, logout, tema e Memoria ora; abbonamento e privacy nelle fasi
   successive.
 

@@ -39,6 +39,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final workspace = Workspace(
       id: 'w1',

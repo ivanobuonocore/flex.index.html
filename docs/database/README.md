@@ -880,6 +880,20 @@ a 0 righe visibili per B per tutta la prova (nessuna policy aggiunta); dopo che 
 membri, B perde di nuovo ogni accesso a note/task — stesso ciclo di vita già verificato per le
 Transazioni nella slice 8.
 
+## Fase 3 (slice 24) — Onboarding leggero al primo accesso
+
+Richiesta esplicita dell'utente. Nessuna tabella nuova: `User.onboardingCompleted` (default
+`false`) segue lo stesso meccanismo già usato per `themeMode` (slice "Tema chiaro/scuro") — salvato
+nei metadata di Supabase Auth (`auth.updateUser({data: {onboarding_completed: true}})`), letto in
+`SupabaseAuthRepository._toDomainUser`, si riflette in `watchCurrentUser` tramite l'evento
+`userUpdated` di `onAuthStateChange`, nessuno stato locale duplicato.
+
+Nuova `OnboardingScreen` (`/onboarding`, `PageView` di 3 schermate + "Salta"/"Avanti"/"Inizia") e un
+gate in più nel redirect di `appRouterProvider`: un utente autenticato con
+`!user.onboardingCompleted` viene sempre mandato lì prima di `/chat`, indipendentemente da dove
+stesse cercando di andare; completarla o saltarla (entrambi chiamano
+`AuthController.completeOnboarding`) lo libera in modo permanente.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

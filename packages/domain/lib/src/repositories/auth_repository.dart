@@ -27,4 +27,10 @@ abstract interface class AuthRepository {
   /// stream di [watchCurrentUser] appena l'identity provider conferma
   /// l'aggiornamento — nessuno stato locale duplicato qui.
   Future<Result<Unit>> updateThemeMode(AppThemeMode mode);
+
+  /// Segna l'onboarding leggero come completato (richiesta esplicita
+  /// dell'utente), così non compare più agli accessi successivi. Stesso
+  /// meccanismo di [updateThemeMode]: nessuno stato locale duplicato, si
+  /// riflette in [watchCurrentUser].
+  Future<Result<Unit>> completeOnboarding();
 }

@@ -49,6 +49,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final chat = Chat(
       id: 'c1',
@@ -137,6 +138,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final chat = Chat(
       id: 'c1',
@@ -223,6 +225,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final chat = Chat(
       id: 'c1',
@@ -322,6 +325,7 @@ void main() {
       name: 'ivano',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final chat = Chat(
       id: 'c1',
@@ -386,6 +390,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final chat = Chat(
       id: 'c1',
@@ -458,6 +463,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final chat = Chat(
       id: 'c1',
@@ -549,6 +555,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final chat = Chat(
       id: 'c1',
@@ -620,6 +627,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final chat = Chat(
       id: 'c1',
@@ -776,6 +784,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final chat = Chat(
       id: 'c1',
@@ -867,6 +876,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final chat = Chat(
       id: 'c1',
@@ -955,6 +965,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final chat = Chat(
       id: 'c1',
@@ -1052,6 +1063,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final chat = Chat(
       id: 'c1',

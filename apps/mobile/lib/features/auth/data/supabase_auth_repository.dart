@@ -126,6 +126,20 @@ class SupabaseAuthRepository implements AuthRepository {
     }
   }
 
+  @override
+  Future<Result<Unit>> completeOnboarding() async {
+    try {
+      await _client.auth.updateUser(
+        supabase.UserAttributes(data: {'onboarding_completed': true}),
+      );
+      return const Result.ok(unit);
+    } catch (e) {
+      return Result.err(UnexpectedFailure(
+          'Non è stato possibile salvare la preferenza. Riprova.',
+          cause: e));
+    }
+  }
+
   User? _toDomainUser(supabase.User? authUser) {
     if (authUser == null) return null;
     final metadataName = (authUser.userMetadata?['name'] as String?)?.trim();
@@ -143,6 +157,8 @@ class SupabaseAuthRepository implements AuthRepository {
           ? DateTime.tryParse(authUser.lastSignInAt!)
           : null,
       themeMode: _themeModeFromMetadata(authUser.userMetadata?['theme_mode']),
+      onboardingCompleted:
+          authUser.userMetadata?['onboarding_completed'] == true,
     );
   }
 
