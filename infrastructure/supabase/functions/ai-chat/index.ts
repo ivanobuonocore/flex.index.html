@@ -125,6 +125,29 @@ const TRANSACTION_CATEGORIES = [
   "altro",
 ] as const;
 
+// Modello usato per la lettura isolata di uno scontrino (handleExtractReceipt): a
+// differenza del resto della Chat, questa modalità non è legata a una riga `chats`
+// (nessun `ai_model` da leggere), quindi serve un default fisso — stesso valore di
+// `kDefaultAiModel` in apps/mobile/lib/features/chat/data/supabase_chat_repository.dart
+// (duplicato invece di condiviso, stessa convenzione già usata per TRANSACTION_CATEGORIES
+// tra Dart e TypeScript).
+const RECEIPT_EXTRACTION_MODEL = "claude-sonnet-5";
+
+// System prompt della lettura isolata di uno scontrino: forza l'uso di
+// extract_transactions (tool_choice, non "auto") perché qui serve sempre un risultato
+// strutturato da precompilare nel form, mai una risposta in prosa.
+const RECEIPT_EXTRACTION_SYSTEM_PROMPT =
+  `Analizza la foto di uno scontrino o di una ricevuta allegata e registrala con lo strumento
+extract_transactions. Usa sempre type "expense" (uno scontrino non rappresenta mai un'entrata).
+La descrizione è il nome del negozio/esercizio se leggibile nella foto, altrimenti una breve
+descrizione degli articoli principali. L'importo è il totale pagato, non un singolo articolo. Se
+la data non è leggibile nella foto, usa la data odierna fornita nel contesto. Classifica la
+categoria con lo stesso criterio del resto della Chat (es. supermercato → "alimentari",
+ristorante/bar → "svago", farmacia → "salute", benzina → "trasporti"). Se la foto non mostra
+affatto uno scontrino o una ricevuta (nessun importo/negozio leggibile), usa comunque lo
+strumento ma con amount_cents 0 — verrà scartato lato server invece di registrare dati
+inventati.`;
+
 // Addendum al system prompt, solo quando è disponibile un Workspace per i promemoria
 // (vedi `reminderToolEnabled`): a differenza delle Transazioni, un promemoria non ha
 // uno stato "pending/confirmed" — non è un dato finanziario da poter contare per
@@ -442,6 +465,12 @@ interface RequestBody {
   // Sezione "Attività" — separata sia da `workspaceId` che da `remindersWorkspaceId`: un
   // elemento di lista (manage_tasks) non appartiene né al Bilancio né agli Appuntamenti.
   tasksWorkspaceId?: string | null;
+  // Lettura isolata di uno scontrino già caricato (Fase 3, "OCR sugli scontrini
+  // allegati manualmente" — integrazione richiesta esplicitamente): quando presente,
+  // nessuno degli altri campi/della logica di Chat viene usato — vedi
+  // `handleExtractReceipt` più sotto. Mai combinato con `chatId` nella stessa
+  // richiesta: il client li invoca come due modalità distinte.
+  extractReceiptDocumentId?: string;
 }
 
 interface ContextItem {
@@ -529,9 +558,6 @@ Deno.serve(async (req) => {
     }
 
     const body = (await req.json()) as Partial<RequestBody>;
-    if (!body.chatId) {
-      return jsonError("chatId obbligatorio.", 400);
-    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -542,6 +568,23 @@ Deno.serve(async (req) => {
         "ai-chat: variabili d'ambiente mancanti (SUPABASE_URL/ANON_KEY/ANTHROPIC_API_KEY)",
       );
       return jsonError("Servizio AI non configurato.", 500);
+    }
+
+    // Modalità isolata "leggi uno scontrino" (vedi RequestBody.extractReceiptDocumentId):
+    // esce subito, prima di richiedere/usare `chatId` — nessuna riga `messages` coinvolta.
+    if (body.extractReceiptDocumentId) {
+      const supabaseForReceipt = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      return await handleExtractReceipt(
+        supabaseForReceipt,
+        anthropicApiKey,
+        body.extractReceiptDocumentId,
+      );
+    }
+
+    if (!body.chatId) {
+      return jsonError("chatId obbligatorio.", 400);
     }
 
     // Client con il JWT dell'utente: tutte le query qui sotto sono soggette a RLS
@@ -1331,6 +1374,76 @@ async function fetchImageBlock(
       data: encodeBase64(bytes),
     },
   };
+}
+
+// Lettura isolata di uno scontrino/ricevuta già caricato (Fase 3, "OCR sugli scontrini
+// allegati manualmente" — integrazione richiesta esplicitamente): nessuna riga `messages`
+// creata, un solo giro con Anthropic e tool_choice forzato su extract_transactions (non
+// "auto" come nel resto della Chat) perché qui serve sempre un risultato strutturato da
+// precompilare nel form di apps/mobile, mai una risposta in prosa. Non bloccante per il
+// chiamante: qualunque esito diverso da "estratto con successo" (documento non
+// leggibile, Anthropic non disponibile, nessuna transazione valida nella risposta) torna
+// `{ ok: true, result: null }`, mai un errore — il form resta semplicemente vuoto, come
+// se l'utente non avesse allegato nulla.
+async function handleExtractReceipt(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  anthropicApiKey: string,
+  documentId: string,
+): Promise<Response> {
+  const imageBlock = await fetchImageBlock(supabase, documentId);
+  if (!imageBlock) return jsonReceiptResult(null);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const anthropicResponse = await fetch(ANTHROPIC_API_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": anthropicApiKey,
+      "anthropic-version": ANTHROPIC_VERSION,
+    },
+    body: JSON.stringify({
+      model: RECEIPT_EXTRACTION_MODEL,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      thinking: { type: "disabled" },
+      system: `${RECEIPT_EXTRACTION_SYSTEM_PROMPT}\n\nData odierna: ${today}.`,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Estrai i dati di questo scontrino/ricevuta." },
+            imageBlock,
+          ],
+        },
+      ],
+      tools: [EXTRACT_TRANSACTIONS_TOOL],
+      tool_choice: { type: "tool", name: "extract_transactions" },
+    }),
+  });
+
+  if (!anthropicResponse.ok) {
+    const detail = await anthropicResponse.text();
+    console.error(
+      "ai-chat: errore Anthropic (extract-receipt)",
+      anthropicResponse.status,
+      detail,
+    );
+    return jsonReceiptResult(null);
+  }
+
+  const anthropicBody = await anthropicResponse.json();
+  const rawSuggestions = extractTransactionSuggestions(anthropicBody);
+  const sanitized = rawSuggestions
+    .map(sanitizeTransaction)
+    .find((t): t is TransactionSuggestion => t !== null) ?? null;
+  return jsonReceiptResult(sanitized);
+}
+
+function jsonReceiptResult(result: TransactionSuggestion | null): Response {
+  return new Response(JSON.stringify({ ok: true, result }), {
+    status: 200,
+    headers: { ...CORS_HEADERS, "content-type": "application/json" },
+  });
 }
 
 const BASE64_CHARS =

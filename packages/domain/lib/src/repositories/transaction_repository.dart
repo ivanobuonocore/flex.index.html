@@ -1,5 +1,6 @@
 import 'package:pip_shared/pip_shared.dart';
 
+import '../entities/receipt_extraction.dart';
 import '../entities/transaction.dart';
 import '../enums.dart';
 
@@ -45,4 +46,11 @@ abstract interface class TransactionRepository {
     required String transactionId,
     required String? documentId,
   });
+
+  /// Lettura automatica (OCR via AI Engine) di uno scontrino/ricevuta già
+  /// allegato (integrazione richiesta esplicitamente). Ritorna `null` — mai
+  /// un [Failure] bloccante — se la foto non è leggibile come scontrino o il
+  /// servizio AI non è disponibile: l'utente compila comunque il form a
+  /// mano in quel caso, come oggi.
+  Future<Result<ReceiptExtraction?>> extractReceiptData(String documentId);
 }

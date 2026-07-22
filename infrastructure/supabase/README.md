@@ -96,7 +96,17 @@ spese ed entrate descritte dall'utente e registrarle come "in attesa di conferma
 (`docs/database/README.md`, Fase 3 slice 2). Legge anche eventuali foto allegate all'ultimo
 messaggio dell'utente e le invia ad Anthropic come immagini (Fase 3 slice 3) — vedi
 `docs/database/README.md` per i limiti (max 3 foto, ~5MB ciascuna, formati non standard come
-HEIC non garantiti). Richiede una chiave Anthropic, mai committata nel repository:
+HEIC non garantiti).
+
+Guadagna anche una modalità isolata (`extractReceiptDocumentId` nel body — Fase 3, "OCR sugli
+scontrini allegati manualmente", integrazione richiesta esplicitamente): letta uno scontrino/
+ricevuta già caricato con la stessa pipeline immagine di sopra, forza il tool `extract_transactions`
+(`tool_choice`, non "auto") e ritorna solo `{ ok, result }` — nessuna riga `chats`/`messages`
+coinvolta, nessuno storico di conversazione. Riusa la stessa `ANTHROPIC_API_KEY`, nessun segreto
+nuovo; modello fisso (`RECEIPT_EXTRACTION_MODEL`, coerente con `kDefaultAiModel` lato mobile) dato
+che non c'è una riga `chats` da cui leggere `ai_model`.
+
+Richiede una chiave Anthropic, mai committata nel repository:
 
 ```
 npx supabase secrets set ANTHROPIC_API_KEY=<la-tua-chiave>

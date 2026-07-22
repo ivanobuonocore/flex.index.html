@@ -6,6 +6,7 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/providers.dart';
 import '../../document/application/document_controller.dart';
 import '../application/transaction_category_meta.dart';
 import '../application/transaction_controller.dart';
@@ -150,7 +151,31 @@ class _CreateEditTransactionSheetState
     if (attachFailure != null) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(attachFailure.message)));
+      return;
     }
+
+    await _prefillFromReceipt(document.id);
+  }
+
+  /// Lettura automatica (OCR via AI Engine) dello scontrino appena allegato
+  /// (integrazione richiesta esplicitamente): se produce un risultato
+  /// utilizzabile, precompila descrizione/importo/categoria — l'utente resta
+  /// libero di correggerli prima di salvare, il tocco su "Salva" resta
+  /// sempre suo. Nessun errore bloccante: se la lettura fallisce o non trova
+  /// nulla, il form resta com'era, esattamente come prima di questa slice.
+  Future<void> _prefillFromReceipt(String documentId) async {
+    final result = await ref
+        .read(transactionRepositoryProvider)
+        .extractReceiptData(documentId);
+    if (!mounted) return;
+    final extraction = result.fold((value) => value, (_) => null);
+    if (extraction == null) return;
+
+    setState(() {
+      _descriptionController.text = extraction.description;
+      _amountController.text = _formatAmountForInput(extraction.amountCents);
+      _category = extraction.category;
+    });
   }
 
   Future<void> _removeReceipt() async {

@@ -995,6 +995,50 @@ superata su create e su confirm, nessuna chiamata senza budget configurato, su u
 Bilancio condiviso. **Non verificato in questa sessione**: nessuna chiamata HTTP reale né notifica
 recapitata a un browser (richiederebbe un progetto Supabase remoto o Docker, come `send-test-push`).
 
+## Fase 3 (slice 29) — OCR sugli scontrini allegati manualmente
+
+Integrazione richiesta esplicitamente. Finora "Allega scontrino" (`create_edit_transaction_sheet.
+dart`, disponibile solo in modifica: serve l'id della Transazione già salvata per collegare il
+Documento) era un allegato statico — upload e collegamento a `Transaction.documentId`, nessuna
+lettura del contenuto. In Chat invece `ai-chat` manda già blocchi immagine reali ad Anthropic
+(`fetchImageBlock`, Fase 3 slice 3) e il modello può già chiamare `extract_transactions` leggendo
+la foto: pipeline vision riusabile, non duplicata con un servizio OCR esterno (coerente con "mai un
+secondo provider AI diretto dal frontend").
+
+Nessuna migrazione: la Edge Function `ai-chat` guadagna una modalità isolata, attivata da un nuovo
+campo opzionale del body (`extractReceiptDocumentId`) che esce prima di richiedere `chatId` — nessuna
+riga `messages`/`chats` coinvolta, un solo giro con Anthropic e `tool_choice` che forza
+`extract_transactions` (non lasciato "auto" come nel resto della Chat, perché qui serve sempre un
+risultato strutturato, mai una risposta in prosa). Modello fisso (`RECEIPT_EXTRACTION_MODEL`,
+coerente con `kDefaultAiModel` lato mobile) dato che questa modalità non è legata a una riga `chats`
+da cui leggere `ai_model`. Se la foto non mostra uno scontrino leggibile, il system prompt istruisce
+il modello a usare comunque lo strumento ma con `amount_cents: 0`, scartato lato server
+(`sanitizeTransaction`, già esistente) invece di propagare dati inventati.
+
+Mobile: nuovo `TransactionRepository.extractReceiptData(documentId)`, best-effort come
+`BudgetRepository.checkBudgetAlert` (slice 28) — nessun `Failure` mai propagato, `null` per
+qualunque esito diverso da "estratto con successo". La conversione della risposta JSON in un
+`ReceiptExtraction` (nuova entità: type/description/amountCents/occurredAt/category) è isolata in
+una funzione pura (`parseReceiptExtractionResponse` in `supabase_transaction_repository.dart`)
+proprio per poterla testare senza mockare il client Supabase — nessun test in questo progetto
+esercita un `Supabase*Repository` direttamente, sempre tramite l'interfaccia di dominio via un
+fake. Subito dopo un upload+attach riuscito (`_pickAndAttachReceipt` in
+`create_edit_transaction_sheet.dart`), `_prefillFromReceipt` chiama il nuovo metodo e, se produce
+un risultato, precompila descrizione/importo/categoria — mai la data né il tipo (sempre "uscita"
+per uno scontrino, e comunque non modificabile in modifica) — lasciando comunque l'utente libero di
+correggere prima di salvare.
+
+Verificato: `deno check`/`deno lint`/`deno fmt --check` sulle parti nuove di `ai-chat` (i 2
+problemi lint pre-esistenti segnalati su `extractToolUseBlocks` e le divergenze di `deno fmt` sul
+resto del file non sono stati introdotti da questa slice — verificato confrontando lint/fmt prima e
+dopo la modifica, nessuna riga toccata da questa slice compare in quei problemi); test della
+funzione pura `parseReceiptExtractionResponse` (risposta valida, risultato assente, importo zero,
+descrizione vuota, data non parsabile, categoria sconosciuta, tipo diverso da income/expense).
+**Non verificato in questa sessione**: il precompilamento effettivo nel form richiede
+selezionare/caricare un file reale (`file_picker`, non mockabile in questi test — stesso limite già
+documentato per l'allegato scontrino originale) e nessuna chiamata Anthropic reale (richiederebbe
+un progetto Supabase remoto o Docker).
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

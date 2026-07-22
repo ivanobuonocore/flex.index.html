@@ -483,6 +483,21 @@ Non ancora presenti: settings, billing.
   primissima spesa creata subito dopo l'avvio, prima di aver mai aperto il Bilancio), l'avviso
   può essere saltato silenziosamente quella volta; nessun impatto sulla correttezza del saldo, solo
   sulla tempestività della notifica.
+- **OCR sugli scontrini allegati manualmente** (integrazione richiesta esplicitamente) — finora
+  "Allega scontrino" (`create_edit_transaction_sheet.dart`, solo in modifica: serve l'id della
+  Transazione già salvata) era un allegato statico, nessuna lettura del contenuto. Riusa la stessa
+  pipeline vision già usata da `ai-chat` per le foto allegate in Chat (`fetchImageBlock`), non un
+  secondo servizio OCR esterno (coerente con "mai un secondo provider AI diretto dal frontend"):
+  subito dopo l'upload+attach, `_prefillFromReceipt` chiama `TransactionRepository.
+  extractReceiptData` (nuovo metodo — Edge Function `ai-chat` in una modalità isolata,
+  `extractReceiptDocumentId`, nessun messaggio di Chat creato, tool `extract_transactions` forzato
+  invece di lasciato "auto") e, se torna un risultato, precompila descrizione/importo/categoria nel
+  form — l'utente resta libero di correggerli prima di toccare "Salva" ("l'AI suggerisce, l'utente
+  decide", stesso principio già applicato al resto dell'AI Engine). Se la lettura fallisce o la
+  foto non è leggibile come scontrino, il form resta com'era: nessun errore bloccante, stesso
+  principio già usato per la notifica budget. `parseReceiptExtractionResponse` (funzione pura in
+  `supabase_transaction_repository.dart`) isola la conversione della risposta JSON in un
+  `ReceiptExtraction`, testabile senza mockare il client Supabase.
 
 ## Setup locale
 

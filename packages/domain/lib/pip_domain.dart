@@ -17,6 +17,7 @@ export 'src/entities/document.dart';
 export 'src/entities/memory.dart';
 export 'src/entities/message.dart';
 export 'src/entities/note.dart';
+export 'src/entities/receipt_extraction.dart';
 export 'src/entities/recurring_transaction_template.dart';
 export 'src/entities/search_result.dart';
 export 'src/entities/task.dart';

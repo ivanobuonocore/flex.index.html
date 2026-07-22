@@ -14,6 +14,15 @@ import '../../../support/fake_transaction_repository.dart';
 /// visibilità del pulsante "Allega scontrino" quando non c'è ancora un
 /// allegato e la rimozione di un allegato esistente (nessun file picker
 /// coinvolto in quel percorso).
+///
+/// Stesso limite per l'OCR sugli scontrini (integrazione richiesta
+/// esplicitamente, "l'AI suggerisce, l'utente decide"): il precompilamento
+/// di descrizione/importo/categoria (`_prefillFromReceipt` in
+/// create_edit_transaction_sheet.dart) scatta solo dopo un upload+attach
+/// riuscito, quindi non è esercitabile qui senza lo stesso file_picker non
+/// mockabile — la logica di conversione della risposta dell'Edge Function
+/// (`parseReceiptExtractionResponse`) è invece testata direttamente in
+/// `test/features/transaction/data/supabase_transaction_repository_test.dart`.
 void main() {
   const workspaceId = 'w1';
   final transaction = Transaction(

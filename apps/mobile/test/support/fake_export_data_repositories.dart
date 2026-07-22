@@ -202,4 +202,8 @@ class FakeInstantTransactionRepository implements TransactionRepository {
   Future<Result<Transaction>> attachDocument(
           {required String transactionId, required String? documentId}) =>
       throw UnimplementedError();
+
+  @override
+  Future<Result<ReceiptExtraction?>> extractReceiptData(String documentId) =>
+      throw UnimplementedError();
 }

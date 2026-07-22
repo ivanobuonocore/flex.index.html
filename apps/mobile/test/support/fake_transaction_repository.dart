@@ -24,6 +24,8 @@ class FakeTransactionRepository implements TransactionRepository {
   String? lastAttachedTransactionId;
   String? lastAttachedDocumentId;
   bool attachDocumentCalled = false;
+  Result<ReceiptExtraction?>? extractReceiptDataResult;
+  String? lastExtractReceiptDocumentId;
 
   void emit(List<Transaction> transactions) => _controller.add(transactions);
 
@@ -84,6 +86,13 @@ class FakeTransactionRepository implements TransactionRepository {
     return attachDocumentResult ??
         const Result<Transaction>.err(
             ValidationFailure('Nessun risultato configurato.'));
+  }
+
+  @override
+  Future<Result<ReceiptExtraction?>> extractReceiptData(
+      String documentId) async {
+    lastExtractReceiptDocumentId = documentId;
+    return extractReceiptDataResult ?? const Result.ok(null);
   }
 
   void dispose() => _controller.close();
