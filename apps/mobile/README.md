@@ -245,6 +245,10 @@ Implementate, con dati reali via Supabase:
 - **reminder (eliminare l'intera serie)** (richiesta esplicita dell'utente) — lo swipe su un
   promemoria ricorrente chiede prima "Solo questa occorrenza" o "Intera serie" invece di
   cancellare subito; un promemoria singolo resta immediato come sempre.
+- **budget (per categoria)** (richiesta esplicita dell'utente) — legato all'utente, non a un
+  Workspace: nuova sezione nel Bilancio con una barra di avanzamento per categoria (spesa del
+  mese/limite), rossa e "Budget superato" oltre il 100%. Nascosta se non è stato impostato alcun
+  budget.
 - **memory (prima slice minima)** (richiesta esplicita dell'utente) — solo il livello Globale:
   l'AI salva una nota quando l'utente dice esplicitamente "ricorda che..." (tool `remember_fact`,
   sempre disponibile come le query di sola lettura), e le memorie salvate vengono iniettate nel

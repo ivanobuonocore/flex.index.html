@@ -11,6 +11,7 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
+import '../../budget/application/budget_controller.dart';
 import '../../workspace/application/workspace_controller.dart';
 import '../application/transaction_category_meta.dart';
 import '../application/transaction_controller.dart';
@@ -179,6 +180,8 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
               ),
               const SizedBox(height: AppSpacing.md),
               _BalancePieChart(incomeCents: income, expenseCents: expense),
+              const SizedBox(height: AppSpacing.lg),
+              _BudgetSection(expenseByCategory: expenseByCategory),
               if (pending.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
                 Text('In attesa di conferma', style: AppTypography.heading3),
@@ -1029,4 +1032,298 @@ String _buildSummaryText({
   writeCategoryLines('Uscite', expenseByCategory);
 
   return buffer.toString();
+}
+
+/// Budget per categoria (richiesta esplicita dell'utente: "budget per
+/// categoria"), legato all'utente — non a un Workspace — e valutato contro
+/// [expenseByCategory], lo stesso aggregato multi-Workspace già mostrato dal
+/// resto della schermata (esclusi i Bilanci condivisi). Nascosto del tutto
+/// se non c'è alcun budget impostato: non è un placeholder, è una feature
+/// opzionale che l'utente attiva categoria per categoria.
+class _BudgetSection extends ConsumerWidget {
+  const _BudgetSection({required this.expenseByCategory});
+
+  final Map<TransactionCategory, int> expenseByCategory;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final budgetsAsync = ref.watch(budgetsProvider);
+
+    return budgetsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (budgets) {
+        if (budgets.isEmpty) {
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _showSetBudgetDialog(context, ref),
+              icon: const Icon(Icons.speed_outlined),
+              label: const Text('Imposta un budget per categoria'),
+            ),
+          );
+        }
+
+        final sorted = budgets.toList()
+          ..sort((a, b) => TransactionCategoryMeta.of(a.category)
+              .label
+              .compareTo(TransactionCategoryMeta.of(b.category).label));
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Budget per categoria', style: AppTypography.heading3),
+                TextButton(
+                  onPressed: () => _showSetBudgetDialog(context, ref),
+                  child: const Text('Aggiungi'),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            for (final budget in sorted) ...[
+              _BudgetTile(
+                budget: budget,
+                spentCents: expenseByCategory[budget.category] ?? 0,
+                onTap: () => _showSetBudgetDialog(context, ref, budget: budget),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showSetBudgetDialog(
+    BuildContext context,
+    WidgetRef ref, {
+    CategoryBudget? budget,
+  }) async {
+    final budgetsAsync = ref.read(budgetsProvider).value ?? const [];
+    final alreadyBudgeted = budgetsAsync.map((b) => b.category).toSet();
+
+    final result = await showDialog<_BudgetDialogResult>(
+      context: context,
+      builder: (context) => _SetBudgetDialog(
+        initial: budget,
+        // Nella creazione (non nella modifica) non si può scegliere una
+        // categoria già budgetata: setBudget farebbe comunque un upsert, ma
+        // mostrerebbe due righe per la stessa categoria fino al refresh.
+        excludedCategories: budget == null ? alreadyBudgeted : const {},
+      ),
+    );
+    if (result == null) return;
+    if (!context.mounted) return;
+
+    if (result.delete && budget != null) {
+      final failure = await ref
+          .read(budgetFormControllerProvider.notifier)
+          .deleteBudget(budget.id);
+      if (!context.mounted) return;
+      if (failure != null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(failure.message)));
+      }
+      return;
+    }
+
+    final failure =
+        await ref.read(budgetFormControllerProvider.notifier).setBudget(
+              category: result.category!,
+              monthlyLimitCents: result.monthlyLimitCents!,
+            );
+    if (!context.mounted) return;
+    if (failure != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(failure.message)));
+    }
+  }
+}
+
+class _BudgetTile extends StatelessWidget {
+  const _BudgetTile({
+    required this.budget,
+    required this.spentCents,
+    required this.onTap,
+  });
+
+  final CategoryBudget budget;
+  final int spentCents;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = TransactionCategoryMeta.of(budget.category);
+    final ratio = budget.monthlyLimitCents == 0
+        ? 0.0
+        : spentCents / budget.monthlyLimitCents;
+    final isOverBudget = spentCents > budget.monthlyLimitCents;
+    final barColor = isOverBudget ? AppColors.error : meta.color;
+
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadii.standardRadius,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(meta.icon, color: meta.color, size: 20),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(meta.label, style: AppTypography.body),
+                  ),
+                  Text(
+                    '${_formatAmount(spentCents)} / ${_formatAmount(budget.monthlyLimitCents)}',
+                    style: AppTypography.caption.copyWith(
+                      color: isOverBudget
+                          ? AppColors.error
+                          : Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withOpacity(0.6),
+                      fontWeight:
+                          isOverBudget ? FontWeight.w700 : FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: ratio.clamp(0, 1),
+                  minHeight: 6,
+                  backgroundColor: barColor.withOpacity(0.15),
+                  valueColor: AlwaysStoppedAnimation(barColor),
+                ),
+              ),
+              if (isOverBudget) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Budget superato',
+                  style: AppTypography.caption.copyWith(
+                      color: AppColors.error, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BudgetDialogResult {
+  const _BudgetDialogResult.set(this.category, this.monthlyLimitCents)
+      : delete = false;
+  const _BudgetDialogResult.delete()
+      : category = null,
+        monthlyLimitCents = null,
+        delete = true;
+
+  final TransactionCategory? category;
+  final int? monthlyLimitCents;
+  final bool delete;
+}
+
+/// Dialog per creare/modificare/cancellare un budget — `StatefulWidget`
+/// dedicato (stesso motivo di `_AddMemoryDialog`: il `TextEditingController`
+/// deve restare vivo per tutta l'animazione di chiusura del dialog).
+class _SetBudgetDialog extends StatefulWidget {
+  const _SetBudgetDialog({this.initial, required this.excludedCategories});
+
+  final CategoryBudget? initial;
+  final Set<TransactionCategory> excludedCategories;
+
+  @override
+  State<_SetBudgetDialog> createState() => _SetBudgetDialogState();
+}
+
+class _SetBudgetDialogState extends State<_SetBudgetDialog> {
+  late TransactionCategory _category = widget.initial?.category ??
+      TransactionCategory.values.firstWhere(
+          (c) => !widget.excludedCategories.contains(c),
+          orElse: () => TransactionCategory.altro);
+  late final _amountController = TextEditingController(
+    text: widget.initial == null
+        ? ''
+        : (widget.initial!.monthlyLimitCents / 100).toStringAsFixed(2),
+  );
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectableCategories = TransactionCategory.values
+        .where((c) => c == _category || !widget.excludedCategories.contains(c))
+        .toList(growable: false);
+
+    return AlertDialog(
+      title: Text(widget.initial == null ? 'Nuovo budget' : 'Modifica budget'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<TransactionCategory>(
+            value: _category,
+            decoration: const InputDecoration(labelText: 'Categoria'),
+            items: [
+              for (final category in selectableCategories)
+                DropdownMenuItem(
+                  value: category,
+                  child: Text(TransactionCategoryMeta.of(category).label),
+                ),
+            ],
+            onChanged: widget.initial != null
+                ? null
+                : (value) => setState(() => _category = value!),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          TextField(
+            controller: _amountController,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Budget mensile',
+              prefixText: '€ ',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        if (widget.initial != null)
+          TextButton(
+            onPressed: () =>
+                Navigator.of(context).pop(const _BudgetDialogResult.delete()),
+            child: const Text('Elimina'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Annulla'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final amount =
+                double.tryParse(_amountController.text.replaceAll(',', '.'));
+            if (amount == null || amount <= 0) return;
+            Navigator.of(context).pop(
+              _BudgetDialogResult.set(_category, (amount * 100).round()),
+            );
+          },
+          child: const Text('Salva'),
+        ),
+      ],
+    );
+  }
 }

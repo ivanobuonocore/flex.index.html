@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_mobile/core/providers.dart';
 import 'package:pip_mobile/features/transaction/presentation/balance_overview_screen.dart';
+import 'package:pip_shared/pip_shared.dart';
 
+import '../../../support/fake_budget_repository.dart';
 import '../../../support/fake_transaction_repository.dart';
 import '../../../support/fake_workspace_repository.dart';
 
@@ -79,14 +81,17 @@ void main() {
       (tester) async {
     final fakeTransaction = FakeTransactionRepository();
     final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
     addTearDown(fakeTransaction.dispose);
     addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           transactionRepositoryProvider.overrideWithValue(fakeTransaction),
           workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
         ],
         child: const MaterialApp(home: BalanceOverviewScreen()),
       ),
@@ -114,8 +119,10 @@ void main() {
       (tester) async {
     final fakeTransaction = FakeTransactionRepository();
     final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
     addTearDown(fakeTransaction.dispose);
     addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
 
     final lastMonth = DateTime(now.year, now.month - 1, 15);
     final oldExpense = Transaction(
@@ -134,6 +141,7 @@ void main() {
         overrides: [
           transactionRepositoryProvider.overrideWithValue(fakeTransaction),
           workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
         ],
         child: const MaterialApp(home: BalanceOverviewScreen()),
       ),
@@ -170,8 +178,10 @@ void main() {
       (tester) async {
     final fakeTransaction = FakeTransactionRepository();
     final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
     addTearDown(fakeTransaction.dispose);
     addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
 
     final salary = Transaction(
       id: 't-salary',
@@ -201,6 +211,7 @@ void main() {
         overrides: [
           transactionRepositoryProvider.overrideWithValue(fakeTransaction),
           workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
         ],
         child: const MaterialApp(home: BalanceOverviewScreen()),
       ),
@@ -225,8 +236,10 @@ void main() {
       (tester) async {
     final fakeTransaction = FakeTransactionRepository();
     final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
     addTearDown(fakeTransaction.dispose);
     addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
 
     // flutter_test non mocka Clipboard.setData di default (a differenza di
     // altri canali comuni): senza questo handler la chiamata reale fallisce
@@ -246,6 +259,7 @@ void main() {
         overrides: [
           transactionRepositoryProvider.overrideWithValue(fakeTransaction),
           workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
         ],
         child: const MaterialApp(home: BalanceOverviewScreen()),
       ),
@@ -277,14 +291,17 @@ void main() {
       (tester) async {
     final fakeTransaction = FakeTransactionRepository();
     final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
     addTearDown(fakeTransaction.dispose);
     addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           transactionRepositoryProvider.overrideWithValue(fakeTransaction),
           workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
         ],
         child: const MaterialApp(home: BalanceOverviewScreen()),
       ),
@@ -295,5 +312,112 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Nessuna transazione ancora'), findsOneWidget);
+  });
+
+  testWidgets(
+      'un budget superato mostra "Budget superato" nella pillola di categoria',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final groceries = Transaction(
+      id: 't-groceries',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Supermercato',
+      amountCents: 40000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      category: TransactionCategory.alimentari,
+    );
+    final budget = CategoryBudget(
+      id: 'b1',
+      category: TransactionCategory.alimentari,
+      monthlyLimitCents: 30000,
+      updatedAt: now,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([groceries]);
+    // _BudgetSection non esiste nell'albero finché transazioni/Workspace non
+    // hanno dati (gate su transactionsAsync.when): un pump() intermedio fa
+    // montare quel widget e sottoscriversi a budgetsProvider PRIMA
+    // dell'emit sotto — altrimenti, essendo _controller un broadcast
+    // StreamController, l'emissione andrebbe persa (nessun listener ancora).
+    await tester.pump();
+    fakeBudget.emit([budget]);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Budget per categoria'), 300);
+    // "Alimentari" compare due volte: nel budget e nel badge categoria della
+    // transazione confermata elencata più sotto nella stessa schermata.
+    expect(find.text('Alimentari'), findsWidgets);
+    expect(find.text('400,00 € / 300,00 €'), findsOneWidget);
+    expect(find.text('Budget superato'), findsOneWidget);
+  });
+
+  testWidgets('il pulsante "Aggiungi" imposta un nuovo budget per categoria',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final budget = CategoryBudget(
+      id: 'b1',
+      category: TransactionCategory.alimentari,
+      monthlyLimitCents: 30000,
+      updatedAt: now,
+    );
+    fakeBudget.setResult = Result.ok(budget);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([personalIncome]);
+    // Vedi commento nel test precedente: pump() intermedio prima dell'emit
+    // di fakeBudget, altrimenti l'emissione sul broadcast stream va persa.
+    await tester.pump();
+    fakeBudget.emit(const []);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+        find.text('Imposta un budget per categoria'), 300);
+    await tester.tap(find.text('Imposta un budget per categoria'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '300');
+    await tester.tap(find.text('Salva'));
+    await tester.pumpAndSettle();
+
+    expect(fakeBudget.lastSetCategory, TransactionCategory.alimentari);
+    expect(fakeBudget.lastSetMonthlyLimitCents, 30000);
   });
 }

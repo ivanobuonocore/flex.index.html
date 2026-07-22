@@ -734,6 +734,24 @@ un promemoria singolo che resta immediato come sempre — la cancellazione di un
 un'azione più difficile da annullare (bisognerebbe ricrearla da capo), merita conferma
 indipendentemente dalla richiesta più generale "conferma su swipe" (slice successiva).
 
+## Fase 3 (slice 18) — Budget per categoria
+
+`20260723100000_category_budgets.sql`: tabella `public.category_budgets` (id, user_id, category,
+monthly_limit_cents, updated_at), `category_budgets_limit_positive` (> 0),
+`category_budgets_user_category_unique` (un budget al più per categoria per utente — `setBudget`
+lato repository fa upsert su questo vincolo). RLS diretta `user_id = auth.uid()` (nessun join a
+`workspaces`): il Budget è legato **all'utente**, non a un Workspace — valutato contro lo stesso
+aggregato multi-Workspace già mostrato dal Bilancio personale (tutti i Workspace personali,
+esclusi i Bilanci condivisi), con cui un budget "per Workspace" non avrebbe un confronto naturale.
+Verificato su Postgres locale: upsert non duplica, un insert cross-user o con limite non positivo
+viene respinto, un utente non vede né può cancellare il budget di un altro.
+
+`BalanceOverviewScreen`: nuova sezione "Budget per categoria" sotto il grafico a torta, una
+`_BudgetTile` per budget con barra di avanzamento (spesa del mese/limite) e colore che passa al
+rosso oltre il 100% ("Budget superato"); dialog per creare/modificare/cancellare. Nascosta del
+tutto se l'utente non ha impostato alcun budget (mostra solo un pulsante "Imposta un budget per
+categoria") — non è un placeholder, è una feature opzionale attivata categoria per categoria.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

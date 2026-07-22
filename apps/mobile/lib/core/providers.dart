@@ -3,6 +3,7 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 import '../features/auth/data/supabase_auth_repository.dart';
+import '../features/budget/data/supabase_budget_repository.dart';
 import '../features/chat/data/supabase_chat_repository.dart';
 import '../features/chat/data/supabase_message_repository.dart';
 import '../features/document/data/supabase_document_repository.dart';
@@ -75,4 +76,8 @@ final pushSubscriptionRepositoryProvider =
 
 final memoryRepositoryProvider = Provider<MemoryRepository>((ref) {
   return SupabaseMemoryRepository(ref.watch(supabaseClientProvider));
+});
+
+final budgetRepositoryProvider = Provider<BudgetRepository>((ref) {
+  return SupabaseBudgetRepository(ref.watch(supabaseClientProvider));
 });
