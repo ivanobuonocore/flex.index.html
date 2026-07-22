@@ -831,6 +831,30 @@ sliver lazy. I test che emettevano il budget dopo un solo `pump()` perdevano l'e
 (`_BudgetSection` non ancora montato = non ancora sottoscritto a `budgetsProvider`, broadcast
 stream senza replay): corretto aggiungendo uno scroll esplicito prima dell'emit.
 
+## Fase 3 (slice 22) — Export dati completo
+
+Nessuna migrazione: legge solo repository già esistenti, con `.first` invece di `watch` (uno
+snapshot, non un ascolto realtime — un export non deve restare aperto in sottoscrizione).
+
+`features/export/application/data_export_controller.dart`: `DataExportController.generate()`
+legge tutti i Workspace, poi per ciascuno Note/Attività/Documenti (solo metadata: nome, mime type,
+dimensione, data — mai i byte del file, restano in Storage)/Promemoria/Memoria di livello
+Workspace; infine Transazioni di tutti i Workspace (`watchTransactions(null)`, stesso pattern del
+Bilancio globale) e Memoria di livello Globale. Tutto serializzato con `JsonEncoder.withIndent`.
+
+Bug evitato con la stessa causa della slice precedente ma un sintomo diverso: `generate()` veniva
+invocato dal chiamante di `showDataExportSheet`, **prima** di `showModalBottomSheet`. Tra quella
+chiamata e il montaggio effettivo del foglio passano più frame in cui nessuno osserva
+`dataExportControllerProvider` (`autoDispose`) — verificato con un test widget che falliva
+silenziosamente (il foglio restava fermo su "generazione in corso" per sempre, la vera istanza con
+il risultato veniva scartata e ricreata da zero al primo `watch`). Risolto spostando la chiamata a
+`generate()` dentro `initState()` del foglio stesso, dove la `build()` immediatamente successiva
+(stesso ciclo sincrono) stabilisce già l'ascolto che tiene vivo il provider.
+
+Mobile: voce "Esporta i miei dati" in Profilo, apre un foglio con conteggio caratteri, "Copia negli
+appunti" e "Invia via email" — stesso limite già dichiarato per il riepilogo mensile del Bilancio:
+niente PDF/file scaricabile, `pdf`/`share_plus` non disponibili in questo ambiente di build.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

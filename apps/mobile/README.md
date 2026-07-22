@@ -276,6 +276,15 @@ Implementate, con dati reali via Supabase:
   Home del Workspace), FAB con un dialog minimale per aggiungerla, conferma via dialog prima di
   cancellare su swipe. Livello Conversazione fuori scope: con un'unica conversazione per utente
   coinciderebbe sempre col Globale.
+- **export (dati completi)** (richiesta esplicita dell'utente) — Profilo → "Esporta i miei dati":
+  un JSON con Note/Attività/Documenti (solo metadata, non i file)/Promemoria/Memoria di ogni
+  Workspace, più Transazioni e Memoria globale. Lettura one-shot (`.first` su ogni stream, non
+  realtime: un export è uno snapshot). `DataExportController` (`AutoDisposeAsyncNotifier<String?>`)
+  avvia `generate()` dal proprio `initState()`, non dal chiamante che apre il foglio: tra
+  l'apertura di `showModalBottomSheet` e il montaggio effettivo del foglio passano più frame senza
+  alcun ascoltatore del provider, e un provider `autoDispose` verrebbe ricreato da zero in quella
+  finestra, perdendo il risultato. Stesso limite dichiarato per l'export del Bilancio: niente
+  PDF/file scaricabile (pacchetti non disponibili), solo copia negli appunti e invio via email.
 
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):

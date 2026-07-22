@@ -7,6 +7,7 @@ import 'package:pip_domain/pip_domain.dart';
 import '../../../core/env/app_env.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/application/session_controller.dart';
+import '../../export/presentation/data_export_sheet.dart';
 import '../../notifications/application/push_notification_controller.dart';
 import '../../notifications/data/push_notification_service.dart';
 
@@ -71,6 +72,18 @@ class ProfileScreen extends ConsumerWidget {
                     'e l\'altra.'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push('/profile/memories'),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.download_outlined),
+                title: const Text('Esporta i miei dati'),
+                subtitle: const Text(
+                    'Note, Attività, Documenti, Promemoria, Transazioni e '
+                    'Memoria in un file JSON.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => showDataExportSheet(context, ref),
               ),
             ),
             if (AppEnv.vapidPublicKey.isNotEmpty) ...[
