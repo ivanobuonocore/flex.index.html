@@ -6,6 +6,7 @@ import 'package:pip_domain/pip_domain.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
+import '../../recurring_transaction/presentation/recurring_transaction_list_sheet.dart';
 import '../application/transaction_category_meta.dart';
 import '../application/transaction_controller.dart';
 import 'create_edit_transaction_sheet.dart';
@@ -39,7 +40,17 @@ class TransactionReportScreen extends ConsumerWidget {
     final transactionsAsync = ref.watch(transactionsProvider(workspaceId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Bilancio')),
+      appBar: AppBar(
+        title: const Text('Bilancio'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.repeat),
+            tooltip: 'Spese ricorrenti',
+            onPressed: () => showRecurringTransactionListSheet(context,
+                workspaceId: workspaceId),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () =>
             showCreateEditTransactionSheet(context, workspaceId: workspaceId),

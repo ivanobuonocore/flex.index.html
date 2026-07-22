@@ -249,6 +249,11 @@ Implementate, con dati reali via Supabase:
   Workspace: nuova sezione nel Bilancio con una barra di avanzamento per categoria (spesa del
   mese/limite), rossa e "Budget superato" oltre il 100%. Nascosta se non è stato impostato alcun
   budget.
+- **transaction (spese ricorrenti automatiche)** (richiesta esplicita dell'utente) — scritte solo
+  dall'AI in Chat ("il canone Netflix è 15,99€ ogni mese"); a differenza dei Promemoria ricorrenti,
+  genera una Transaction pending alla volta, solo quando dovuta (Edge Function
+  `create-due-recurring-transactions`, cron giornaliero), non tutte insieme in anticipo. Icona
+  "Ricorrenti" nell'AppBar del Bilancio per consultare/cancellare i modelli.
 - **memory (prima slice minima)** (richiesta esplicita dell'utente) — solo il livello Globale:
   l'AI salva una nota quando l'utente dice esplicitamente "ricorda che..." (tool `remember_fact`,
   sempre disponibile come le query di sola lettura), e le memorie salvate vengono iniettate nel

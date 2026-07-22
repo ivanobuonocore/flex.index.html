@@ -88,6 +88,23 @@ Bilancio: non contano ancora nel saldo. Includi sempre, oltre all'eventuale uso 
 una risposta testuale breve che nomini cosa hai registrato (tipo, descrizione e importo di
 ciascuna transazione) e che è in attesa di conferma.`;
 
+// Addendum al system prompt, solo quando è disponibile un Workspace reale (stesso gate di
+// TRANSACTION_TOOL_INSTRUCTIONS — vedi `transactionToolEnabled`): richiesta esplicita
+// dell'utente, "spese ricorrenti automatiche", stesso motore già costruito per i
+// Promemoria ricorrenti (REMINDER_TOOL_INSTRUCTIONS). A differenza di extract_transactions
+// (una transazione già avvenuta, subito pending), create_recurring_transaction registra un
+// modello: la Edge Function `create-due-recurring-transactions` genera una nuova
+// transazione pending ogni volta che è dovuta, non tutte insieme in anticipo.
+const RECURRING_TRANSACTION_TOOL_INSTRUCTIONS =
+  `Quando l'utente descrive una spesa o un'entrata che si ripete nel tempo (es. "il canone
+Netflix è 15,99€ ogni mese", "pago l'affitto di 800€ il primo di ogni mese", "ricevo 200€ ogni
+settimana di mancia"), usa lo strumento create_recurring_transaction — non extract_transactions,
+che è solo per un evento già avvenuto una tantum. Risolvi la data della prima occorrenza rispetto
+alla data odierna fornita nel contesto (se l'utente non la specifica, usa oggi). Classifica la
+categoria con lo stesso criterio di extract_transactions. Includi sempre, oltre all'uso dello
+strumento, una risposta testuale breve che confermi importo, frequenza e che le occorrenze future
+compariranno "in attesa di conferma" quando dovute, non tutte insieme.`;
+
 // Nome e schema dello strumento Anthropic per l'estrazione strutturata di spese ed
 // entrate (Fase 3 slice 2 — vedi docs/database/README.md). Niente `currency`: questa
 // slice registra sempre in EUR. Attaccato alla richiesta solo quando esiste un
@@ -369,6 +386,52 @@ const EXTRACT_TRANSACTIONS_TOOL = {
   },
 };
 
+const CREATE_RECURRING_TRANSACTION_TOOL = {
+  name: "create_recurring_transaction",
+  description:
+    "Registra un modello di spesa o entrata che si ripete nel tempo (es. 'il canone " +
+    "Netflix è 15,99€ ogni mese'), non un evento già avvenuto una tantum (per quello usa " +
+    "extract_transactions). Le occorrenze future compaiono 'in attesa di conferma' quando " +
+    "dovute, non tutte insieme.",
+  input_schema: {
+    type: "object",
+    properties: {
+      type: {
+        type: "string",
+        enum: ["income", "expense"],
+        description: "'income' per un'entrata, 'expense' per un'uscita.",
+      },
+      description: {
+        type: "string",
+        description: "Breve descrizione, es. 'Netflix' o 'Affitto'.",
+      },
+      amount_cents: {
+        type: "integer",
+        description: "Importo in centesimi, sempre positivo (es. 15,99€ = 1599).",
+      },
+      category: {
+        type: "string",
+        enum: TRANSACTION_CATEGORIES,
+        description:
+          "Categoria più adatta, stesso criterio di extract_transactions. Usa 'altro' " +
+          "solo se nessuna categoria più specifica calza.",
+      },
+      frequency: {
+        type: "string",
+        enum: ["weekly", "monthly"],
+        description: "'weekly' o 'monthly', in base a come l'utente descrive la ricorrenza.",
+      },
+      first_occurrence_at: {
+        type: "string",
+        description:
+          "Data della PRIMA occorrenza in formato YYYY-MM-DD, risolta rispetto alla data " +
+          "odierna fornita nel contesto. Se l'utente non la specifica, usa la data odierna.",
+      },
+    },
+    required: ["type", "description", "amount_cents", "category", "frequency", "first_occurrence_at"],
+  },
+};
+
 interface RequestBody {
   chatId: string;
   workspaceId?: string | null;
@@ -394,6 +457,19 @@ interface TransactionSuggestion {
   amountCents: number;
   occurredAt: string;
   category: TransactionCategory;
+}
+
+// Solo weekly/monthly (a differenza di RecurrenceFrequency dei Promemoria, che include
+// anche daily): una spesa/entrata giornaliera automatica non ha un caso d'uso realistico.
+type TransactionRecurrenceFrequency = "weekly" | "monthly";
+
+interface RecurringTransactionSuggestion {
+  type: "income" | "expense";
+  description: string;
+  amountCents: number;
+  category: TransactionCategory;
+  frequency: TransactionRecurrenceFrequency;
+  firstOccurrenceAt: string;
 }
 
 type RecurrenceFrequency = "daily" | "weekly" | "monthly";
@@ -556,6 +632,7 @@ Deno.serve(async (req) => {
         // Workspace attivo).
         tools: [
           ...(transactionToolEnabled ? [EXTRACT_TRANSACTIONS_TOOL] : []),
+          ...(transactionToolEnabled ? [CREATE_RECURRING_TRANSACTION_TOOL] : []),
           ...(reminderToolEnabled ? [CREATE_REMINDER_TOOL] : []),
           ...(taskToolEnabled ? [MANAGE_TASKS_TOOL] : []),
           REMEMBER_FACT_TOOL,
@@ -697,6 +774,88 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Spese/entrate ricorrenti automatiche (richiesta esplicita dell'utente): registra
+    // un MODELLO (recurring_transaction_templates), non tutte le occorrenze future come
+    // Transazioni pending — vedi il commento in cima al file della migrazione. Se la
+    // prima occorrenza è già dovuta (oggi o nel passato), la prima Transaction pending
+    // viene inserita subito qui, senza aspettare il prossimo giro del cron job
+    // `create-due-recurring-transactions` (una volta al giorno) — coerente con la
+    // reattività del resto della Chat; le occorrenze successive restano al cron.
+    const recurringTransactionSuggestions = transactionToolEnabled
+      ? extractRecurringTransactionSuggestions(anthropicBody)
+        .map(sanitizeRecurringTransaction)
+        .filter((r): r is RecurringTransactionSuggestion => r !== null)
+      : [];
+
+    let recurringTransactionInsertFailed = false;
+    if (recurringTransactionSuggestions.length > 0) {
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const immediateTransactionRows: Record<string, unknown>[] = [];
+      const templateRows: Record<string, unknown>[] = [];
+
+      for (const suggestion of recurringTransactionSuggestions) {
+        const anchorDay = Number(suggestion.firstOccurrenceAt.slice(8, 10));
+        let nextOccurrenceAt = suggestion.firstOccurrenceAt;
+        if (suggestion.firstOccurrenceAt <= todayIso) {
+          immediateTransactionRows.push({
+            workspace_id: body.workspaceId,
+            chat_id: body.chatId,
+            type: suggestion.type,
+            description: suggestion.description,
+            amount_cents: suggestion.amountCents,
+            occurred_at: suggestion.firstOccurrenceAt,
+            status: "pending",
+            created_by_ai: true,
+            category: suggestion.category,
+          });
+          nextOccurrenceAt = advanceRecurringOccurrence(
+            suggestion.firstOccurrenceAt,
+            suggestion.frequency,
+            anchorDay,
+          );
+        }
+        templateRows.push({
+          workspace_id: body.workspaceId,
+          type: suggestion.type,
+          description: suggestion.description,
+          amount_cents: suggestion.amountCents,
+          category: suggestion.category,
+          frequency: suggestion.frequency,
+          next_occurrence_at: nextOccurrenceAt,
+          anchor_day: anchorDay,
+        });
+      }
+
+      if (immediateTransactionRows.length > 0) {
+        const { data: insertedRecurringTransactions, error: immediateInsertError } =
+          await supabase.from("transactions").insert(immediateTransactionRows).select(
+            "id",
+          );
+        if (immediateInsertError) {
+          console.error(
+            "ai-chat: errore insert transactions (ricorrenti)",
+            immediateInsertError,
+          );
+          recurringTransactionInsertFailed = true;
+        } else {
+          insertedTransactionIds = insertedTransactionIds.concat(
+            (insertedRecurringTransactions ?? []).map((t: { id: string }) => t.id),
+          );
+        }
+      }
+
+      const { error: templateInsertError } = await supabase.from(
+        "recurring_transaction_templates",
+      ).insert(templateRows);
+      if (templateInsertError) {
+        console.error(
+          "ai-chat: errore insert recurring_transaction_templates",
+          templateInsertError,
+        );
+        recurringTransactionInsertFailed = true;
+      }
+    }
+
     // A differenza delle Transazioni (pending/confirmed), un promemoria non ha nulla
     // da confermare: reversibile con un tocco, non un dato finanziario — inserito
     // direttamente (AI Constitution, Principio 1 si applica al "contare" qualcosa,
@@ -818,6 +977,9 @@ Deno.serve(async (req) => {
     // combinazioni possibili sono 15, non 3.
     const failedInserts: string[] = [];
     if (transactionInsertFailed) failedInserts.push("le transazioni");
+    if (recurringTransactionInsertFailed) {
+      failedInserts.push("la spesa/entrata ricorrente");
+    }
     if (reminderInsertFailed) failedInserts.push("i promemoria");
     if (taskInsertFailed) failedInserts.push("gli elementi della lista");
     if (memoryInsertFailed) failedInserts.push("le informazioni da ricordare");
@@ -831,6 +993,14 @@ Deno.serve(async (req) => {
       finalReplyText = `Ho registrato ${suggestions.length} ${
         suggestions.length === 1 ? "transazione" : "transazioni"
       } in attesa di conferma nella sezione Bilancio.`;
+    } else if (!finalReplyText && recurringTransactionSuggestions.length > 0) {
+      const frequencyLabel = recurringTransactionSuggestions[0].frequency === "weekly"
+        ? "ogni settimana"
+        : "ogni mese";
+      finalReplyText =
+        `Ho registrato la spesa/entrata ricorrente (${frequencyLabel}): comparirà "in ` +
+        "attesa di conferma" +
+        `" nella sezione Bilancio ad ogni scadenza.`;
     } else if (!finalReplyText && reminderRows.length > 0) {
       // "Promemoria" è invariante in italiano: nessuna forma plurale distinta da gestire.
       // reminderRows conta le occorrenze reali (una ricorrenza ne genera più di una),
@@ -1063,7 +1233,8 @@ async function buildSystemPrompt(
   }
 
   const toolInstructions =
-    `${TRANSACTION_TOOL_INSTRUCTIONS}\n\n${alwaysOnInstructions}`;
+    `${TRANSACTION_TOOL_INSTRUCTIONS}\n\n${RECURRING_TRANSACTION_TOOL_INSTRUCTIONS}` +
+    `\n\n${alwaysOnInstructions}`;
   const systemPrompt =
     `${ASSISTANT_PERSONA}\n\n${toolInstructions}\n\n${sections.join("\n\n")}`;
   const sourceReferences = [...noteItems, ...taskItems, ...documentItems].map((
@@ -1438,6 +1609,80 @@ function sanitizeTransaction(raw: unknown): TransactionSuggestion | null {
   if (!Number.isFinite(amountCents) || amountCents <= 0) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(occurredAt)) return null;
   return { type, description, amountCents, occurredAt, category };
+}
+
+// Estrae le chiamate allo strumento create_recurring_transaction — stesso pattern di
+// extractTransactionSuggestions (tool_choice "auto", un blocco tool_use per modello).
+// deno-lint-ignore no-explicit-any
+function extractRecurringTransactionSuggestions(anthropicBody: any): unknown[] {
+  const blocks = anthropicBody?.content;
+  if (!Array.isArray(blocks)) return [];
+  return blocks
+    .filter((block: { type: string; name?: string }) =>
+      block.type === "tool_use" && block.name === "create_recurring_transaction"
+    )
+    // deno-lint-ignore no-explicit-any
+    .map((block: any) => block.input);
+}
+
+// Validazione difensiva, stesso principio di sanitizeTransaction.
+function sanitizeRecurringTransaction(
+  raw: unknown,
+): RecurringTransactionSuggestion | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const type = r.type === "income" || r.type === "expense" ? r.type : null;
+  const description = typeof r.description === "string"
+    ? r.description.trim()
+    : "";
+  const amountCents = Math.round(Number(r.amount_cents));
+  const frequency = r.frequency === "weekly" || r.frequency === "monthly"
+    ? r.frequency
+    : null;
+  const firstOccurrenceAt = typeof r.first_occurrence_at === "string"
+    ? r.first_occurrence_at
+    : "";
+  const category = TRANSACTION_CATEGORIES.includes(r.category as TransactionCategory)
+    ? (r.category as TransactionCategory)
+    : "altro";
+  if (!type) return null;
+  if (!description) return null;
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return null;
+  if (!frequency) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(firstOccurrenceAt)) return null;
+  return { type, description, amountCents, category, frequency, firstOccurrenceAt };
+}
+
+// Avanza una data (formato YYYY-MM-DD) di un periodo — duplicato di
+// advanceOccurrence in create-due-recurring-transactions/index.ts: le Edge Function di
+// questo progetto sono deployate indipendentemente, nessun modulo condiviso tra loro
+// (stesso principio già applicato a TRANSACTION_CATEGORIES, duplicata invece di importata).
+// `anchorDay` è il giorno "vero" della ricorrenza, fissato alla creazione — mai derivato da
+// `dateIso` (vedi lo stesso commento nell'altra function per il bug che questo evita).
+function advanceRecurringOccurrence(
+  dateIso: string,
+  frequency: TransactionRecurrenceFrequency,
+  anchorDay: number,
+): string {
+  const date = new Date(`${dateIso}T00:00:00Z`);
+
+  if (frequency === "weekly") {
+    date.setUTCDate(date.getUTCDate() + 7);
+    return date.toISOString().slice(0, 10);
+  }
+
+  const firstOfNextMonth = new Date(date);
+  firstOfNextMonth.setUTCDate(1);
+  firstOfNextMonth.setUTCMonth(firstOfNextMonth.getUTCMonth() + 1);
+  const daysInNextMonth = new Date(
+    Date.UTC(
+      firstOfNextMonth.getUTCFullYear(),
+      firstOfNextMonth.getUTCMonth() + 1,
+      0,
+    ),
+  ).getUTCDate();
+  firstOfNextMonth.setUTCDate(Math.min(anchorDay, daysInNextMonth));
+  return firstOfNextMonth.toISOString().slice(0, 10);
 }
 
 // Estrae le chiamate allo strumento create_reminder dalla risposta Anthropic — stesso

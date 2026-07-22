@@ -752,6 +752,38 @@ rosso oltre il 100% ("Budget superato"); dialog per creare/modificare/cancellare
 tutto se l'utente non ha impostato alcun budget (mostra solo un pulsante "Imposta un budget per
 categoria") — non è un placeholder, è una feature opzionale attivata categoria per categoria.
 
+## Fase 3 (slice 19) — Spese ricorrenti automatiche
+
+`20260723110000_recurring_transaction_templates.sql`: tabella `public.recurring_transaction_templates`
+(id, workspace_id, type, description, amount_cents, category, frequency `weekly`/`monthly`,
+next_occurrence_at date, **anchor_day**, created_at, deleted_at). Stesso pattern RLS a join di
+transactions/notes/tasks. `anchor_day` (1-31) è il giorno "vero" della ricorrenza, fissato alla
+creazione e mai ricalcolato dalla data corrente — un bug trovato e corretto durante lo sviluppo
+(verificato con uno script Node standalone): senza un anchor fisso, un mese corto (Feb 28) fa
+scivolare la scadenza al 28 per sempre invece di tornare al 31 nei mesi più lunghi. Una policy
+UPDATE (non solo DELETE) è necessaria per il soft delete via `deleted_at` — dimenticarla (errore
+trovato durante la verifica su Postgres locale) lascia l'update silenziosamente a 0 righe sotto
+RLS, nessun errore, nessun effetto.
+
+A differenza dei Promemoria ricorrenti (tutte le occorrenze pre-generate subito), qui si genera
+**una Transaction pending alla volta**, solo quando dovuta: un elenco "in attesa di conferma" con
+mesi di spese future già presenti confonderebbe la sezione del Bilancio, oltre a non avere senso
+finanziariamente. Nuova Edge Function `create-due-recurring-transactions` (service role, cron
+giornaliero — stesso pattern/giustificazione di `send-due-reminders`, istruzioni `pg_cron`/`pg_net`
+nel commento finale della migrazione): legge i modelli dovuti, genera le occorrenze arretrate (con
+un tetto di sicurezza per modello, `MAX_OCCURRENCES_PER_RUN = 24`) e avanza `next_occurrence_at`.
+
+`ai-chat/index.ts`: nuovo tool `create_recurring_transaction`, stesso gate di
+`extract_transactions` (richiede un Workspace Bilancio attivo). Se la prima occorrenza è già
+dovuta (oggi o nel passato), la Transaction pending viene inserita **subito**, senza aspettare il
+prossimo giro del cron — coerente con la reattività del resto della Chat; solo le occorrenze
+successive restano al cron.
+
+Mobile: `features/recurring_transaction/` (data/application/presentation) — scritto solo dall'AI,
+nessuna creazione manuale. Icona "Ricorrenti" nell'AppBar di `TransactionReportScreen` apre un
+foglio con elenco + swipe-to-delete (con conferma via dialog, cancella solo il modello: le
+Transazioni già generate restano).
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

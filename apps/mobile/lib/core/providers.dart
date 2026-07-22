@@ -10,6 +10,7 @@ import '../features/document/data/supabase_document_repository.dart';
 import '../features/memory/data/supabase_memory_repository.dart';
 import '../features/note/data/supabase_note_repository.dart';
 import '../features/notifications/data/supabase_push_subscription_repository.dart';
+import '../features/recurring_transaction/data/supabase_recurring_transaction_repository.dart';
 import '../features/reminder/data/supabase_calendar_event_repository.dart';
 import '../features/search/data/supabase_search_repository.dart';
 import '../features/task/data/supabase_task_repository.dart';
@@ -80,4 +81,10 @@ final memoryRepositoryProvider = Provider<MemoryRepository>((ref) {
 
 final budgetRepositoryProvider = Provider<BudgetRepository>((ref) {
   return SupabaseBudgetRepository(ref.watch(supabaseClientProvider));
+});
+
+final recurringTransactionRepositoryProvider =
+    Provider<RecurringTransactionRepository>((ref) {
+  return SupabaseRecurringTransactionRepository(
+      ref.watch(supabaseClientProvider));
 });

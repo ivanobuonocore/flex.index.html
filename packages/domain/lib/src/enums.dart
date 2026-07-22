@@ -65,3 +65,11 @@ enum TransactionCategory {
   stipendio,
   altro,
 }
+
+/// Frequenza di una Transazione ricorrente (Domain Model, entità
+/// RecurringTransactionTemplate — richiesta esplicita dell'utente: "spese
+/// ricorrenti automatiche"). Solo settimanale/mensile: a differenza dei
+/// Promemoria ricorrenti (che includono `daily`), una spesa/entrata
+/// giornaliera automatica non ha un caso d'uso realistico e intaserebbe
+/// l'elenco "in attesa di conferma" più in fretta di quanto serva rivedere.
+enum RecurrenceFrequency { weekly, monthly }
