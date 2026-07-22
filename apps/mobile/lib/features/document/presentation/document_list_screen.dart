@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
+import 'package:pip_shared/pip_shared.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
@@ -30,7 +31,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
     final file = result?.files.single;
     if (file == null || file.bytes == null) return;
 
-    final failure =
+    final uploadResult =
         await ref.read(documentFormControllerProvider.notifier).upload(
               workspaceId: widget.workspaceId,
               fileName: file.name,
@@ -39,7 +40,8 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
             );
 
     if (!mounted) return;
-    if (failure != null) {
+    if (uploadResult.isErr) {
+      final failure = (uploadResult as Err<Document>).failure;
       setState(() => _errorMessage = failure.message);
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(failure.message)));

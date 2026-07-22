@@ -73,6 +73,21 @@ class TransactionFormController extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);
   }
+
+  /// [documentId] `null` rimuove l'allegato (richiesta esplicita
+  /// dell'utente: "scontrino allegato alla Transazione").
+  Future<Failure?> attachDocument({
+    required String transactionId,
+    required String? documentId,
+  }) async {
+    state = const AsyncLoading();
+    final result = await ref.read(transactionRepositoryProvider).attachDocument(
+          transactionId: transactionId,
+          documentId: documentId,
+        );
+    state = const AsyncData(null);
+    return result.fold((_) => null, (failure) => failure);
+  }
 }
 
 /// Transazioni confermate che ricadono nel mese di [now] (default: oggi).

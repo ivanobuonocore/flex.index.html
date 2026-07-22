@@ -115,6 +115,32 @@ void main() {
     expect(fakeRepository.lastUpdated, expense);
   });
 
+  test('attachDocument delega al repository con l\'id del documento', () async {
+    fakeRepository.attachDocumentResult =
+        Result.ok(expense.copyWith(description: expense.description));
+    final controller =
+        container.read(transactionFormControllerProvider.notifier);
+
+    final failure = await controller.attachDocument(
+        transactionId: expense.id, documentId: 'd1');
+
+    expect(failure, isNull);
+    expect(fakeRepository.lastAttachedTransactionId, expense.id);
+    expect(fakeRepository.lastAttachedDocumentId, 'd1');
+  });
+
+  test('attachDocument con documentId null rimuove l\'allegato', () async {
+    fakeRepository.attachDocumentResult = Result.ok(expense);
+    final controller =
+        container.read(transactionFormControllerProvider.notifier);
+
+    await controller.attachDocument(
+        transactionId: expense.id, documentId: null);
+
+    expect(fakeRepository.attachDocumentCalled, isTrue);
+    expect(fakeRepository.lastAttachedDocumentId, isNull);
+  });
+
   group('confirmedThisMonth', () {
     test('include solo le transazioni confermate del mese di riferimento', () {
       final now = DateTime.utc(2026, 6, 20);

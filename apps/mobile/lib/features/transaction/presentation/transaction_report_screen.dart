@@ -156,7 +156,21 @@ class TransactionReportScreen extends ConsumerWidget {
                           _CategoryBadge(category: transaction.category),
                         ],
                       ),
-                      trailing: Text(_formatAmount(transaction.amountCents)),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (transaction.documentId != null) ...[
+                            Icon(Icons.receipt_long_outlined,
+                                size: 16,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withOpacity(0.5)),
+                            const SizedBox(width: AppSpacing.xs),
+                          ],
+                          Text(_formatAmount(transaction.amountCents)),
+                        ],
+                      ),
                       onTap: () => showCreateEditTransactionSheet(
                         context,
                         workspaceId: workspaceId,

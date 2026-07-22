@@ -254,6 +254,9 @@ Implementate, con dati reali via Supabase:
   genera una Transaction pending alla volta, solo quando dovuta (Edge Function
   `create-due-recurring-transactions`, cron giornaliero), non tutte insieme in anticipo. Icona
   "Ricorrenti" nell'AppBar del Bilancio per consultare/cancellare i modelli.
+- **transaction (scontrino allegato)** (richiesta esplicita dell'utente) — un Document persistente
+  collegato alla Transazione (diverso dalla foto temporanea letta dall'AI per estrarne l'importo),
+  gestito dal form di modifica: allega/apri/rimuovi. Icona scontrino nell'elenco quando presente.
 - **memory (prima slice minima)** (richiesta esplicita dell'utente) — solo il livello Globale:
   l'AI salva una nota quando l'utente dice esplicitamente "ricorda che..." (tool `remember_fact`,
   sempre disponibile come le query di sola lettura), e le memorie salvate vengono iniettate nel

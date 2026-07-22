@@ -22,6 +22,7 @@ final class Transaction {
     this.createdByAi = false,
     this.deletedAt,
     this.category = TransactionCategory.altro,
+    this.documentId,
   });
 
   final String id;
@@ -31,6 +32,14 @@ final class Transaction {
   /// messaggio di Chat (traccia la fonte, AI Constitution, Principio 3 —
   /// Trasparenza).
   final String? chatId;
+
+  /// Scontrino/ricevuta allegata (richiesta esplicita dell'utente: "scontrino
+  /// allegato alla Transazione") — un [Document] persistente e consultabile
+  /// dopo, non solo la foto temporanea che l'AI legge per estrarre
+  /// l'importo. Gestito solo tramite [TransactionRepository.attachDocument],
+  /// non tramite [copyWith] (nessun modo pulito di rappresentare "rimuovi
+  /// l'allegato" in un copyWith che usa `?? this.x`).
+  final String? documentId;
 
   final TransactionType type;
   final String description;
@@ -73,6 +82,7 @@ final class Transaction {
       createdAt: createdAt,
       deletedAt: deletedAt,
       category: category ?? this.category,
+      documentId: documentId,
     );
   }
 
@@ -91,7 +101,8 @@ final class Transaction {
       other.createdByAi == createdByAi &&
       other.createdAt == createdAt &&
       other.deletedAt == deletedAt &&
-      other.category == category;
+      other.category == category &&
+      other.documentId == documentId;
 
   @override
   int get hashCode => Object.hash(
@@ -108,6 +119,7 @@ final class Transaction {
         createdAt,
         deletedAt,
         category,
+        documentId,
       );
 
   @override

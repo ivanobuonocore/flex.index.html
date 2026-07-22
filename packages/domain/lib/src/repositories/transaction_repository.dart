@@ -36,4 +36,12 @@ abstract interface class TransactionRepository {
   /// dall'AI) sia per "elimina" (transazione `confirmed`) — stessa
   /// operazione, etichetta diversa in UI a seconda di [Transaction.status].
   Future<Result<Unit>> deleteTransaction(String transactionId);
+
+  /// Collega un Documento (es. una foto di scontrino) alla Transazione, o lo
+  /// scollega se [documentId] è `null` (richiesta esplicita dell'utente:
+  /// "scontrino allegato alla Transazione").
+  Future<Result<Transaction>> attachDocument({
+    required String transactionId,
+    required String? documentId,
+  });
 }

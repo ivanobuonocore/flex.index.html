@@ -784,6 +784,28 @@ nessuna creazione manuale. Icona "Ricorrenti" nell'AppBar di `TransactionReportS
 foglio con elenco + swipe-to-delete (con conferma via dialog, cancella solo il modello: le
 Transazioni già generate restano).
 
+## Fase 3 (slice 20) — Scontrino allegato alla Transazione
+
+`20260723120000_transactions_document_id.sql`: `transactions.document_id uuid references
+documents (id) on delete set null`. Nessuna nuova RLS: la colonna è protetta dalle policy già
+esistenti su `transactions` (select/insert/**update**/delete, verificato che l'update esistesse
+già — a differenza della svista trovata per `recurring_transaction_templates` nella slice
+precedente). A differenza della foto che l'AI legge in Chat per estrarre l'importo (mai
+persistita come Document), questo collega un Document **persistente** e consultabile dopo.
+
+`TransactionRepository.attachDocument({transactionId, documentId})` — `documentId` `null` rimuove
+l'allegato; un solo metodo per entrambi i versi. `DocumentFormController.upload` cambiato da
+`Future<Failure?>` a `Future<Result<Document>>`: l'unico altro chiamante
+(`document_list_screen.dart`) aveva bisogno solo dell'eventuale errore, ma allegare uno scontrino
+serve l'id del Document appena creato — invece di duplicare la chiamata upload, si espone il
+`Result` completo (aggiornato anche l'unico test esistente).
+
+Mobile: riga "Scontrino" in `create_edit_transaction_sheet.dart`, visibile solo in modifica (serve
+l'id della Transazione già salvata). Il form è stato avvolto in un `SingleChildScrollView` (prima
+un semplice `Column`): la riga in più poteva superare l'altezza disponibile su schermi piccoli o a
+tastiera aperta — trovato durante i test widget (`RenderFlex overflow`), non solo in teoria.
+Icona scontrino nell'elenco Transazioni confermate di `TransactionReportScreen` quando presente.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

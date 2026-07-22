@@ -135,6 +135,27 @@ class SupabaseTransactionRepository implements TransactionRepository {
     }
   }
 
+  @override
+  Future<Result<Transaction>> attachDocument({
+    required String transactionId,
+    required String? documentId,
+  }) async {
+    try {
+      final row = await _client
+          .from(_table)
+          .update({'document_id': documentId})
+          .eq('id', transactionId)
+          .select()
+          .single();
+      return Result.ok(_toDomain(row));
+    } catch (e) {
+      return Result.err(
+        UnexpectedFailure('Non è stato possibile allegare lo scontrino.',
+            cause: e),
+      );
+    }
+  }
+
   Transaction _toDomain(Map<String, dynamic> row) {
     return Transaction(
       id: row['id'] as String,
@@ -152,6 +173,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
           ? DateTime.parse(row['deleted_at'] as String)
           : null,
       category: TransactionCategory.values.byName(row['category'] as String),
+      documentId: row['document_id'] as String?,
     );
   }
 }
