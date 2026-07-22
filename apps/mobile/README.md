@@ -42,6 +42,12 @@ Implementate, con dati reali via Supabase:
   vecchio `workspaceId` della Chat). Si può allegare una foto a un messaggio: va sempre nella
   sezione Documenti (`Document` con `chat_id`, stesso bucket riusato — nessuna nuova
   infrastruttura) e l'assistente la "vede" tramite il supporto immagini di Claude.
+- **chat (chip di suggerimento)** (richiesta esplicita dell'utente) — tre `ActionChip` sopra il
+  campo di testo ("Chiedi il saldo", "Ricorda che...", "Aggiungi alla lista"): scrivono il testo nel
+  campo (non inviano subito, i due prefissi vanno completati) e spariscono appena l'utente inizia a
+  scrivere (`ValueListenableBuilder` sul `TextEditingController`, non un listener manuale). Riga
+  scorrevole con `SingleChildScrollView` + `Row`, non una seconda `ListView`: alcuni test esistenti
+  assumevano un solo `ListView` in albero (la lista messaggi) e si rompevano con una seconda.
 - **chat (scroll automatico)** (bug segnalato dall'utente: "quando risponde non si blocca la
   pagina ma che esca di seguito senza scatti, come una normale conversazione su whatsapp") — la
   lista messaggi scorre automaticamente in fondo a ogni nuovo messaggio (proprio o
