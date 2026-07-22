@@ -1260,4 +1260,104 @@ void main() {
 
     expect(find.byIcon(Icons.check_circle_outline), findsNothing);
   });
+
+  testWidgets(
+      'un messaggio con ** mostra il testo in grassetto (Text.rich), uno senza '
+      'marcatori resta un Text semplice', (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final plainMessage = Message(
+      id: 'm1',
+      chatId: 'c1',
+      role: MessageRole.user,
+      content: 'Ciao, come va?',
+      timestamp: DateTime.utc(2026, 1, 1),
+    );
+    final markdownMessage = Message(
+      id: 'm2',
+      chatId: 'c1',
+      role: MessageRole.ai,
+      content: 'Ho segnato **50,00 €** di spesa.',
+      timestamp: DateTime.utc(2026, 1, 1, 0, 1),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(const []);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit([plainMessage, markdownMessage]);
+    await tester.pumpAndSettle();
+
+    // Nessun marcatore: resta un `Text` semplice, `find.text(...)` esatto
+    // continua a funzionare come per ogni altro test di questo file.
+    expect(find.text('Ciao, come va?'), findsOneWidget);
+
+    // Con `**`: il testo letterale coi marcatori non compare più come `Text`
+    // semplice (i marcatori sono rimossi, il contenuto è diviso in frammenti
+    // dentro un `Text.rich`) — il testo intero (marcatori rimossi) resta
+    // comunque leggibile con `findRichText: true`, `RichText` concatena il
+    // testo di tutti i suoi `TextSpan`.
+    expect(find.text('Ho segnato **50,00 €** di spesa.'), findsNothing);
+    final richTextFinder =
+        find.text('Ho segnato 50,00 € di spesa.', findRichText: true);
+    expect(richTextFinder, findsOneWidget);
+
+    // Il frammento in grassetto è un TextSpan figlio con fontWeight w700, non
+    // ereditato dallo stile di base della bolla.
+    final richText = tester.widget<RichText>(richTextFinder);
+    // `Text.rich(mySpan)` avvolge `mySpan` come unico figlio di un TextSpan
+    // esterno (che porta lo stile ereditato da `DefaultTextStyle`): il
+    // `TextSpan` passato da `_MessageText` è quindi un livello più in
+    // profondità, non `richText.text` stesso.
+    final ourSpan = (richText.text as TextSpan).children!.single as TextSpan;
+    final boldChild = ourSpan.children!
+        .whereType<TextSpan>()
+        .firstWhere((span) => span.text == '50,00 €');
+    expect(boldChild.style?.fontWeight, FontWeight.w700);
+  });
 }

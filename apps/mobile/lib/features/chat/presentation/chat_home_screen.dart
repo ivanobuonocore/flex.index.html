@@ -22,6 +22,7 @@ import '../../workspace/application/workspace_category_meta.dart';
 import '../../workspace/application/workspace_controller.dart';
 import '../../workspace/presentation/widgets/section_preview.dart';
 import '../application/chat_controller.dart';
+import '../application/markdown_lite.dart';
 import '../application/message_controller.dart';
 
 /// Home dell'app **e** unica Chat (Fase 3, "Chat unica" — richiesta esplicita
@@ -839,8 +840,7 @@ class _MessageBubble extends ConsumerWidget {
             DocumentThumbnail(documentId: attachmentId),
             const SizedBox(height: AppSpacing.xs),
           ],
-          Text(message.content,
-              style: AppTypography.body.copyWith(color: textColor)),
+          _MessageText(content: message.content, color: textColor),
           const SizedBox(height: AppSpacing.xs),
           Align(
             alignment: Alignment.centerRight,
@@ -895,6 +895,47 @@ class _MessageBubble extends ConsumerWidget {
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+}
+
+/// Contenuto di una bolla di messaggio, con grassetto/elenchi puntati
+/// (`markdown_lite.dart`) quando presenti. Resta un `Text` semplice quando il
+/// contenuto non ha alcun marcatore — il caso comune, incluso ogni messaggio
+/// dell'utente e ogni fixture di test esistente — perché `find.text(...)`
+/// (usato in tutta `chat_home_screen_test.dart`) non trova testo dentro un
+/// `Text.rich`/`RichText` per difetto: passare sempre a `Text.rich`
+/// romperebbe quelle asserzioni.
+class _MessageText extends StatelessWidget {
+  const _MessageText({required this.content, required this.color});
+
+  final String content;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!containsMarkdownLite(content)) {
+      return Text(content, style: AppTypography.body.copyWith(color: color));
+    }
+
+    final lines = parseMarkdownLite(content);
+    return Text.rich(
+      TextSpan(
+        style: AppTypography.body.copyWith(color: color),
+        children: [
+          for (var i = 0; i < lines.length; i++) ...[
+            if (lines[i].isBullet) const TextSpan(text: '•  '),
+            for (final span in lines[i].spans)
+              TextSpan(
+                text: span.text,
+                style: span.bold
+                    ? const TextStyle(fontWeight: FontWeight.w700)
+                    : null,
+              ),
+            if (i < lines.length - 1) const TextSpan(text: '\n'),
+          ],
+        ],
+      ),
+    );
   }
 }
 

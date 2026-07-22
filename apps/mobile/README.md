@@ -391,6 +391,27 @@ Non ancora presenti: settings, billing.
   verificato manualmente. La disponibilità del prompt è comunque un provider runtime testabile con
   un fake (`FakeInstallPromptService`), a differenza delle notifiche push che restano gated da una
   costante di compilazione mai vera nei test.
+- **Markdown "lite" nelle risposte dell'assistente** (richiesta esplicita dell'utente, "anche solo
+  migliorie grafiche") — nuovo `features/chat/application/markdown_lite.dart`: parser scritto a
+  mano (regex, solo grassetto `**testo**` ed elenchi puntati con `- ` a inizio riga), non un
+  pacchetto (`flutter_markdown` non era tra le dipendenze e comprerebbe robustezza — link,
+  escaping, codice inline — non necessaria per messaggi di chat brevi, al costo di una dipendenza
+  in più). `containsMarkdownLite`/`parseMarkdownLite` sono funzioni pure, testabili senza Flutter
+  widget bindings. In `_MessageBubble` (`chat_home_screen.dart`), il nuovo widget `_MessageText`
+  resta un `Text` semplice quando il contenuto non ha alcun marcatore — il caso comune, incluso
+  ogni messaggio dell'utente e ogni fixture di test esistente — e diventa un `Text.rich` solo
+  quando li contiene davvero: `find.text(...)` (usato in tutta `chat_home_screen_test.dart`)
+  ignora `RichText`/`Text.rich` per difetto, quindi passare sempre a `Text.rich` avrebbe rotto
+  ogni asserzione esistente. Stile del grassetto: `fontWeight: FontWeight.w700` sul `TextSpan`
+  figlio (eredita colore/dimensione dallo stile di base impostato sul `TextSpan` padre). Il system
+  prompt (`ASSISTANT_PERSONA`, `ai-chat/index.ts`) guadagna un paragrafo che dice esplicitamente al
+  modello che grassetto ed elenchi puntati sono ora resi correttamente e possono essere usati con
+  moderazione — senza questo, il modello non avrebbe motivo di produrre quella sintassi. **Nota
+  tecnica sul test**: `Text.rich(mySpan)` avvolge `mySpan` come unico figlio di un `TextSpan`
+  esterno (quello che porta lo stile ereditato da `DefaultTextStyle`) — il test widget che verifica
+  lo stile del frammento in grassetto deve quindi scendere di un livello (`richText.text.children!
+  .single`) prima di ispezionare i figli reali prodotti da `_MessageText`, non `richText.text`
+  direttamente.
 - **Nessuna migrazione/Edge Function di questo progetto è mai stata applicata a un progetto
   Supabase reale da questa sessione**: serve un token di accesso Supabase (`supabase login`) che
   non è mai stato disponibile qui. Ogni `infrastructure/supabase/migrations/*.sql` scritto va
