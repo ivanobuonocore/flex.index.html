@@ -1249,6 +1249,37 @@ Verificato: `flutter analyze`/`dart format --set-exit-if-changed`/`flutter test`
 pre-esistenti e non correlati già documentati altrove in questo file, confermato che il diff di
 questa slice non li tocca).
 
+## Fase 3 (slice 34) — Appuntamenti al posto di Ricerca nella barra di navigazione
+
+Nessuna migrazione: solo un cambio applicativo. Richiesta esplicita dell'utente: tolta la tab
+"Ricerca" dalla barra di navigazione, sostituita da "Appuntamenti" (nuova
+`AppointmentsOverviewScreen`, `/appuntamenti`), stesso principio già usato da
+`BalanceOverviewScreen` per il Bilancio globale — aggrega i promemoria di **tutti** i Workspace
+dell'utente in un unico calendario. `CalendarEventRepository.watchEvents` guadagna un
+`workspaceId` nullable (`null` = tutti i Workspace), stessa forma già usata da
+`TransactionRepository.watchTransactions(String?)`: nessuna nuova policy RLS necessaria, la stessa
+già esistente su `calendar_events` (`calendar_events_select_own_workspace`, solo il proprietario
+del Workspace) si applica identica a una query senza filtro `workspace_id` — a differenza delle
+Transazioni non esiste oggi un concetto di "Promemoria condivisi" da escludere applicativamente,
+quindi qui non serve nessun filtro `category != sharedBalanceCategory` equivalente a quello del
+Bilancio globale.
+
+La Ricerca Universale non è stata rimossa (resta uno dei pilastri di prodotto elencati in
+CLAUDE.md/Product Bible): `SearchScreen` è invariata, solo spostata fuori dallo
+`StatefulShellRoute` (una route di primo livello come login/onboarding) e raggiungibile da una
+nuova icona nell'intestazione della Chat Home. Aggiunta inoltre una ricerca locale per
+descrizione/tag nelle Transazioni confermate di `BalanceOverviewScreen` (richiesta esplicita
+dell'utente: "la ricerca potrei comunque inserirla nel bilancio per ricercare le spese") — filtra
+solo quell'elenco, non saldo/grafico/budget.
+
+Rimosso anche il selettore emoji dalla Chat (`_EmojiPicker`, richiesta esplicita dell'utente:
+"elimina l'emoji accanto la tastiera perché non ha molto senso") — l'assistente continua a usare
+emoji nelle proprie risposte (`ASSISTANT_PERSONA`), solo il pulsante manuale per l'utente è stato
+tolto.
+
+Verificato: `flutter analyze`/`dart format --set-exit-if-changed`/`flutter test` (intera suite)
+verdi.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

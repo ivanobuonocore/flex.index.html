@@ -5,9 +5,11 @@ import 'package:pip_shared/pip_shared.dart';
 import '../../../core/providers.dart';
 
 /// Promemoria di un Workspace, in tempo reale (Software Architecture,
-/// "Sincronizzazione" — Realtime lato Supabase).
+/// "Sincronizzazione" — Realtime lato Supabase). `null` = promemoria di tutti
+/// i Workspace dell'utente (schermata Appuntamenti globale, stesso principio
+/// già usato da `transactionsProvider`).
 final calendarEventsProvider =
-    StreamProvider.autoDispose.family<List<CalendarEvent>, String>(
+    StreamProvider.autoDispose.family<List<CalendarEvent>, String?>(
   (ref, workspaceId) =>
       ref.watch(calendarEventRepositoryProvider).watchEvents(workspaceId),
 );

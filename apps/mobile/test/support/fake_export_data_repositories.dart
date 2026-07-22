@@ -121,8 +121,8 @@ class FakeInstantCalendarEventRepository implements CalendarEventRepository {
   final Map<String, List<CalendarEvent>> byWorkspace;
 
   @override
-  Stream<List<CalendarEvent>> watchEvents(String workspaceId) =>
-      Stream.value(byWorkspace[workspaceId] ?? const []);
+  Stream<List<CalendarEvent>> watchEvents(String? workspaceId) => Stream.value(
+      workspaceId == null ? const [] : byWorkspace[workspaceId] ?? const []);
 
   @override
   Future<Result<CalendarEvent>> createEvent(

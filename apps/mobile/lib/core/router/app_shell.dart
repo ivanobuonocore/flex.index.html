@@ -137,9 +137,12 @@ class _BottomBar extends StatelessWidget {
                   ),
                   const SizedBox(width: _chatButtonSize),
                   _NavItem(
-                    icon: Icons.search_outlined,
-                    selectedIcon: Icons.search,
-                    label: 'Ricerca',
+                    // Al posto di "Ricerca" (richiesta esplicita
+                    // dell'utente): la Ricerca Universale resta raggiungibile
+                    // da un'icona in Chat Home, non più da qui.
+                    icon: Icons.event_outlined,
+                    selectedIcon: Icons.event,
+                    label: 'Appuntamenti',
                     color: AppColors.categoryAppuntamenti,
                     selected: currentIndex == 3,
                     onTap: () => onSelect(3),

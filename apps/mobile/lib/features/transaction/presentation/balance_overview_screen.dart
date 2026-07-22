@@ -61,6 +61,20 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
   // avesse anche uno storico, una tendina dove poter scegliere il mese").
   DateTime? _selectedMonth;
 
+  // Ricerca nelle Transazioni confermate (richiesta esplicita dell'utente,
+  // al posto della tab Ricerca tolta dalla barra di navigazione: "la ricerca
+  // potrei comunque inserirla nel bilancio per ricercare le spese"). Filtra
+  // solo l'elenco sotto, non il saldo/grafico/budget — stesso principio già
+  // usato dalla tendina del mese per il solo elenco "In attesa di conferma".
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final transactionsAsync = ref.watch(transactionsProvider(null));
@@ -257,15 +271,54 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                   padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Text('Nessuna transazione confermata questo mese.'),
                 )
-              else
-                for (final transaction in confirmed) ...[
-                  _ConfirmedTransactionTile(
-                    transaction: transaction,
-                    workspaceName:
-                        workspaceNames[transaction.workspaceId] ?? 'Workspace',
+              else ...[
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Cerca per descrizione o tag…',
+                    prefixIcon: const Icon(Icons.search),
+                    isDense: true,
+                    border:
+                        OutlineInputBorder(borderRadius: AppRadii.buttonRadius),
                   ),
-                  const SizedBox(height: AppSpacing.xs),
-                ],
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Builder(builder: (context) {
+                  final query = _searchQuery.trim().toLowerCase();
+                  final visibleConfirmed = query.isEmpty
+                      ? confirmed
+                      : confirmed
+                          .where((t) =>
+                              t.description.toLowerCase().contains(query) ||
+                              t.tags.any(
+                                  (tag) => tag.toLowerCase().contains(query)))
+                          .toList(growable: false);
+
+                  if (visibleConfirmed.isEmpty) {
+                    return Padding(
+                      padding:
+                          const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                      child: Text(
+                          'Nessun risultato per "${_searchController.text}".'),
+                    );
+                  }
+
+                  return Column(
+                    children: [
+                      for (final transaction in visibleConfirmed) ...[
+                        _ConfirmedTransactionTile(
+                          transaction: transaction,
+                          workspaceName:
+                              workspaceNames[transaction.workspaceId] ??
+                                  'Workspace',
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                      ],
+                    ],
+                  );
+                }),
+              ],
             ],
           );
         },

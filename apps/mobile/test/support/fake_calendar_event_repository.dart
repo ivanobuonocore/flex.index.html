@@ -18,7 +18,7 @@ class FakeCalendarEventRepository implements CalendarEventRepository {
   void emit(List<CalendarEvent> events) => _controller.add(events);
 
   @override
-  Stream<List<CalendarEvent>> watchEvents(String workspaceId) =>
+  Stream<List<CalendarEvent>> watchEvents(String? workspaceId) =>
       _controller.stream;
 
   @override

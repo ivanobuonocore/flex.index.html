@@ -105,7 +105,8 @@ void main() {
     // L'hero del saldo + il grafico (redesign estetico 2.0) spingono
     // l'elenco delle transazioni confermate sotto la piega: va scorsa la
     // lista per trovarla, come farebbe l'utente.
-    await tester.scrollUntilVisible(find.text('Stipendio'), 300);
+    await tester.scrollUntilVisible(find.text('Stipendio'), 300,
+        scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
 
     // Solo la transazione del Bilancio personale conta: 1.000,00 € di
@@ -153,7 +154,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Di default (mese corrente) si vede la transazione di questo mese.
-    await tester.scrollUntilVisible(find.text('Stipendio'), 300);
+    await tester.scrollUntilVisible(find.text('Stipendio'), 300,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Stipendio'), findsOneWidget);
 
     // Torna in cima (la tendina del mese è nell'intestazione, scomparsa
@@ -170,7 +172,8 @@ void main() {
 
     // Ora il mese scorso è selezionato: la transazione di questo mese non
     // conta più nel totale/elenco, quella del mese scorso sì.
-    await tester.scrollUntilVisible(find.text('Spesa del mese scorso'), 300);
+    await tester.scrollUntilVisible(find.text('Spesa del mese scorso'), 300,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Spesa del mese scorso'), findsOneWidget);
     expect(find.text('Stipendio'), findsNothing);
   });
@@ -432,11 +435,89 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Benzina'),
       300,
-      scrollable: find.byType(Scrollable),
+      scrollable: find.byType(Scrollable).first,
     );
 
     expect(find.text('auto'), findsOneWidget);
     expect(find.text('lavoro'), findsOneWidget);
+  });
+
+  testWidgets(
+      'il campo di ricerca filtra le transazioni confermate per descrizione e tag',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final groceries = Transaction(
+      id: 't-groceries',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Spesa supermercato',
+      amountCents: 5000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      tags: const ['casa'],
+    );
+    final fuel = Transaction(
+      id: 't-fuel',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Benzina',
+      amountCents: 2000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      tags: const ['auto'],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([groceries, fuel]);
+    fakeBudget.emit(const []);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Cerca per descrizione o tag…'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Spesa supermercato'), findsOneWidget);
+    expect(find.text('Benzina'), findsOneWidget);
+
+    // Filtro per descrizione.
+    await tester.enterText(find.byType(TextField), 'benzina');
+    await tester.pumpAndSettle();
+    expect(find.text('Spesa supermercato'), findsNothing);
+    expect(find.text('Benzina'), findsOneWidget);
+
+    // Filtro per tag: nessuna transazione con descrizione "cinema" ma una
+    // con tag "casa".
+    await tester.enterText(find.byType(TextField), 'casa');
+    await tester.pumpAndSettle();
+    expect(find.text('Spesa supermercato'), findsOneWidget);
+    expect(find.text('Benzina'), findsNothing);
+
+    // Nessun risultato.
+    await tester.enterText(find.byType(TextField), 'inesistente');
+    await tester.pumpAndSettle();
+    expect(find.text('Spesa supermercato'), findsNothing);
+    expect(find.text('Benzina'), findsNothing);
+    expect(find.text('Nessun risultato per "inesistente".'), findsOneWidget);
   });
 
   testWidgets(
@@ -579,7 +660,8 @@ void main() {
     fakeBudget.emit([budget]);
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Budget per categoria'), 300);
+    await tester.scrollUntilVisible(find.text('Budget per categoria'), 300,
+        scrollable: find.byType(Scrollable).first);
     // "Alimentari" compare due volte: nel budget e nel badge categoria della
     // transazione confermata elencata più sotto nella stessa schermata.
     expect(find.text('Alimentari'), findsWidgets);
@@ -627,11 +709,21 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-        find.text('Imposta un budget per categoria'), 300);
+        find.text('Imposta un budget per categoria'), 300,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Imposta un budget per categoria'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField), '300');
+    // La schermata sotto ha ora un proprio TextField di ricerca (Bilancio,
+    // ricerca nelle Transazioni confermate): il finder va ristretto al
+    // TextField dentro l'AlertDialog per restare univoco.
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      ),
+      '300',
+    );
     await tester.tap(find.text('Salva'));
     await tester.pumpAndSettle();
 
@@ -679,7 +771,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('vs mese scorso'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Andamento ultimi 6 mesi'), 300);
+    await tester.scrollUntilVisible(find.text('Andamento ultimi 6 mesi'), 300,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Andamento ultimi 6 mesi'), findsOneWidget);
   });
 }

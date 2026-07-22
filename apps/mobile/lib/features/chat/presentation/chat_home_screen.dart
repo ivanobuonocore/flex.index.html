@@ -67,7 +67,20 @@ class _ChatHomeScreenState extends ConsumerState<ChatHomeScreen> {
     final chatAsync = ref.watch(singleChatProvider);
 
     return Scaffold(
-      appBar: GradientAppBar(title: Text(_greeting(user?.name))),
+      appBar: GradientAppBar(
+        title: Text(_greeting(user?.name)),
+        // Ricerca Universale (richiesta esplicita dell'utente: tolta dalla
+        // barra di navigazione, sostituita lì da Appuntamenti) — resta
+        // raggiungibile da qui, solo meno in vista: Note/Attività/Documenti/
+        // Spazi/Promemoria restano cercabili, la schermata non è cambiata.
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'Ricerca',
+            onPressed: () => context.push('/search'),
+          ),
+        ],
+      ),
       body: chatAsync.when(
         loading: () {
           final cachedId = _lastKnownChatId;
@@ -1118,7 +1131,6 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
   String? _errorMessage;
   PlatformFile? _pendingPhoto;
   bool _isUploadingPhoto = false;
-  bool _showEmojiPicker = false;
 
   // Dettatura vocale (integrazione richiesta esplicitamente). `SpeechToText`
   // risolve da sé l'implementazione per piattaforma (canale nativo su
@@ -1296,21 +1308,6 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     }
   }
 
-  /// Inserisce l'emoji alla posizione del cursore (non solo in coda al
-  /// testo) — così funziona anche se l'utente ha già scritto qualcosa e
-  /// vuole aggiungere l'emoji in mezzo alla frase.
-  void _insertEmoji(String emoji) {
-    final text = _controller.text;
-    final selection = _controller.selection;
-    final start = selection.start >= 0 ? selection.start : text.length;
-    final end = selection.end >= 0 ? selection.end : text.length;
-    final newText = text.replaceRange(start, end, emoji);
-    _controller.value = TextEditingValue(
-      text: newText,
-      selection: TextSelection.collapsed(offset: start + emoji.length),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isSending =
@@ -1352,18 +1349,6 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
             ],
             Row(
               children: [
-                IconButton(
-                  tooltip: 'Emoji',
-                  onPressed: isSending
-                      ? null
-                      : () =>
-                          setState(() => _showEmojiPicker = !_showEmojiPicker),
-                  icon: Icon(
-                    _showEmojiPicker
-                        ? Icons.keyboard_outlined
-                        : Icons.emoji_emotions_outlined,
-                  ),
-                ),
                 IconButton(
                   tooltip: _canAttachPhoto
                       ? 'Allega una foto'
@@ -1407,87 +1392,8 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                 ),
               ],
             ),
-            if (_showEmojiPicker) ...[
-              const SizedBox(height: AppSpacing.sm),
-              _EmojiPicker(onSelected: _insertEmoji),
-            ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Selettore di emoji semplice (stile WhatsApp: una tastiera alternativa
-/// sotto il campo di testo, non un menu a comparsa). Nessuna dipendenza
-/// esterna: sono solo caratteri Unicode, disegnati dal font di sistema —
-/// funzionano allo stesso modo su web, Android e iOS senza bisogno di un
-/// pacchetto dedicato.
-class _EmojiPicker extends StatelessWidget {
-  const _EmojiPicker({required this.onSelected});
-
-  final ValueChanged<String> onSelected;
-
-  static const _emojis = [
-    '😀',
-    '😂',
-    '🥰',
-    '😍',
-    '😊',
-    '😉',
-    '😎',
-    '🤔',
-    '😅',
-    '😭',
-    '😢',
-    '😡',
-    '🥳',
-    '😴',
-    '🤗',
-    '🙄',
-    '👍',
-    '👎',
-    '👏',
-    '🙏',
-    '💪',
-    '🤝',
-    '👋',
-    '✌️',
-    '❤️',
-    '🔥',
-    '✨',
-    '🎉',
-    '👌',
-    '💯',
-    '⭐',
-    '✅',
-    '☕',
-    '🍕',
-    '🎂',
-    '🚀',
-    '📌',
-    '📅',
-    '💰',
-    '🏠',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 160,
-      child: GridView.builder(
-        gridDelegate:
-            const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 8),
-        itemCount: _emojis.length,
-        itemBuilder: (context, index) {
-          final emoji = _emojis[index];
-          return InkWell(
-            borderRadius: AppRadii.buttonRadius,
-            onTap: () => onSelected(emoji),
-            child: Center(
-                child: Text(emoji, style: const TextStyle(fontSize: 22))),
-          );
-        },
       ),
     );
   }

@@ -6,8 +6,11 @@ import '../entities/calendar_event.dart';
 /// nel layer `data` di ogni app (Dependency Inversion — Engineering
 /// Constitution, Articolo 4).
 abstract interface class CalendarEventRepository {
-  /// Promemoria del Workspace [workspaceId], ordinati per data.
-  Stream<List<CalendarEvent>> watchEvents(String workspaceId);
+  /// Promemoria del Workspace [workspaceId], ordinati per data. `null` =
+  /// promemoria di tutti i Workspace dell'utente (schermata Appuntamenti
+  /// globale) — stesso principio già usato da
+  /// `TransactionRepository.watchTransactions`.
+  Stream<List<CalendarEvent>> watchEvents(String? workspaceId);
 
   Future<Result<CalendarEvent>> createEvent({
     required String workspaceId,

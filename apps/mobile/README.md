@@ -722,6 +722,39 @@ Non ancora presenti: settings, billing.
   `beforeinstallprompt` non è simulabile) — verificato che `flutter build web` compili
   correttamente la forma dell'interop, comportamento a runtime da verificare manualmente in
   Chrome/Edge, stesso limite già accettato per le notifiche push.
+- **Rimosso il selettore emoji dalla Chat** (richiesta esplicita dell'utente: "elimina l'emoji
+  accanto la tastiera perché non ha molto senso") — tolti il pulsante toggle
+  emoji/tastiera (`Icons.emoji_emotions_outlined`/`Icons.keyboard_outlined`), `_insertEmoji` e la
+  classe `_EmojiPicker` da `chat_home_screen.dart`. L'utente resta libero di scrivere emoji dalla
+  tastiera del sistema; l'assistente continua comunque a usarle nelle risposte
+  (`ASSISTANT_PERSONA`), quella parte non è cambiata.
+- **"Ricerca" tolta dalla barra di navigazione, sostituita da "Appuntamenti"** (richiesta esplicita
+  dell'utente) — la quarta voce della barra ora apre una nuova `AppointmentsOverviewScreen`
+  (`/appuntamenti`), che aggrega i promemoria di **tutti** i Workspace dell'utente in un unico
+  calendario, stesso principio già usato da `BalanceOverviewScreen` per il Bilancio globale:
+  `CalendarEventRepository.watchEvents` guadagna un `workspaceId` nullable (`null` = tutti i
+  Workspace, stessa forma già usata da `TransactionRepository.watchTransactions`). Il calendario "a
+  quadratini" (`_MonthCalendarGrid`/`_DayCell`) è stato estratto da `reminder_list_screen.dart` in
+  un nuovo widget condiviso pubblico `shared/widgets/month_calendar_grid.dart`
+  (`MonthCalendarGrid`), riusato da entrambe le schermate. Nessun FAB nella vista globale: un
+  promemoria appartiene sempre a un Workspace preciso, la creazione resta lì o via Chat — toccare
+  una riga apre `/workspace/:id/reminders` per modificarla/eliminarla. La Ricerca Universale
+  **non è stata rimossa** (resta uno dei pilastri di prodotto): la schermata `SearchScreen` è
+  invariata, solo spostata fuori dallo `StatefulShellRoute` (una route di primo livello come
+  login/onboarding, non più una delle 5 destinazioni principali) e raggiungibile da una nuova
+  icona nell'intestazione della Chat Home.
+- **Ricerca nelle Transazioni confermate, dentro il Bilancio** (richiesta esplicita dell'utente:
+  "la ricerca potrei comunque inserirla nel bilancio per ricercare le spese") — nuovo campo di
+  testo in `BalanceOverviewScreen`, sopra l'elenco "Transazioni confermate": filtra per descrizione
+  o tag (case-insensitive), solo quell'elenco — saldo/grafico/budget restano invariati, stesso
+  principio già usato dalla tendina del mese per la sola sezione "In attesa di conferma". **Nota
+  tecnica sui test**: un `TextField` porta con sé un secondo `Scrollable` interno (l'`EditableText`
+  lo usa per scrollare il cursore in vista) — ogni `scrollUntilVisible` in
+  `balance_overview_screen_test.dart` ha dovuto essere ristretto esplicitamente con `scrollable:
+  find.byType(Scrollable).first` (altrimenti `find.byType(Scrollable)` diventa ambiguo), e il test
+  del dialog "Imposta un budget" ha dovuto restringere `find.byType(TextField)` con
+  `find.descendant(of: find.byType(AlertDialog), ...)` per non confondersi con il nuovo campo di
+  ricerca sotto.
 
 ## Setup locale
 
