@@ -394,6 +394,19 @@ Non ancora presenti: settings, billing.
   presuppone funzioni in produzione — un gap tra "scritto nel repo" e "applicato al database" ha
   già causato un fallimento reale in produzione (salvataggio di una Transazione dopo la slice 7C,
   prima che la colonna `category` fosse effettivamente pushata).
+- **Fix**: bug segnalato dall'utente ("la chat non va, mi esce scritto il messaggio [che non è
+  stato possibile caricare i messaggi]") — stesso gap operativo del punto sopra, questa volta su
+  `messages.pending_transaction_ids` (colonna aggiunta dalla migrazione della slice "Conferma/
+  Scarta inline", più recente di `attachment_ids`/`source_references`): se non ancora pushata su
+  un progetto reale, la colonna esiste come `null` nella riga (non assente), e il cast diretto
+  (`as List<dynamic>`) in `SupabaseMessageRepository._toDomain` esplodeva dentro il `.map()` dello
+  stream realtime — l'intera Chat mostrava "Non è stato possibile caricare i messaggi." per un
+  problema di migrazione mancante, non un errore di rete o RLS reale. Corretto rendendo il parsing
+  di tutte e tre le colonne array tollerante a `null` (lista vuota, non un'eccezione) ed estraendolo
+  in una funzione pura `parseMessageRow` (stesso motivo di `parseReceiptExtractionResponse`:
+  testabile senza mockare Supabase) — la Chat carica sempre i messaggi esistenti anche prima che
+  quella specifica migrazione sia stata applicata, semplicemente senza i chip Conferma/Scarta
+  inline finché non lo è.
 - **Bilancio condiviso**: il codice d'invito va condiviso manualmente dall'utente (messaggio,
   chiamata, ecc.) — nessuna infrastruttura email/deep-link in questa slice. La migrazione
   `20260721160000_workspace_sharing.sql` (tabelle `workspace_members`/`workspace_invites`, RLS

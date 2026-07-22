@@ -1181,6 +1181,32 @@ estenderlo motu proprio. Nessun test esistente cercava `find.byType(AppBar)` in 
 file toccati (verificato prima di procedere): `flutter analyze` pulito, `dart format` stabile,
 intera suite di test (208 in `apps/mobile`, 40 in `packages/domain`) verde senza modifiche.
 
+## Fix — Chat non caricava i messaggi (schema drift su `pending_transaction_ids`)
+
+Bug reale segnalato dall'utente su un ambiente deployato (non stale-build, non rete/RLS):
+`SupabaseMessageRepository._toDomain` (ora estratto in una funzione pura top-level
+`parseMessageRow`, `apps/mobile/lib/features/chat/data/supabase_message_repository.dart`)
+faceva un cast diretto (`as List<dynamic>`, non nullable) su `pending_transaction_ids` —
+colonna aggiunta da `20260722160000_message_pending_transaction_ids.sql` (slice "Conferma/Scarta
+inline in Chat"), più recente di `attachment_ids`/`source_references`. Se quella migrazione non è
+ancora stata pushata su un progetto Supabase reale (mai automatico in questo repository — vedi
+sopra), la colonna esiste ma la riga arriva con quel campo `null`, non assente: il cast diretto
+lanciava un'eccezione dentro il `.map()` dello stream realtime di `watchMessages`, l'intero stream
+finiva in errore e l'app mostrava "Non è stato possibile caricare i messaggi." per l'intera Chat
+— non solo per i messaggi con transazioni pending. Stesso tipo di gap operativo già descritto
+sopra per la colonna `category` di Transazione.
+
+**Fix**: le tre colonne array lette da `parseMessageRow` (`attachment_ids`/`source_references`/
+`pending_transaction_ids`) usano ora un cast tollerante a `null` (`as List<dynamic>?`, fallback a
+lista vuota) invece di un cast diretto — la Chat carica sempre i messaggi esistenti anche prima
+che una migrazione additiva recente sia stata applicata, degradando (niente chip Conferma/Scarta
+per quel messaggio) invece di rompersi per l'intera conversazione. Aggiunto
+`apps/mobile/test/features/chat/data/supabase_message_repository_test.dart` (4 test, incluso il
+caso `null` che riproduce esattamente il bug) per evitare la stessa regressione in futuro. **Non
+sostituisce comunque il vero fix operativo**: se il sintomo persiste, la causa reale resta la
+migrazione non ancora applicata al progetto Supabase reale — va comunque eseguito `npx supabase db
+push` per allineare lo schema e ottenere il comportamento completo (chip inline inclusi).
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:
