@@ -262,7 +262,8 @@ class _CreateSharedBalanceSheetState
                 const SizedBox(height: AppSpacing.sm),
                 const Text(
                   'Condividi questo codice con la persona con cui vuoi condividere '
-                  'il Bilancio: potrà usarlo per unirsi.',
+                  'il Bilancio: potrà usarlo per unirsi e vedere/modificare anche '
+                  'Note e Attività di questo Workspace (non i Documenti).',
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 _InviteCodeCard(code: invite.code),

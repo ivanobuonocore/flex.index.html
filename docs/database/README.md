@@ -855,6 +855,31 @@ Mobile: voce "Esporta i miei dati" in Profilo, apre un foglio con conteggio cara
 appunti" e "Invia via email" — stesso limite già dichiarato per il riepilogo mensile del Bilancio:
 niente PDF/file scaricabile, `pdf`/`share_plus` non disponibili in questo ambiente di build.
 
+## Fase 3 (slice 23) — Note/Attività condivise
+
+Richiesta esplicita dell'utente: estendere il modello di condivisione — finora solo il Bilancio
+(slice 8, `20260721160000_workspace_sharing.sql`) — a Note e Attività, con gli stessi permessi di
+lettura+scrittura. Non introduce un meccanismo nuovo: `workspace_members`/`workspace_invites` sono
+già generiche per Workspace, la slice 8 aveva deliberatamente ridotto lo scope alle sole
+Transazioni ("risposta esplicita dell'utente, 'Solo il Bilancio'"). Questa migrazione
+(`20260723130000_shared_workspace_notes_tasks.sql`) allarga quello scope, restando ADDITIVA — nuove
+policy permissive `notes_*_member`/`tasks_*_member` (select/insert/update/delete), identiche nella
+forma a `transactions_*_member`, combinate in OR con le policy esistenti (mai toccate). I Documenti
+restano esclusi, non menzionati dalla richiesta: nessuna policy `documents_*_member` aggiunta.
+
+Nessun codice mobile nuovo: `WorkspaceDetailScreen`/`NoteListScreen`/`TaskListScreen` sono già
+generiche per qualunque Workspace (nessun controllo espliciti su `ownerId`) — una volta che le RLS
+rendono visibili/scrivibili le righe a un membro, quegli stessi schermi le mostrano automaticamente,
+esattamente come già succede per le Transazioni condivise. Aggiornato solo il testo del foglio
+"Bilancio condiviso creato!" per avvisare che ora si condividono anche Note e Attività.
+
+**Verificato su Postgres locale, due utenti simulati (A proprietario, B invitato)**: prima
+dell'invito B non vede nessuna nota/task del Workspace; dopo `redeem_workspace_invite` B vede la
+nota e la task create da A, può inserirne di proprie e modificare quelle di A; i Documenti restano
+a 0 righe visibili per B per tutta la prova (nessuna policy aggiunta); dopo che A rimuove B dai
+membri, B perde di nuovo ogni accesso a note/task — stesso ciclo di vita già verificato per le
+Transazioni nella slice 8.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

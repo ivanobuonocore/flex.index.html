@@ -102,15 +102,22 @@ Implementate, con dati reali via Supabase:
   ciascuno il proprio Bilancio personale separato) — nuova schermata `SharedBalanceScreen`
   (`/balance/shared`, raggiungibile da un'icona nell'AppBar del Bilancio globale): crea un Bilancio
   condiviso (un Workspace libero, categoria `sharedBalanceCategory`) e mostra subito un codice
-  d'invito da condividere, oppure unisciti a uno con un codice ricevuto. La condivisione riguarda
-  **solo le Transazioni** — Note/Attività/Documenti restano visibili solo al proprietario, anche
-  per un Workspace di cui qualcun altro è membro. Il Bilancio globale (`/balance`) esclude i
-  Bilanci condivisi dal totale aggregato: restano due Bilanci separati, mai mescolati. Nuove tabelle
-  `workspace_members`/`workspace_invites` e funzione `redeem_workspace_invite` (SECURITY DEFINER) —
-  vedi `docs/database/README.md` per il dettaglio delle RLS (additive, non una riscrittura di
-  quelle esistenti) e due bug reali trovati e corretti verificando su Postgres locale con due
-  utenti simulati (ricorsione infinita tra le RLS di `workspaces`/`workspace_members`, colonna
-  ambigua nella funzione di redeem).
+  d'invito da condividere, oppure unisciti a uno con un codice ricevuto. La condivisione riguardava
+  inizialmente **solo le Transazioni** (poi estesa a Note/Attività, vedi sotto) — i Documenti
+  restano visibili solo al proprietario, anche per un Workspace di cui qualcun altro è membro. Il
+  Bilancio globale (`/balance`) esclude i Bilanci condivisi dal totale aggregato: restano due
+  Bilanci separati, mai mescolati. Nuove tabelle `workspace_members`/`workspace_invites` e funzione
+  `redeem_workspace_invite` (SECURITY DEFINER) — vedi `docs/database/README.md` per il dettaglio
+  delle RLS (additive, non una riscrittura di quelle esistenti) e due bug reali trovati e corretti
+  verificando su Postgres locale con due utenti simulati (ricorsione infinita tra le RLS di
+  `workspaces`/`workspace_members`, colonna ambigua nella funzione di redeem).
+- **note/task (Note/Attività condivise)** (richiesta esplicita dell'utente: estendere la
+  condivisione oltre il Bilancio) — stesso meccanismo `workspace_members` sopra, esteso con policy
+  RLS additive `notes_*_member`/`tasks_*_member` (select/insert/update/delete). Nessun codice
+  mobile nuovo: `WorkspaceDetailScreen`/`NoteListScreen`/`TaskListScreen` sono già generiche per
+  qualunque Workspace, quindi mostrano automaticamente le righe ora visibili a un membro grazie
+  alla RLS — solo il testo del foglio "Bilancio condiviso creato!" è stato aggiornato per avvisare
+  che ora si condividono anche Note e Attività. Documenti restano esclusi.
 
 - **reminder (Promemoria via Chat)** (Fase 3, "Promemoria via Chat" — CLAUDE.md, richiesta
   esplicita dell'utente di notifiche push vere, non un semplice elenco in app) — nuova

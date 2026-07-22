@@ -1,9 +1,10 @@
 /// Appartenenza di un secondo utente a un Workspace altrui (Fase 3, "Bilancio
 /// condiviso" — richiesta esplicita dell'utente: due Bilanci, uno personale e
-/// uno condiviso con un'altra persona). Non introduce Workspace condivisi in
-/// generale: la condivisione vale solo per le Transazioni di quel Workspace
-/// (RLS aggiuntiva, vedi migrazione), Note/Attività/Documenti restano
-/// visibili solo al proprietario.
+/// uno condiviso con un'altra persona; estesa da "Note/Attività condivise" —
+/// richiesta esplicita dell'utente). Non introduce Workspace condivisi in
+/// generale: la condivisione vale per Transazioni, Note e Attività di quel
+/// Workspace (RLS aggiuntiva per ciascuna, vedi migrazioni), i Documenti
+/// restano visibili solo al proprietario.
 final class WorkspaceMember {
   const WorkspaceMember({
     required this.id,

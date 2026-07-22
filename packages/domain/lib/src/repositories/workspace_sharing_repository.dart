@@ -32,8 +32,8 @@ abstract interface class WorkspaceSharingRepository {
   Future<Result<Workspace>> redeemInvite(String code);
 
   /// Rimuove [userId] dai membri di [workspaceId] (solo il proprietario può
-  /// farlo): da quel momento quell'utente perde ogni accesso alle
-  /// transazioni del Workspace.
+  /// farlo): da quel momento quell'utente perde ogni accesso a Transazioni,
+  /// Note e Attività del Workspace.
   Future<Result<Unit>> removeMember({
     required String workspaceId,
     required String userId,
