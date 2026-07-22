@@ -121,4 +121,39 @@ void main() {
       expect(extraction?.type, TransactionType.expense);
     });
   });
+
+  group('parseTransactionRow', () {
+    Map<String, dynamic> baseRow({Object? tags = const <String>[]}) => {
+          'id': 'tx-1',
+          'workspace_id': 'ws-1',
+          'chat_id': null,
+          'type': 'expense',
+          'description': 'Bar',
+          'amount_cents': 250,
+          'currency': 'EUR',
+          'occurred_at': '2026-07-22T10:00:00.000Z',
+          'status': 'confirmed',
+          'created_by_ai': false,
+          'created_at': '2026-07-22T10:00:00.000Z',
+          'deleted_at': null,
+          'category': 'svago',
+          'document_id': null,
+          'tags': tags,
+        };
+
+    test('converte una riga completa in una Transaction', () {
+      final transaction = parseTransactionRow(baseRow(tags: ['weekend']));
+
+      expect(transaction.id, 'tx-1');
+      expect(transaction.tags, ['weekend']);
+    });
+
+    test(
+        'tags null (colonna aggiunta da una migrazione non ancora pushata) '
+        'non fa fallire il parsing: lista vuota invece di un\'eccezione', () {
+      final transaction = parseTransactionRow(baseRow(tags: null));
+
+      expect(transaction.tags, isEmpty);
+    });
+  });
 }

@@ -31,7 +31,7 @@ class SupabaseDocumentRepository implements DocumentRepository {
         .map(
           (rows) => rows
               .where((row) => row['deleted_at'] == null)
-              .map(_toDomain)
+              .map(parseDocumentRow)
               .toList(growable: false),
         );
   }
@@ -83,7 +83,7 @@ class SupabaseDocumentRepository implements DocumentRepository {
           })
           .select()
           .single();
-      return Result.ok(_toDomain(row));
+      return Result.ok(parseDocumentRow(row));
     } catch (e) {
       // Il file è già in Storage ma senza metadata: rimuovilo per non
       // lasciare un oggetto orfano (compensazione, non una transazione vera
@@ -134,7 +134,7 @@ class SupabaseDocumentRepository implements DocumentRepository {
     try {
       final row =
           await _client.from(_table).select().eq('id', documentId).single();
-      return Result.ok(_toDomain(row));
+      return Result.ok(parseDocumentRow(row));
     } catch (e) {
       return Result.err(
         UnexpectedFailure('Non è stato possibile leggere il documento.',
@@ -155,29 +155,39 @@ class SupabaseDocumentRepository implements DocumentRepository {
           .eq('id', documentId)
           .select()
           .single();
-      return Result.ok(_toDomain(row));
+      return Result.ok(parseDocumentRow(row));
     } catch (e) {
       return Result.err(
         UnexpectedFailure('Non è stato possibile aggiornare i tag.', cause: e),
       );
     }
   }
+}
 
-  Document _toDomain(Map<String, dynamic> row) {
-    return Document(
-      id: row['id'] as String,
-      workspaceId: row['workspace_id'] as String,
-      name: row['name'] as String,
-      mimeType: row['mime_type'] as String,
-      sizeBytes: row['size_bytes'] as int,
-      storagePath: row['storage_path'] as String,
-      hash: row['hash'] as String,
-      chatId: row['chat_id'] as String?,
-      uploadedAt: DateTime.parse(row['uploaded_at'] as String),
-      deletedAt: row['deleted_at'] != null
-          ? DateTime.parse(row['deleted_at'] as String)
-          : null,
-      tags: (row['tags'] as List<dynamic>).cast<String>(),
-    );
-  }
+/// Converte una riga di `documents` in un [Document] — funzione pura (non un
+/// metodo privato) perché testabile senza mockare il client Supabase, stesso
+/// motivo di `parseMessageRow` in `supabase_message_repository.dart`.
+///
+/// `tags` è letta con un cast tollerante a `null` invece che diretto: è stata
+/// aggiunta da una migrazione additiva (Slice 1) più recente dello schema
+/// originale di `documents` — se non ancora applicata al progetto Supabase
+/// reale arriva `null`, non assente, e un cast diretto romperebbe il
+/// caricamento dell'intera lista Documenti (stesso bug già corretto per
+/// `messages.pending_transaction_ids`).
+Document parseDocumentRow(Map<String, dynamic> row) {
+  return Document(
+    id: row['id'] as String,
+    workspaceId: row['workspace_id'] as String,
+    name: row['name'] as String,
+    mimeType: row['mime_type'] as String,
+    sizeBytes: row['size_bytes'] as int,
+    storagePath: row['storage_path'] as String,
+    hash: row['hash'] as String,
+    chatId: row['chat_id'] as String?,
+    uploadedAt: DateTime.parse(row['uploaded_at'] as String),
+    deletedAt: row['deleted_at'] != null
+        ? DateTime.parse(row['deleted_at'] as String)
+        : null,
+    tags: (row['tags'] as List<dynamic>?)?.cast<String>() ?? const [],
+  );
 }

@@ -407,6 +407,22 @@ Non ancora presenti: settings, billing.
   testabile senza mockare Supabase) — la Chat carica sempre i messaggi esistenti anche prima che
   quella specifica migrazione sia stata applicata, semplicemente senza i chip Conferma/Scarta
   inline finché non lo è.
+- **Fix**: stesso gap operativo, stavolta sul Bilancio ("non è stato possibile caricare il
+  bilancio" dopo aver ripubblicato il sito con tutte le 8 integrazioni) — audit sistematico di ogni
+  colonna aggiunta da una migrazione additiva di questa sessione e letta con un cast diretto
+  (non nullable) lato client, per evitare di scoprirle una alla volta a ogni nuova segnalazione.
+  Trovate e corrette tre in più: `transactions.tags`/`documents.tags` (Slice 1, in
+  `parseTransactionRow`/`parseDocumentRow`, ex `_toDomain`) e `workspace_members.role`/
+  `workspace_invites.role` (Slice 3, in `parseWorkspaceMemberRow`/`parseWorkspaceInviteRow`, ex
+  `_memberFromDb`/`_inviteFromDb`) — tutte estratte in funzioni pure top-level e rese tolleranti a
+  `null` (lista vuota per i tag, `WorkspaceRole.editor` per il ruolo — lo stesso default della
+  colonna SQL), stesso principio del fix sopra. Verificate anche `calendar_events.google_event_id`
+  (già `String?`, sicura) e le colonne di `category_budgets` aggiunte per gli avvisi budget (mai
+  lette dal client, solo dalla Edge Function — sicure); non toccata `notes.tags`, presente fin
+  dalla migrazione originale delle Note (non una aggiunta di questa sessione, nessuna segnalazione
+  di rottura). **Resta comunque necessario** applicare le migrazioni mancanti con `npx supabase db
+  push`: questi fix evitano il crash e degradano (niente tag/ruoli differenziati finché lo schema
+  reale non è allineato), non sostituiscono la migrazione reale.
 - **Bilancio condiviso**: il codice d'invito va condiviso manualmente dall'utente (messaggio,
   chiamata, ecc.) — nessuna infrastruttura email/deep-link in questa slice. La migrazione
   `20260721160000_workspace_sharing.sql` (tabelle `workspace_members`/`workspace_invites`, RLS
