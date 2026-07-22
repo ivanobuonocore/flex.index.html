@@ -958,6 +958,43 @@ propria riga: nessuna query dedicata necessaria per sapere "il mio ruolo qui". L
 FAB/swipe-to-delete/tocco-per-modificare quando il ruolo è `viewer`; `shared_balance_screen.dart`
 guadagna un selettore di ruolo sia alla creazione dell'invito sia per un membro già presente.
 
+## Fase 3 (slice 28) — Notifica push su budget quasi superato
+
+Integrazione richiesta esplicitamente, dopo "Budget per categoria" (slice 18): finora "budget
+superato" era solo un colore nella `_BudgetTile` del Bilancio, nessun avviso attivo.
+`20260723160000_category_budgets_alert_state.sql` aggiunge `category_budgets.
+last_alert_threshold`/`last_alert_month` (`add column if not exists`, puramente additiva — nessuna
+RLS nuova, le policy esistenti di `category_budgets` coprono anche le due colonne in più).
+
+Nuova Edge Function `send-budget-alert` (stesso pattern di `send-test-push`: JWT del chiamante,
+mai service role), invocata direttamente dal client — non un cron come `send-due-reminders`, perché
+l'evento ("questa spesa fa superare la soglia?") è deterministico nel momento in cui la spesa viene
+creata/confermata, non richiede una scansione periodica su tutti gli utenti. Riceve `budgetId`/
+`category`/`spentCents`/`limitCents`; se la soglia (80 o 100) è superata e non è già stata
+notificata questo mese per quel budget (confronto `last_alert_month` col mese corrente UTC),
+aggiorna comunque `last_alert_threshold`/`last_alert_month` anche senza iscrizioni push attive
+(evita di ritentare a ogni transazione se l'utente non ha mai attivato le notifiche), poi invia la
+notifica alle iscrizioni lette da `push_subscriptions`.
+
+Mobile: `BudgetRepository.checkBudgetAlert` (nuovo metodo) invoca la function ed è interamente
+best-effort — nessun errore propagato al chiamante (funzione non deployata, VAPID non configurate).
+`TransactionFormController._maybeAlertBudget` (nuovo helper privato in `transaction_controller.
+dart`), chiamato da `create()`/`confirm()` solo per le spese (`TransactionType.expense`): calcola lo
+speso confermato del mese corrente per quella categoria sui soli Workspace personali (stesso
+aggregato di `_BudgetSection` nel Bilancio — un Bilancio condiviso non innesca mai un avviso),
+somma l'importo appena creato/confermato per non dipendere dal tempismo del realtime, e — se esiste
+un budget per quella categoria — chiama `checkBudgetAlert`. Tutto l'helper è avvolto in un
+`try/catch`: un errore nella lettura dei provider (mai capitato nei test, ma possibile in
+produzione se nessuno schermo ha ancora sottoscritto `transactionsProvider(null)`/
+`workspacesProvider`/`budgetsProvider` in questa sessione) non deve mai bloccare create/confirm già
+riuscite — stesso limite noto documentato in `apps/mobile/README.md`.
+
+Verificato: `deno check`/`deno lint`/`deno fmt --check` sulla nuova Edge Function; test del
+controller (`transaction_controller_test.dart`) con repository/workspace/budget fake — soglia
+superata su create e su confirm, nessuna chiamata senza budget configurato, su un'entrata, o in un
+Bilancio condiviso. **Non verificato in questa sessione**: nessuna chiamata HTTP reale né notifica
+recapitata a un browser (richiederebbe un progetto Supabase remoto o Docker, come `send-test-push`).
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

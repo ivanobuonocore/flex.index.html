@@ -2,10 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_mobile/core/providers.dart';
+import 'package:pip_mobile/features/budget/application/budget_controller.dart';
 import 'package:pip_mobile/features/transaction/application/transaction_controller.dart';
+import 'package:pip_mobile/features/workspace/application/workspace_controller.dart';
 import 'package:pip_shared/pip_shared.dart';
 
+import '../../../support/fake_budget_repository.dart';
 import '../../../support/fake_transaction_repository.dart';
+import '../../../support/fake_workspace_repository.dart';
 
 void main() {
   const workspaceId = 'w1';
@@ -20,18 +24,35 @@ void main() {
     createdAt: DateTime.utc(2026, 6, 15),
   );
 
+  final workspace = Workspace(
+    id: workspaceId,
+    ownerId: 'u1',
+    name: 'Personale',
+    icon: '💶',
+    status: WorkspaceStatus.active,
+    createdAt: DateTime.utc(2026, 1, 1),
+  );
+
   late FakeTransactionRepository fakeRepository;
+  late FakeWorkspaceRepository fakeWorkspaceRepository;
+  late FakeBudgetRepository fakeBudgetRepository;
   late ProviderContainer container;
 
   setUp(() {
     fakeRepository = FakeTransactionRepository();
+    fakeWorkspaceRepository = FakeWorkspaceRepository();
+    fakeBudgetRepository = FakeBudgetRepository();
     container = ProviderContainer(
       overrides: [
-        transactionRepositoryProvider.overrideWithValue(fakeRepository)
+        transactionRepositoryProvider.overrideWithValue(fakeRepository),
+        workspaceRepositoryProvider.overrideWithValue(fakeWorkspaceRepository),
+        budgetRepositoryProvider.overrideWithValue(fakeBudgetRepository),
       ],
     );
     addTearDown(container.dispose);
     addTearDown(fakeRepository.dispose);
+    addTearDown(fakeWorkspaceRepository.dispose);
+    addTearDown(fakeBudgetRepository.dispose);
   });
 
   test('transactionsProvider riflette lo stream del repository per workspace',
@@ -346,6 +367,164 @@ void main() {
       );
 
       expect(projected, 30000);
+    });
+  });
+
+  group('notifica push su budget quasi superato', () {
+    // Riferite a "adesso" (non a una data fissa come `expense` sopra):
+    // `_maybeAlertBudget` valuta sempre il mese corrente reale, come la
+    // Edge Function `send-budget-alert` lato server.
+    final now = DateTime.now();
+    final budget = CategoryBudget(
+      id: 'b1',
+      category: TransactionCategory.svago,
+      monthlyLimitCents: 10000,
+      updatedAt: now,
+    );
+    final existingSpend = Transaction(
+      id: 'existing',
+      workspaceId: workspaceId,
+      type: TransactionType.expense,
+      description: 'Cinema',
+      amountCents: 3000,
+      category: TransactionCategory.svago,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+    );
+
+    // `transactionsProvider(null)`/`workspacesProvider`/`budgetsProvider`
+    // sono `.autoDispose`: senza un ascoltatore attivo prima dell'emit, un
+    // `ref.read` successivo troverebbe uno stream broadcast già "passato"
+    // (nessun replay ai nuovi iscritti) — stesso bug di ordinamento già
+    // risolto per `currentMemberRoleProvider` (Slice 3). Il test sottoscrive
+    // prima di emettere, come già fa il primo test di questo file.
+    Future<void> warmUpAndEmit({
+      required List<Workspace> workspaces,
+      required List<CategoryBudget> budgets,
+      required List<Transaction> transactions,
+    }) async {
+      container.listen(workspacesProvider, (_, __) {});
+      container.listen(budgetsProvider, (_, __) {});
+      container.listen(transactionsProvider(null), (_, __) {});
+      fakeWorkspaceRepository.emit(workspaces);
+      fakeBudgetRepository.emit(budgets);
+      fakeRepository.emit(transactions);
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    test(
+        'create di una spesa che supera la soglia chiama checkBudgetAlert con lo speso aggiornato',
+        () async {
+      await warmUpAndEmit(
+        workspaces: [workspace],
+        budgets: [budget],
+        transactions: [existingSpend],
+      );
+      fakeRepository.createResult =
+          Result.ok(existingSpend.copyWith(amountCents: 9000));
+
+      await container.read(transactionFormControllerProvider.notifier).create(
+            workspaceId: workspaceId,
+            type: TransactionType.expense,
+            description: 'Concerto',
+            amountCents: 9000,
+            occurredAt: now,
+            category: TransactionCategory.svago,
+          );
+
+      expect(fakeBudgetRepository.alertCallCount, 1);
+      expect(fakeBudgetRepository.lastAlertBudgetId, 'b1');
+      expect(fakeBudgetRepository.lastAlertCategory, TransactionCategory.svago);
+      // 3000 (già confermato questo mese) + 9000 (appena creata) = 12000.
+      expect(fakeBudgetRepository.lastAlertSpentCents, 12000);
+      expect(fakeBudgetRepository.lastAlertLimitCents, 10000);
+    });
+
+    test('create senza budget per la categoria non chiama checkBudgetAlert',
+        () async {
+      await warmUpAndEmit(
+        workspaces: [workspace],
+        budgets: const [],
+        transactions: const [],
+      );
+      fakeRepository.createResult = Result.ok(existingSpend);
+
+      await container.read(transactionFormControllerProvider.notifier).create(
+            workspaceId: workspaceId,
+            type: TransactionType.expense,
+            description: 'Concerto',
+            amountCents: 9000,
+            occurredAt: now,
+            category: TransactionCategory.svago,
+          );
+
+      expect(fakeBudgetRepository.alertCallCount, 0);
+    });
+
+    test('create di un\'entrata non chiama mai checkBudgetAlert', () async {
+      await warmUpAndEmit(
+        workspaces: [workspace],
+        budgets: [budget],
+        transactions: [existingSpend],
+      );
+      final income = existingSpend.copyWith();
+      fakeRepository.createResult = Result.ok(income);
+
+      await container.read(transactionFormControllerProvider.notifier).create(
+            workspaceId: workspaceId,
+            type: TransactionType.income,
+            description: 'Stipendio',
+            amountCents: 9000,
+            occurredAt: now,
+            category: TransactionCategory.svago,
+          );
+
+      expect(fakeBudgetRepository.alertCallCount, 0);
+    });
+
+    test(
+        'create in un Bilancio condiviso non chiama checkBudgetAlert (i budget sono solo personali)',
+        () async {
+      final sharedWorkspace =
+          workspace.copyWith(category: sharedBalanceCategory);
+      await warmUpAndEmit(
+        workspaces: [sharedWorkspace],
+        budgets: [budget],
+        transactions: [existingSpend],
+      );
+      fakeRepository.createResult =
+          Result.ok(existingSpend.copyWith(amountCents: 9000));
+
+      await container.read(transactionFormControllerProvider.notifier).create(
+            workspaceId: workspaceId,
+            type: TransactionType.expense,
+            description: 'Concerto',
+            amountCents: 9000,
+            occurredAt: now,
+            category: TransactionCategory.svago,
+          );
+
+      expect(fakeBudgetRepository.alertCallCount, 0);
+    });
+
+    test('confirm di una spesa che supera la soglia chiama checkBudgetAlert',
+        () async {
+      await warmUpAndEmit(
+        workspaces: [workspace],
+        budgets: [budget],
+        transactions: [existingSpend],
+      );
+      final confirmedTransaction = existingSpend.copyWith(amountCents: 8000);
+      fakeRepository.confirmResult = Result.ok(confirmedTransaction);
+
+      await container
+          .read(transactionFormControllerProvider.notifier)
+          .confirm('pending1');
+
+      expect(fakeBudgetRepository.alertCallCount, 1);
+      // 3000 (già confermato) + 8000 (appena confermata) = 11000.
+      expect(fakeBudgetRepository.lastAlertSpentCents, 11000);
     });
   });
 }

@@ -465,6 +465,24 @@ Non ancora presenti: settings, billing.
   FAB, swipe-to-delete e il tocco-per-modificare quando il ruolo è `viewer` — l'applicazione
   effettiva dei permessi resta comunque la RLS lato Supabase (`docs/database/README.md`, slice
   27), la UI qui è solo coerenza percepita, non l'unica barriera.
+- **Notifica push su budget quasi superato** (integrazione richiesta esplicitamente) — finora
+  "budget superato" era solo un colore nella `_BudgetTile` del Bilancio, senza avviso attivo. Ora,
+  subito dopo che una spesa viene creata o confermata (`TransactionFormController._maybeAlertBudget`
+  in `transaction_controller.dart`), se la categoria ha un budget impostato e la spesa
+  già confermata questo mese più quella appena creata/confermata supera l'80% o il 100% del limite,
+  una chiamata diretta (stesso pattern di `send-test-push`, non un cron) alla nuova Edge Function
+  `send-budget-alert` invia la notifica. Interamente best-effort: nessun errore qui (provider non
+  ancora popolati, funzione non deployata) blocca mai il successo di create/confirm già ritornato
+  all'utente — stesso principio già usato per l'allegato scontrino. La soglia non viene rinotificata
+  più volte nello stesso mese: `category_budgets.last_alert_threshold`/`last_alert_month`
+  (nuova migrazione), scritti solo dalla Edge Function, mai dal client. I Budget restano valutati
+  solo sui Workspace personali (stesso aggregato di `_BudgetSection`): una spesa in un Bilancio
+  condiviso non innesca mai una notifica. **Limite noto**: lo speso del mese è letto da
+  `transactionsProvider(null)`/`budgetsProvider`/`workspacesProvider` con un `ref.read` non
+  garantito "caldo" — se nessuna schermata li ha ancora sottoscritti in questa sessione (es. la
+  primissima spesa creata subito dopo l'avvio, prima di aver mai aperto il Bilancio), l'avviso
+  può essere saltato silenziosamente quella volta; nessun impatto sulla correttezza del saldo, solo
+  sulla tempestività della notifica.
 
 ## Setup locale
 

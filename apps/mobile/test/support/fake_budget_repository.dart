@@ -12,6 +12,11 @@ class FakeBudgetRepository implements BudgetRepository {
   TransactionCategory? lastSetCategory;
   int? lastSetMonthlyLimitCents;
   String? lastDeletedId;
+  String? lastAlertBudgetId;
+  TransactionCategory? lastAlertCategory;
+  int? lastAlertSpentCents;
+  int? lastAlertLimitCents;
+  int alertCallCount = 0;
 
   void emit(List<CategoryBudget> budgets) => _controller.add(budgets);
 
@@ -34,6 +39,21 @@ class FakeBudgetRepository implements BudgetRepository {
   Future<Result<Unit>> deleteBudget(String budgetId) async {
     lastDeletedId = budgetId;
     return deleteResult ?? const Result.ok(unit);
+  }
+
+  @override
+  Future<Result<Unit>> checkBudgetAlert({
+    required String budgetId,
+    required TransactionCategory category,
+    required int spentCents,
+    required int limitCents,
+  }) async {
+    alertCallCount += 1;
+    lastAlertBudgetId = budgetId;
+    lastAlertCategory = category;
+    lastAlertSpentCents = spentCents;
+    lastAlertLimitCents = limitCents;
+    return const Result.ok(unit);
   }
 
   void dispose() => _controller.close();

@@ -75,6 +75,12 @@ npx supabase db push
   dall'invito. Verificato manualmente su Postgres locale con cinque utenti simulati (owner,
   editor, viewer, un redeem di invito viewer, un membro "legacy" senza `role` esplicito per
   confermare il default `editor` retrocompatibile) — dettagli in `docs/database/README.md`.
+- `migrations/20260723160000_category_budgets_alert_state.sql` — `category_budgets.
+  last_alert_threshold`/`last_alert_month` (Fase 3, "Notifica push su budget quasi superato" —
+  integrazione richiesta esplicitamente): tracciano l'ultima soglia (80/100) già notificata nel mese,
+  scritti solo dalla Edge Function `send-budget-alert`, mai dal client. Puramente additiva
+  (`add column if not exists`), nessuna RLS nuova da verificare (le policy di `category_budgets`
+  esistenti si applicano identiche alle due colonne in più).
 
 Le altre entità del Domain Model (Memory, Agent, ...) avranno le proprie migrazioni quando le
 rispettive feature verranno implementate (`docs/product/26-execution-blueprint.md`) — lo schema
@@ -139,6 +145,25 @@ npx supabase functions deploy send-test-push
 **Non verificato in questa sessione**: nessuna chiamata HTTP reale alla function (richiederebbe un
 progetto Supabase remoto o Docker), né una notifica realmente recapitata a un browser — vedi
 `docs/database/README.md` per il dettaglio di cosa è stato verificato staticamente.
+
+## Notifica push su budget quasi superato (`send-budget-alert`)
+
+Stessa infrastruttura di `send-test-push` (VAPID, `push_subscriptions`), ma invocata direttamente
+dal client mobile subito dopo aver creato/confermato una spesa (`docs/database/README.md`, Fase 3,
+integrazione richiesta esplicitamente), non da un pulsante di prova. Riceve `budgetId`/`category`/
+`spentCents`/`limitCents`, calcola se l'80% o il 100% del budget è stato superato e, se sì, invia
+una push solo se quella soglia non è già stata notificata questo mese (`category_budgets.
+last_alert_threshold`/`last_alert_month`, migrazione `20260723160000_category_budgets_alert_state.
+sql`). Stesse chiavi VAPID già configurate per `send-test-push` — nessun segreto nuovo da
+impostare:
+
+```
+npx supabase functions deploy send-budget-alert
+```
+
+**Non verificato in questa sessione**: stessa limitazione di `send-test-push` (nessuna chiamata
+HTTP reale né notifica recapitata a un browser) — verificato staticamente con `deno check`/`deno
+lint`/`deno fmt --check`.
 
 ## Nota su Realtime
 

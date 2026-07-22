@@ -3,6 +3,8 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
 
 import '../../../core/providers.dart';
+import '../../budget/application/budget_controller.dart';
+import '../../workspace/application/workspace_controller.dart';
 
 /// Transazioni (entrate/uscite) di un Workspace, in tempo reale (Software
 /// Architecture, "Sincronizzazione" — Realtime lato Supabase). `null` =
@@ -42,6 +44,13 @@ class TransactionFormController extends AutoDisposeAsyncNotifier<void> {
               tags: tags,
             );
     state = const AsyncData(null);
+    if (result is Ok<Transaction> && type == TransactionType.expense) {
+      await _maybeAlertBudget(
+        workspaceId: workspaceId,
+        category: category,
+        amountCents: amountCents,
+      );
+    }
     return result.fold((_) => null, (failure) => failure);
   }
 
@@ -62,6 +71,16 @@ class TransactionFormController extends AutoDisposeAsyncNotifier<void> {
         .read(transactionRepositoryProvider)
         .confirmTransaction(transactionId);
     state = const AsyncData(null);
+    if (result is Ok<Transaction>) {
+      final confirmed = result.value;
+      if (confirmed.type == TransactionType.expense) {
+        await _maybeAlertBudget(
+          workspaceId: confirmed.workspaceId,
+          category: confirmed.category,
+          amountCents: confirmed.amountCents,
+        );
+      }
+    }
     return result.fold((_) => null, (failure) => failure);
   }
 
@@ -89,6 +108,73 @@ class TransactionFormController extends AutoDisposeAsyncNotifier<void> {
         );
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);
+  }
+
+  /// Notifica push se la spesa appena creata/confermata fa superare l'80% o
+  /// il 100% del budget della sua categoria (integrazione richiesta
+  /// esplicitamente: "notifica push su budget quasi superato"). Interamente
+  /// best-effort, come [BudgetRepository.checkBudgetAlert]: nessun errore qui
+  /// (provider non disponibili, budget non ancora caricati) deve mai
+  /// impedire il successo di create/confirm già ritornato al chiamante.
+  /// [spentBeforeCents] è la spesa del mese già confermata, letta dallo
+  /// stream (quindi non ancora aggiornata con questa transazione): sommare
+  /// direttamente [amountCents] evita di dipendere dal tempismo del
+  /// realtime.
+  Future<void> _maybeAlertBudget({
+    required String workspaceId,
+    required TransactionCategory category,
+    required int amountCents,
+  }) async {
+    try {
+      final workspaces = ref.read(workspacesProvider).value ?? const [];
+      Workspace? workspace;
+      for (final w in workspaces) {
+        if (w.id == workspaceId) {
+          workspace = w;
+          break;
+        }
+      }
+      // I Budget sono valutati solo sui Workspace personali (stesso
+      // aggregato di `_BudgetSection` in balance_overview_screen.dart): una
+      // spesa in un Bilancio condiviso non deve innescare una notifica.
+      if (workspace == null || workspace.category == sharedBalanceCategory) {
+        return;
+      }
+
+      final budgets = ref.read(budgetsProvider).value ?? const [];
+      CategoryBudget? budget;
+      for (final b in budgets) {
+        if (b.category == category) {
+          budget = b;
+          break;
+        }
+      }
+      if (budget == null) return;
+
+      final allTransactions =
+          ref.read(transactionsProvider(null)).value ?? const [];
+      final personalWorkspaceIds = workspaces
+          .where((w) => w.category != sharedBalanceCategory)
+          .map((w) => w.id)
+          .toSet();
+      final confirmed = confirmedThisMonth(
+        allTransactions
+            .where((t) => personalWorkspaceIds.contains(t.workspaceId))
+            .toList(growable: false),
+      );
+      final spentBeforeCents = totalExpenseCents(
+        confirmed.where((t) => t.category == category),
+      );
+
+      await ref.read(budgetRepositoryProvider).checkBudgetAlert(
+            budgetId: budget.id,
+            category: category,
+            spentCents: spentBeforeCents + amountCents,
+            limitCents: budget.monthlyLimitCents,
+          );
+    } catch (_) {
+      // Ignorato deliberatamente: vedi commento sopra.
+    }
   }
 }
 

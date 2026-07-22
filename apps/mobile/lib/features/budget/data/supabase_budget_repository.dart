@@ -73,6 +73,29 @@ class SupabaseBudgetRepository implements BudgetRepository {
     }
   }
 
+  @override
+  Future<Result<Unit>> checkBudgetAlert({
+    required String budgetId,
+    required TransactionCategory category,
+    required int spentCents,
+    required int limitCents,
+  }) async {
+    // Best-effort: un errore qui (funzione non deployata, VAPID non
+    // configurate) non deve impedire la conferma della transazione che l'ha
+    // innescato — nessun `Failure` propagato al chiamante, solo un log.
+    try {
+      await _client.functions.invoke('send-budget-alert', body: {
+        'budgetId': budgetId,
+        'category': category.name,
+        'spentCents': spentCents,
+        'limitCents': limitCents,
+      });
+    } catch (_) {
+      // Ignorato deliberatamente: vedi commento sopra.
+    }
+    return const Result.ok(unit);
+  }
+
   CategoryBudget _toDomain(Map<String, dynamic> row) {
     return CategoryBudget(
       id: row['id'] as String,

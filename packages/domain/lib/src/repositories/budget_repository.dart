@@ -18,4 +18,17 @@ abstract interface class BudgetRepository {
   });
 
   Future<Result<Unit>> deleteBudget(String budgetId);
+
+  /// Notifica push se [spentCents] supera l'80% o il 100% di [limitCents]
+  /// (integrazione richiesta esplicitamente: "notifica push su budget quasi
+  /// superato"). Chiamata subito dopo che una Transazione di spesa è stata
+  /// confermata/creata, non su una schedulazione periodica — l'evento è
+  /// deterministico in quel momento. Non invia due volte la stessa soglia
+  /// nello stesso mese (stato tracciato lato server, mai dal client).
+  Future<Result<Unit>> checkBudgetAlert({
+    required String budgetId,
+    required TransactionCategory category,
+    required int spentCents,
+    required int limitCents,
+  });
 }
