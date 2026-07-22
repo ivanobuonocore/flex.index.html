@@ -5,6 +5,7 @@ import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
 
+import '../../../shared/widgets/document_thumbnail.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
@@ -199,8 +200,14 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                             },
                             child: Card(
                               child: ListTile(
-                                leading: Icon(_iconFor(document.mimeType),
-                                    color: AppColors.categoryDocumenti),
+                                leading: document.mimeType.startsWith('image/')
+                                    ? DocumentThumbnail(
+                                        documentId: document.id,
+                                        height: 48,
+                                        width: 48,
+                                      )
+                                    : Icon(_iconFor(document.mimeType),
+                                        color: AppColors.categoryDocumenti),
                                 title: Text(document.name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis),

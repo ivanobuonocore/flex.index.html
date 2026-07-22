@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_mobile/core/providers.dart';
 import 'package:pip_mobile/features/document/presentation/document_list_screen.dart';
+import 'package:pip_mobile/shared/widgets/document_thumbnail.dart';
 import 'package:pip_shared/pip_shared.dart';
 
 import '../../../support/fake_document_repository.dart';
@@ -128,6 +129,34 @@ void main() {
 
     expect(fakeRepository.lastTagsUpdatedDocumentId, 'd1');
     expect(fakeRepository.lastTagsUpdatedTags, ['scontrini']);
+  });
+
+  testWidgets(
+      'un documento immagine mostra una miniatura invece dell\'icona generica '
+      '(richiesta esplicita dell\'utente: "miniature per i Documenti")',
+      (tester) async {
+    final pdfDocument = Document(
+      id: 'd3',
+      workspaceId: workspaceId,
+      name: 'contratto.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 2048,
+      storagePath: 'w1/d3',
+      hash: 'ghi',
+      uploadedAt: DateTime.utc(2026, 1, 3),
+    );
+    final fakeRepository = FakeDocumentRepository();
+    addTearDown(fakeRepository.dispose);
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([document, pdfDocument]);
+    await tester.pumpAndSettle();
+
+    // `document` è già image/jpeg (fixture in testa al file): miniatura, non
+    // l'icona generica di file.
+    expect(find.byType(DocumentThumbnail), findsOneWidget);
+    // Il PDF resta sull'icona generica per tipo di file.
+    expect(find.byIcon(Icons.picture_as_pdf_outlined), findsOneWidget);
   });
 
   testWidgets(

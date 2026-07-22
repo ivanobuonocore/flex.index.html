@@ -10,11 +10,11 @@ import 'package:pip_shared/pip_shared.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../../core/providers.dart';
+import '../../../shared/widgets/document_thumbnail.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../../auth/application/session_controller.dart';
-import '../../document/application/document_controller.dart';
 import '../../reminder/application/calendar_event_controller.dart';
 import '../../task/application/task_controller.dart';
 import '../../transaction/application/transaction_controller.dart';
@@ -836,7 +836,7 @@ class _MessageBubble extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           for (final attachmentId in message.attachmentIds) ...[
-            _AttachmentImage(documentId: attachmentId),
+            DocumentThumbnail(documentId: attachmentId),
             const SizedBox(height: AppSpacing.xs),
           ],
           Text(message.content,
@@ -1033,46 +1033,6 @@ class _PendingTransactionActionTile extends ConsumerWidget {
 
   String _formatAmount(int amountCents) =>
       '${(amountCents / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
-}
-
-/// Foto allegata a un messaggio: la UI conosce solo l'id del [Document]
-/// ([Message.attachmentIds]), quindi legge l'oggetto e il suo URL firmato
-/// tramite [documentDownloadUrlProvider] prima di poterla mostrare.
-class _AttachmentImage extends ConsumerWidget {
-  const _AttachmentImage({required this.documentId});
-
-  final String documentId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final urlAsync = ref.watch(documentDownloadUrlProvider(documentId));
-
-    return ClipRRect(
-      borderRadius: AppRadii.standardRadius,
-      child: urlAsync.when(
-        loading: () => const SizedBox(
-          height: 160,
-          width: 160,
-          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        ),
-        error: (_, __) => const SizedBox(
-          height: 80,
-          width: 80,
-          child: Center(child: Icon(Icons.broken_image_outlined)),
-        ),
-        data: (url) => Image.network(
-          url,
-          height: 200,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => const SizedBox(
-            height: 80,
-            width: 80,
-            child: Center(child: Icon(Icons.broken_image_outlined)),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _MessageInput extends ConsumerStatefulWidget {
