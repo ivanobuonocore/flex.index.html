@@ -4,7 +4,7 @@ import 'package:pip_design_system/pip_design_system.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
-import '../../../shared/widgets/loading_view.dart';
+import '../../../shared/widgets/skeleton_list.dart';
 import '../application/note_controller.dart';
 import 'create_edit_note_sheet.dart';
 
@@ -39,7 +39,7 @@ class _NoteListScreenState extends ConsumerState<NoteListScreen> {
         child: const Icon(Icons.add),
       ),
       body: notesAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const SkeletonList(),
         error: (error, stackTrace) => ErrorView(
           message: 'Non è stato possibile caricare le note.',
           onRetry: () => ref.invalidate(notesProvider(widget.workspaceId)),

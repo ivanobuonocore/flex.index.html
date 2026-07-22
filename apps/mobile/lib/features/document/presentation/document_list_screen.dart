@@ -7,7 +7,7 @@ import 'package:pip_shared/pip_shared.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
-import '../../../shared/widgets/loading_view.dart';
+import '../../../shared/widgets/skeleton_list.dart';
 import '../application/document_controller.dart';
 
 /// Elenco completo dei Documenti di un Workspace
@@ -87,7 +87,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
             : const Icon(Icons.upload_file_outlined),
       ),
       body: documentsAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const SkeletonList(),
         error: (error, stackTrace) => ErrorView(
           message: 'Non è stato possibile caricare i documenti.',
           onRetry: () => ref.invalidate(documentsProvider(widget.workspaceId)),

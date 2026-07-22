@@ -309,6 +309,13 @@ Implementate, con dati reali via Supabase:
   Il pulsante Chat centrale mostra un badge con le transazioni suggerite dall'AI ancora da
   confermare/scartare (`pendingTransactions`, già esistente) — non un concetto di "messaggio non
   letto", che non esiste dato che la Chat è sempre la Home.
+- **skeleton loading nelle liste** (richiesta esplicita dell'utente) — nuovo `SkeletonList`
+  (`shared/widgets/`, righe pulsanti al posto dello spinner centrato) al posto di `LoadingView` in
+  Note, Attività, Documenti, Bilancio (globale e per Workspace) e Appuntamenti — le schermate a
+  lista, dove uno spinner dice meno della forma stessa del contenuto in arrivo. Animazione
+  indeterminata (si ripete finché il widget è a schermo, come un `CircularProgressIndicator`): nei
+  test va verificata con `pump()` a durata limitata, non `pumpAndSettle()` — stessa lezione già
+  imparata altrove in questo progetto.
 - **export (dati completi)** (richiesta esplicita dell'utente) — Profilo → "Esporta i miei dati":
   un JSON con Note/Attività/Documenti (solo metadata, non i file)/Promemoria/Memoria di ogni
   Workspace, più Transazioni e Memoria globale. Lettura one-shot (`.first` su ogni stream, non

@@ -5,7 +5,7 @@ import 'package:pip_domain/pip_domain.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
-import '../../../shared/widgets/loading_view.dart';
+import '../../../shared/widgets/skeleton_list.dart';
 import '../../recurring_transaction/presentation/recurring_transaction_list_sheet.dart';
 import '../application/transaction_category_meta.dart';
 import '../application/transaction_controller.dart';
@@ -57,7 +57,7 @@ class TransactionReportScreen extends ConsumerWidget {
         child: const Icon(Icons.add),
       ),
       body: transactionsAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const SkeletonList(),
         error: (error, stackTrace) => ErrorView(
           message: 'Non è stato possibile caricare il bilancio.',
           onRetry: () => ref.invalidate(transactionsProvider(workspaceId)),

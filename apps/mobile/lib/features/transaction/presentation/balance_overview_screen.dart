@@ -10,7 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
-import '../../../shared/widgets/loading_view.dart';
+import '../../../shared/widgets/skeleton_list.dart';
 import '../../budget/application/budget_controller.dart';
 import '../../workspace/application/workspace_controller.dart';
 import '../application/transaction_category_meta.dart';
@@ -78,7 +78,7 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
         ],
       ),
       body: transactionsAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const SkeletonList(),
         error: (error, stackTrace) => ErrorView(
           message: 'Non è stato possibile caricare il bilancio.',
           onRetry: () => ref.invalidate(transactionsProvider(null)),

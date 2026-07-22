@@ -5,7 +5,7 @@ import 'package:pip_domain/pip_domain.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
-import '../../../shared/widgets/loading_view.dart';
+import '../../../shared/widgets/skeleton_list.dart';
 import '../application/task_controller.dart';
 import 'create_edit_task_sheet.dart';
 
@@ -28,7 +28,7 @@ class TaskListScreen extends ConsumerWidget {
         child: const Icon(Icons.add),
       ),
       body: tasksAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const SkeletonList(),
         error: (error, stackTrace) => ErrorView(
           message: 'Non è stato possibile caricare le attività.',
           onRetry: () => ref.invalidate(tasksProvider(workspaceId)),

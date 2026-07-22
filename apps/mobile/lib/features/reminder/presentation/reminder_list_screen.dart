@@ -6,7 +6,7 @@ import 'package:pip_domain/pip_domain.dart';
 import '../../../core/env/app_env.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
-import '../../../shared/widgets/loading_view.dart';
+import '../../../shared/widgets/skeleton_list.dart';
 import '../../notifications/application/push_notification_controller.dart';
 import '../../notifications/data/push_notification_service.dart';
 import '../application/calendar_event_controller.dart';
@@ -81,7 +81,7 @@ class _ReminderListScreenState extends ConsumerState<ReminderListScreen> {
             const _NotificationStatusBanner(),
           Expanded(
             child: eventsAsync.when(
-              loading: () => const LoadingView(),
+              loading: () => const SkeletonList(),
               error: (error, stackTrace) => ErrorView(
                 message: 'Non è stato possibile caricare i promemoria.',
                 onRetry: () =>
