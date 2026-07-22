@@ -721,6 +721,19 @@ segnaposto dalla Fase 1. Conferma via dialog prima di cancellare su swipe (diver
 Globale, che resta immediato): anticipa la richiesta "conferma su swipe-to-delete" applicata anche
 qui.
 
+## Fase 3 (slice 17) — Eliminare l'intera serie di promemoria ricorrenti
+
+Solo layer applicativo, nessuna migrazione: `CalendarEventRepository` guadagna
+`deleteRecurrenceGroup(recurrenceGroupId)`, un `update` bulk su tutte le righe con lo stesso
+`recurrence_group_id` (colonna già esistente dalla slice 14) — stessa RLS a join già in vigore per
+`deleteEvent`, verificata riga per riga anche sull'update multiplo.
+
+`ReminderListScreen`: lo swipe-to-delete su un promemoria ricorrente ora apre prima un dialog
+("Solo questa occorrenza" / "Intera serie" / Annulla) invece di cancellare subito, a differenza di
+un promemoria singolo che resta immediato come sempre — la cancellazione di un'intera serie è
+un'azione più difficile da annullare (bisognerebbe ricrearla da capo), merita conferma
+indipendentemente dalla richiesta più generale "conferma su swipe" (slice successiva).
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

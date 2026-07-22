@@ -31,6 +31,8 @@ const _italianMonths = [
 bool _isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
 
+enum _DeleteChoice { single, series }
+
 /// Elenco completo dei Promemoria di un Workspace, con un calendario mensile
 /// "a quadratini" in testa (richiesta esplicita dell'utente: "vorrei che si
 /// vedesse un calendario fatto a quadratini (giorni) dove su ogni giorno
@@ -161,6 +163,13 @@ class _ReminderListScreenState extends ConsumerState<ReminderListScreen> {
                             return Dismissible(
                               key: ValueKey(event.id),
                               direction: DismissDirection.endToStart,
+                              // Un promemoria ricorrente chiede prima quale
+                              // ambito cancellare (richiesta esplicita
+                              // dell'utente: "eliminare un'intera serie di
+                              // promemoria ricorrenti"): un'occorrenza
+                              // singola resta immediata come sempre.
+                              confirmDismiss: (_) =>
+                                  _confirmDismiss(context, ref, event),
                               background: Container(
                                 alignment: Alignment.centerRight,
                                 padding: const EdgeInsets.symmetric(
@@ -172,10 +181,18 @@ class _ReminderListScreenState extends ConsumerState<ReminderListScreen> {
                                 child: const Icon(Icons.delete_outline,
                                     color: Colors.white),
                               ),
-                              onDismissed: (_) => ref
-                                  .read(calendarEventFormControllerProvider
-                                      .notifier)
-                                  .delete(event.id),
+                              onDismissed: (_) {
+                                // Ricorrente: la cancellazione (singola o
+                                // dell'intera serie) è già avvenuta dentro
+                                // _confirmDismiss, dove si conosce la scelta
+                                // dell'utente.
+                                if (event.recurrenceGroupId == null) {
+                                  ref
+                                      .read(calendarEventFormControllerProvider
+                                          .notifier)
+                                      .delete(event.id);
+                                }
+                              },
                               child: Card(
                                 child: ListTile(
                                   leading: Icon(
@@ -231,6 +248,50 @@ class _ReminderListScreenState extends ConsumerState<ReminderListScreen> {
         ],
       ),
     );
+  }
+
+  Future<bool> _confirmDismiss(
+    BuildContext context,
+    WidgetRef ref,
+    CalendarEvent event,
+  ) async {
+    final recurrenceGroupId = event.recurrenceGroupId;
+    if (recurrenceGroupId == null) return true;
+
+    final choice = await showDialog<_DeleteChoice>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Promemoria ricorrente'),
+        content: const Text(
+            'Vuoi eliminare solo questa occorrenza o l\'intera serie?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Annulla'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(_DeleteChoice.single),
+            child: const Text('Solo questa'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(_DeleteChoice.series),
+            child: const Text('Intera serie'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null) return false;
+    if (choice == _DeleteChoice.series) {
+      await ref
+          .read(calendarEventFormControllerProvider.notifier)
+          .deleteSeries(recurrenceGroupId);
+    } else {
+      await ref
+          .read(calendarEventFormControllerProvider.notifier)
+          .delete(event.id);
+    }
+    return true;
   }
 
   String _formatDateTime(DateTime date) {

@@ -242,6 +242,9 @@ Implementate, con dati reali via Supabase:
   indipendente ed eliminabile singolarmente (nessuna "elimina tutta la serie" in questa slice).
   Nessuna modifica a `send-due-reminders`/`pg_cron`, già configurati: continuano a vedere righe
   indipendenti come sempre.
+- **reminder (eliminare l'intera serie)** (richiesta esplicita dell'utente) — lo swipe su un
+  promemoria ricorrente chiede prima "Solo questa occorrenza" o "Intera serie" invece di
+  cancellare subito; un promemoria singolo resta immediato come sempre.
 - **memory (prima slice minima)** (richiesta esplicita dell'utente) — solo il livello Globale:
   l'AI salva una nota quando l'utente dice esplicitamente "ricorda che..." (tool `remember_fact`,
   sempre disponibile come le query di sola lettura), e le memorie salvate vengono iniettate nel

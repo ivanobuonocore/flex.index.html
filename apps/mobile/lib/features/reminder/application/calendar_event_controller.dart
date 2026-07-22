@@ -46,4 +46,13 @@ class CalendarEventFormController extends AutoDisposeAsyncNotifier<void> {
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);
   }
+
+  Future<Failure?> deleteSeries(String recurrenceGroupId) async {
+    state = const AsyncLoading();
+    final result = await ref
+        .read(calendarEventRepositoryProvider)
+        .deleteRecurrenceGroup(recurrenceGroupId);
+    state = const AsyncData(null);
+    return result.fold((_) => null, (failure) => failure);
+  }
 }

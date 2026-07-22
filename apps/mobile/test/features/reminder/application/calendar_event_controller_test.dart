@@ -81,4 +81,13 @@ void main() {
     expect(failure, isNull);
     expect(fakeRepository.lastDeletedId, 'e1');
   });
+
+  test('deleteSeries delega al repository con il recurrenceGroupId', () async {
+    final failure = await container
+        .read(calendarEventFormControllerProvider.notifier)
+        .deleteSeries('rg1');
+
+    expect(failure, isNull);
+    expect(fakeRepository.lastDeletedRecurrenceGroupId, 'rg1');
+  });
 }

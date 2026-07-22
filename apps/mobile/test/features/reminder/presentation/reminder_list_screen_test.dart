@@ -203,4 +203,79 @@ void main() {
 
     expect(fakeRepository.lastDeletedId, 'e1');
   });
+
+  testWidgets(
+      'eliminare con lo swipe un promemoria ricorrente chiede prima quale ambito',
+      (tester) async {
+    final fakeRepository = FakeCalendarEventRepository();
+    addTearDown(fakeRepository.dispose);
+
+    final event = CalendarEvent(
+      id: 'e1',
+      workspaceId: 'w1',
+      title: 'Buttare la spazzatura',
+      startsAt: DateTime.now().add(const Duration(days: 1)),
+      durationMinutes: 30,
+      createdAt: DateTime.now(),
+      recurrenceGroupId: 'group-1',
+    );
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([event]);
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+        find.byType(SingleChildScrollView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+        find.text('Buttare la spazzatura'), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Promemoria ricorrente'), findsOneWidget);
+    expect(fakeRepository.lastDeletedId, isNull);
+    expect(fakeRepository.lastDeletedRecurrenceGroupId, isNull);
+
+    await tester.tap(find.text('Intera serie'));
+    await tester.pumpAndSettle();
+
+    expect(fakeRepository.lastDeletedRecurrenceGroupId, 'group-1');
+    expect(fakeRepository.lastDeletedId, isNull);
+  });
+
+  testWidgets(
+      'annullare la scelta su un promemoria ricorrente non elimina nulla',
+      (tester) async {
+    final fakeRepository = FakeCalendarEventRepository();
+    addTearDown(fakeRepository.dispose);
+
+    final event = CalendarEvent(
+      id: 'e1',
+      workspaceId: 'w1',
+      title: 'Buttare la spazzatura',
+      startsAt: DateTime.now().add(const Duration(days: 1)),
+      durationMinutes: 30,
+      createdAt: DateTime.now(),
+      recurrenceGroupId: 'group-1',
+    );
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([event]);
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+        find.byType(SingleChildScrollView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+        find.text('Buttare la spazzatura'), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Annulla'));
+    await tester.pumpAndSettle();
+
+    expect(fakeRepository.lastDeletedId, isNull);
+    expect(fakeRepository.lastDeletedRecurrenceGroupId, isNull);
+    expect(find.text('Buttare la spazzatura'), findsOneWidget);
+  });
 }

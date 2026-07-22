@@ -78,6 +78,23 @@ class SupabaseCalendarEventRepository implements CalendarEventRepository {
     }
   }
 
+  @override
+  Future<Result<Unit>> deleteRecurrenceGroup(String recurrenceGroupId) async {
+    try {
+      await _client
+          .from(_table)
+          .update({'deleted_at': DateTime.now().toIso8601String()}).eq(
+              'recurrence_group_id', recurrenceGroupId);
+      return const Result.ok(unit);
+    } catch (e) {
+      return Result.err(
+        UnexpectedFailure(
+            'Non è stato possibile eliminare la serie di promemoria.',
+            cause: e),
+      );
+    }
+  }
+
   CalendarEvent _toDomain(Map<String, dynamic> row) {
     return CalendarEvent(
       id: row['id'] as String,

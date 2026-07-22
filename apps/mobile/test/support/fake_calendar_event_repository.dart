@@ -10,6 +10,7 @@ class FakeCalendarEventRepository implements CalendarEventRepository {
   Result<CalendarEvent>? createResult;
   CalendarEvent? lastCreated;
   String? lastDeletedId;
+  String? lastDeletedRecurrenceGroupId;
 
   void emit(List<CalendarEvent> events) => _controller.add(events);
 
@@ -38,6 +39,12 @@ class FakeCalendarEventRepository implements CalendarEventRepository {
   @override
   Future<Result<Unit>> deleteEvent(String eventId) async {
     lastDeletedId = eventId;
+    return const Result.ok(unit);
+  }
+
+  @override
+  Future<Result<Unit>> deleteRecurrenceGroup(String recurrenceGroupId) async {
+    lastDeletedRecurrenceGroupId = recurrenceGroupId;
     return const Result.ok(unit);
   }
 

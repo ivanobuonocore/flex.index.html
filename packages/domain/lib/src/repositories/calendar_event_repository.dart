@@ -20,4 +20,9 @@ abstract interface class CalendarEventRepository {
 
   /// Soft delete (Domain Model, "Principi del modello").
   Future<Result<Unit>> deleteEvent(String eventId);
+
+  /// Soft delete di tutte le occorrenze con lo stesso [recurrenceGroupId]
+  /// (richiesta esplicita dell'utente: "eliminare un'intera serie di
+  /// promemoria ricorrenti", non una occorrenza alla volta).
+  Future<Result<Unit>> deleteRecurrenceGroup(String recurrenceGroupId);
 }
