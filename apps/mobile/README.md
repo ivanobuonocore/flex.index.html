@@ -289,6 +289,17 @@ Implementate, con dati reali via Supabase:
   Home del Workspace), FAB con un dialog minimale per aggiungerla, conferma via dialog prima di
   cancellare su swipe. Livello Conversazione fuori scope: con un'unica conversazione per utente
   coinciderebbe sempre col Globale.
+- **conferma su swipe-to-delete** (richiesta esplicita dell'utente: "conferma su swipe-to-delete
+  per elementi non banali") — Note, Attività, Documenti e Memoria globale ora chiedono conferma con
+  un `AlertDialog` prima di cancellare (già presente per Memoria di Workspace, Promemoria ricorrenti
+  e spese ricorrenti dalle slice precedenti). Bug reale trovato in `DocumentListScreen`: la
+  schermata osserva `documentFormControllerProvider` per lo spinner di upload sul FAB, ma `delete()`
+  usa lo stesso controller — il giro `AsyncLoading`→`AsyncData` di un'eliminazione ricostruiva la
+  lista mentre il `Dismissible` era ancora a metà dell'animazione di uscita, reinserendo la stessa
+  riga prima che il repository l'avesse rimossa ("A dismissed Dismissible widget is still part of
+  the tree", riprodotto deterministicamente da un test widget). Corretto con una rimozione
+  ottimistica locale (`Set<String>` di id appena scorsi, filtrati dalla lista finché il repository
+  non conferma).
 - **export (dati completi)** (richiesta esplicita dell'utente) — Profilo → "Esporta i miei dati":
   un JSON con Note/Attività/Documenti (solo metadata, non i file)/Promemoria/Memoria di ogni
   Workspace, più Transazioni e Memoria globale. Lettura one-shot (`.first` su ogni stream, non

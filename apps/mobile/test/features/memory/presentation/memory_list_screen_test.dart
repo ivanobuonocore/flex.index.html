@@ -53,7 +53,7 @@ void main() {
     expect(find.text('Preferisce il caffè la mattina'), findsOneWidget);
   });
 
-  testWidgets('scorrere una memoria la cancella tramite il repository',
+  testWidgets('scorrere una memoria chiede conferma prima di cancellarla',
       (tester) async {
     final fakeRepository = FakeMemoryRepository();
     addTearDown(fakeRepository.dispose);
@@ -63,6 +63,12 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.drag(find.byType(Dismissible), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Eliminare questa memoria?'), findsOneWidget);
+    expect(fakeRepository.lastDeletedId, isNull);
+
+    await tester.tap(find.text('Elimina'));
     await tester.pumpAndSettle();
 
     expect(fakeRepository.lastDeletedId, 'm1');

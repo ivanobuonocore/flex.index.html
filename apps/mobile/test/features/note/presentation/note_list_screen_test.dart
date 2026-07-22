@@ -81,4 +81,25 @@ void main() {
     expect(find.text('Riunione'), findsOneWidget);
     expect(find.text('Lista spesa'), findsOneWidget);
   });
+
+  testWidgets('scorrere una nota chiede conferma prima di cancellarla',
+      (tester) async {
+    final fakeRepository = FakeNoteRepository();
+    addTearDown(fakeRepository.dispose);
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([workNote]);
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(Dismissible), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Eliminare questa nota?'), findsOneWidget);
+    expect(fakeRepository.lastDeletedId, isNull);
+
+    await tester.tap(find.text('Elimina'));
+    await tester.pumpAndSettle();
+
+    expect(fakeRepository.lastDeletedId, 'n1');
+  });
 }

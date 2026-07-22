@@ -24,6 +24,18 @@ class DocumentListScreen extends ConsumerStatefulWidget {
 class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   String? _errorMessage;
 
+  /// Rimozione ottimistica locale (Dismissible, non `documentsProvider`):
+  /// questa schermata osserva `documentFormControllerProvider` per lo
+  /// spinner di upload sul FAB — `delete()` usa lo stesso controller, quindi
+  /// il giro `AsyncLoading`→`AsyncData` di un'eliminazione ricostruisce
+  /// anche questa lista mentre il `Dismissible` sta ancora animando l'uscita,
+  /// reinserendo la stessa riga prima che il repository abbia effettivamente
+  /// rimosso il documento — Flutter la segnala con "A dismissed Dismissible
+  /// widget is still part of the tree" (trovato aggiungendo la conferma su
+  /// swipe, che sposta l'eliminazione oltre un frame in più). Filtrare qui
+  /// gli id appena scorsi evita che la riga ricompaia in quel frame.
+  final _dismissedIds = <String>{};
+
   Future<void> _pickAndUpload() async {
     setState(() => _errorMessage = null);
 
@@ -80,7 +92,10 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
           message: 'Non è stato possibile caricare i documenti.',
           onRetry: () => ref.invalidate(documentsProvider(widget.workspaceId)),
         ),
-        data: (documents) {
+        data: (allDocuments) {
+          final documents = allDocuments
+              .where((d) => !_dismissedIds.contains(d.id))
+              .toList(growable: false);
           if (documents.isEmpty) {
             return EmptyState(
               icon: Icons.upload_file_outlined,
@@ -103,6 +118,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
               return Dismissible(
                 key: ValueKey(document.id),
                 direction: DismissDirection.endToStart,
+                confirmDismiss: (_) => _confirmDelete(context),
                 background: Container(
                   alignment: Alignment.centerRight,
                   padding:
@@ -113,9 +129,12 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                   ),
                   child: const Icon(Icons.delete_outline, color: Colors.white),
                 ),
-                onDismissed: (_) => ref
-                    .read(documentFormControllerProvider.notifier)
-                    .delete(document.id),
+                onDismissed: (_) {
+                  setState(() => _dismissedIds.add(document.id));
+                  ref
+                      .read(documentFormControllerProvider.notifier)
+                      .delete(document.id);
+                },
                 child: Card(
                   child: ListTile(
                     leading: Icon(_iconFor(document.mimeType),
@@ -132,6 +151,29 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
         },
       ),
     );
+  }
+
+  /// Conferma prima di eliminare un documento (richiesta esplicita
+  /// dell'utente: "conferma su swipe-to-delete per elementi non banali") —
+  /// il file caricato non è recuperabile con un tocco dopo lo swipe.
+  Future<bool> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminare questo documento?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Elimina'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
   }
 
   IconData _iconFor(String mimeType) {

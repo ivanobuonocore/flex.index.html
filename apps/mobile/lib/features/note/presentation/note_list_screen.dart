@@ -117,6 +117,7 @@ class _NoteListScreenState extends ConsumerState<NoteListScreen> {
                           return Dismissible(
                             key: ValueKey(note.id),
                             direction: DismissDirection.endToStart,
+                            confirmDismiss: (_) => _confirmDelete(context),
                             background: Container(
                               alignment: Alignment.centerRight,
                               padding: const EdgeInsets.symmetric(
@@ -176,6 +177,31 @@ class _NoteListScreenState extends ConsumerState<NoteListScreen> {
         },
       ),
     );
+  }
+
+  /// Conferma prima di eliminare una nota (richiesta esplicita dell'utente:
+  /// "conferma su swipe-to-delete per elementi non banali") — a differenza
+  /// di una Transazione pending o un promemoria, il contenuto di una nota
+  /// non è recuperabile con un tocco dopo lo swipe.
+  Future<bool> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminare questa nota?'),
+        content: const Text('Il contenuto andrà perso.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Elimina'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
   }
 }
 

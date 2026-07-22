@@ -58,6 +58,7 @@ class TaskListScreen extends ConsumerWidget {
               return Dismissible(
                 key: ValueKey(task.id),
                 direction: DismissDirection.endToStart,
+                confirmDismiss: (_) => _confirmDeleteTask(context),
                 background: Container(
                   alignment: Alignment.centerRight,
                   padding:
@@ -111,4 +112,28 @@ class TaskListScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Conferma prima di eliminare un'attività (richiesta esplicita dell'utente:
+/// "conferma su swipe-to-delete per elementi non banali") — a differenza del
+/// toggle fatto/da fare, cancellare un'attività non è reversibile con un
+/// secondo tocco.
+Future<bool> _confirmDeleteTask(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Eliminare questa attività?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Annulla'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Elimina'),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
 }

@@ -49,6 +49,7 @@ class MemoryListScreen extends ConsumerWidget {
               return Dismissible(
                 key: ValueKey(memory.id),
                 direction: DismissDirection.endToStart,
+                confirmDismiss: (_) => _confirmDelete(context),
                 background: Container(
                   alignment: Alignment.centerRight,
                   padding:
@@ -86,5 +87,30 @@ class MemoryListScreen extends ConsumerWidget {
     final day = local.day.toString().padLeft(2, '0');
     final month = local.month.toString().padLeft(2, '0');
     return '$day/$month/${local.year}';
+  }
+
+  /// Conferma prima di eliminare una memoria (richiesta esplicita
+  /// dell'utente: "conferma su swipe-to-delete per elementi non banali") —
+  /// stessa conferma già presente per la Memoria di Workspace
+  /// ([WorkspaceMemoryListScreen]).
+  Future<bool> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminare questa memoria?'),
+        content: const Text('L\'assistente non ne terrà più conto.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Elimina'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
   }
 }
