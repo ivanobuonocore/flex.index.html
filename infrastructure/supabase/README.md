@@ -63,6 +63,19 @@ npx supabase db push
   manualmente: isolamento cross-utente su tutte le operazioni, constraint su campi non vuoti e
   sull'unicità di `endpoint`.
 
+- `migrations/20260721160000_workspace_sharing.sql` — `workspace_members`/`workspace_invites` +
+  `redeem_workspace_invite` (Fase 3, "Bilancio condiviso"). Verificato manualmente su Postgres
+  locale con due utenti simulati: isolamento completo prima dell'invito, redeem che rifiuta codici
+  scaduti/usati/propri, accesso concesso dopo il redeem e revocato dopo la rimozione.
+- `migrations/20260723150000_workspace_member_roles.sql` — `workspace_members.role`/
+  `workspace_invites.role` (Fase 3, "Permessi granulari sui Workspace condivisi" — integrazione
+  richiesta esplicitamente): un viewer legge tutto ma ogni scrittura su transazioni/note/attività
+  è bloccata dalla RLS; solo il proprietario può cambiare il ruolo di un membro (un
+  auto-tentativo di promozione viene bloccato); `redeem_workspace_invite` assegna il ruolo portato
+  dall'invito. Verificato manualmente su Postgres locale con cinque utenti simulati (owner,
+  editor, viewer, un redeem di invito viewer, un membro "legacy" senza `role` esplicito per
+  confermare il default `editor` retrocompatibile) — dettagli in `docs/database/README.md`.
+
 Le altre entità del Domain Model (Memory, Agent, ...) avranno le proprie migrazioni quando le
 rispettive feature verranno implementate (`docs/product/26-execution-blueprint.md`) — lo schema
 non richiede di riscrivere quelle esistenti per crescere (Engineering Constitution, Articolo 8).

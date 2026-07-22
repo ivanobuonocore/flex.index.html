@@ -5,7 +5,9 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_mobile/core/providers.dart';
 import 'package:pip_mobile/features/task/presentation/task_list_screen.dart';
 
+import '../../../support/fake_auth_repository.dart';
 import '../../../support/fake_task_repository.dart';
+import '../../../support/fake_workspace_sharing_repository.dart';
 
 /// Conferma su swipe-to-delete (richiesta esplicita dell'utente: "conferma
 /// su swipe-to-delete per elementi non banali") — un'Attività cancellata non
@@ -25,9 +27,18 @@ void main() {
     WidgetTester tester,
     FakeTaskRepository fakeRepository,
   ) {
+    // `TaskListScreen` osserva `currentMemberRoleProvider` (permessi
+    // granulari sui Workspace condivisi): senza queste due dipendenze
+    // (mai esercitate in questi test, che riguardano un Workspace personale)
+    // fallirebbe tentando di leggere `Supabase.instance` non inizializzato.
     return tester.pumpWidget(
       ProviderScope(
-        overrides: [taskRepositoryProvider.overrideWithValue(fakeRepository)],
+        overrides: [
+          taskRepositoryProvider.overrideWithValue(fakeRepository),
+          authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
+          workspaceSharingRepositoryProvider
+              .overrideWithValue(FakeWorkspaceSharingRepository()),
+        ],
         child: const MaterialApp(
           home: TaskListScreen(workspaceId: workspaceId),
         ),

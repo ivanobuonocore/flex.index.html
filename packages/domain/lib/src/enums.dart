@@ -73,3 +73,10 @@ enum TransactionCategory {
 /// giornaliera automatica non ha un caso d'uso realistico e intaserebbe
 /// l'elenco "in attesa di conferma" più in fretta di quanto serva rivedere.
 enum RecurrenceFrequency { weekly, monthly }
+
+/// Ruolo di un [WorkspaceMember] in un Workspace condiviso (integrazione
+/// richiesta esplicitamente: "permessi granulari sui Workspace condivisi").
+/// `editor` (default, per non cambiare il comportamento dei membri esistenti
+/// creati prima di questa distinzione): stessi diritti di scrittura del
+/// proprietario su Transazioni/Note/Attività. `viewer`: sola lettura.
+enum WorkspaceRole { viewer, editor }

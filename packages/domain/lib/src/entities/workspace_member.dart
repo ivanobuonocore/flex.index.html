@@ -1,3 +1,5 @@
+import '../enums.dart';
+
 /// Appartenenza di un secondo utente a un Workspace altrui (Fase 3, "Bilancio
 /// condiviso" — richiesta esplicita dell'utente: due Bilanci, uno personale e
 /// uno condiviso con un'altra persona; estesa da "Note/Attività condivise" —
@@ -11,6 +13,7 @@ final class WorkspaceMember {
     required this.workspaceId,
     required this.userId,
     required this.joinedAt,
+    this.role = WorkspaceRole.editor,
   });
 
   final String id;
@@ -20,16 +23,23 @@ final class WorkspaceMember {
   final String userId;
   final DateTime joinedAt;
 
+  /// Permessi granulari (integrazione richiesta esplicitamente): `editor`
+  /// (default) ha gli stessi diritti di scrittura del proprietario, `viewer`
+  /// solo lettura. Modificabile solo dal proprietario
+  /// ([WorkspaceSharingRepository.updateMemberRole]).
+  final WorkspaceRole role;
+
   @override
   bool operator ==(Object other) =>
       other is WorkspaceMember &&
       other.id == id &&
       other.workspaceId == workspaceId &&
       other.userId == userId &&
-      other.joinedAt == joinedAt;
+      other.joinedAt == joinedAt &&
+      other.role == role;
 
   @override
-  int get hashCode => Object.hash(id, workspaceId, userId, joinedAt);
+  int get hashCode => Object.hash(id, workspaceId, userId, joinedAt, role);
 
   @override
   String toString() =>

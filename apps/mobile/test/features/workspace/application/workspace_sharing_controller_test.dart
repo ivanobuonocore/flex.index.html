@@ -5,6 +5,7 @@ import 'package:pip_mobile/core/providers.dart';
 import 'package:pip_mobile/features/workspace/application/workspace_sharing_controller.dart';
 import 'package:pip_shared/pip_shared.dart';
 
+import '../../../support/fake_auth_repository.dart';
 import '../../../support/fake_workspace_sharing_repository.dart';
 
 void main() {
@@ -33,17 +34,21 @@ void main() {
   );
 
   late FakeWorkspaceSharingRepository fakeRepository;
+  late FakeAuthRepository fakeAuth;
   late ProviderContainer container;
 
   setUp(() {
     fakeRepository = FakeWorkspaceSharingRepository();
+    fakeAuth = FakeAuthRepository();
     container = ProviderContainer(
       overrides: [
         workspaceSharingRepositoryProvider.overrideWithValue(fakeRepository),
+        authRepositoryProvider.overrideWithValue(fakeAuth),
       ],
     );
     addTearDown(container.dispose);
     addTearDown(fakeRepository.dispose);
+    addTearDown(fakeAuth.dispose);
   });
 
   test('sharedBalancesProvider riflette lo stream del repository', () async {
@@ -113,5 +118,48 @@ void main() {
 
     expect(failure, isNull);
     expect(fakeRepository.lastRemovedMember, (workspaceId: 'w1', userId: 'u2'));
+  });
+
+  test('createInvite senza indicare un ruolo usa editor come default',
+      () async {
+    fakeRepository.createInviteResult = Result.ok(invite);
+
+    await container
+        .read(workspaceSharingFormControllerProvider.notifier)
+        .createInvite('w1');
+
+    expect(fakeRepository.lastInvitedRole, WorkspaceRole.editor);
+  });
+
+  test('createInvite inoltra il ruolo viewer indicato', () async {
+    fakeRepository.createInviteResult = Result.ok(invite);
+
+    await container
+        .read(workspaceSharingFormControllerProvider.notifier)
+        .createInvite('w1', role: WorkspaceRole.viewer);
+
+    expect(fakeRepository.lastInvitedRole, WorkspaceRole.viewer);
+  });
+
+  test('updateMemberRole delega al repository con workspaceId/userId/role',
+      () async {
+    final failure = await container
+        .read(workspaceSharingFormControllerProvider.notifier)
+        .updateMemberRole(
+          workspaceId: 'w1',
+          userId: 'u2',
+          role: WorkspaceRole.viewer,
+        );
+
+    expect(failure, isNull);
+    expect(
+      fakeRepository.lastUpdatedMemberRole,
+      (workspaceId: 'w1', userId: 'u2', role: WorkspaceRole.viewer),
+    );
+  });
+
+  test('currentMemberRoleProvider è null senza un ruolo per l\'utente', () {
+    final role = container.read(currentMemberRoleProvider('w1'));
+    expect(role, isNull);
   });
 }

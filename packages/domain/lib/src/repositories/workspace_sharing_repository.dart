@@ -3,6 +3,7 @@ import 'package:pip_shared/pip_shared.dart';
 import '../entities/workspace.dart';
 import '../entities/workspace_invite.dart';
 import '../entities/workspace_member.dart';
+import '../enums.dart';
 
 /// Confine verso la persistenza della condivisione di un Workspace (Fase 3,
 /// "Bilancio condiviso"), implementato nel layer `data` di ogni app.
@@ -22,13 +23,20 @@ abstract interface class WorkspaceSharingRepository {
   /// altri membri.
   Stream<List<WorkspaceMember>> watchMembers(String workspaceId);
 
-  /// Genera un nuovo codice d'invito per [workspaceId]. Solo il proprietario
-  /// del Workspace può generarlo (verificato via RLS).
-  Future<Result<WorkspaceInvite>> createInvite(String workspaceId);
+  /// Genera un nuovo codice d'invito per [workspaceId], con il ruolo che
+  /// verrà assegnato al momento del redeem (integrazione richiesta
+  /// esplicitamente: "permessi granulari" — default [WorkspaceRole.editor]
+  /// per non cambiare il comportamento di default). Solo il proprietario del
+  /// Workspace può generarlo (verificato via RLS).
+  Future<Result<WorkspaceInvite>> createInvite(
+    String workspaceId, {
+    WorkspaceRole role = WorkspaceRole.editor,
+  });
 
-  /// Unisce l'utente autenticato al Workspace associato a [code]. Fallisce
-  /// se il codice non esiste, è scaduto, è già stato usato, o se l'utente
-  /// prova a unirsi a un Workspace che ha creato lui stesso.
+  /// Unisce l'utente autenticato al Workspace associato a [code], con il
+  /// ruolo portato dall'invito. Fallisce se il codice non esiste, è scaduto,
+  /// è già stato usato, o se l'utente prova a unirsi a un Workspace che ha
+  /// creato lui stesso.
   Future<Result<Workspace>> redeemInvite(String code);
 
   /// Rimuove [userId] dai membri di [workspaceId] (solo il proprietario può
@@ -37,5 +45,14 @@ abstract interface class WorkspaceSharingRepository {
   Future<Result<Unit>> removeMember({
     required String workspaceId,
     required String userId,
+  });
+
+  /// Cambia il ruolo di [userId] in [workspaceId] (solo il proprietario può
+  /// farlo, verificato via RLS — un membro non può auto-assegnarsi
+  /// `editor`).
+  Future<Result<Unit>> updateMemberRole({
+    required String workspaceId,
+    required String userId,
+    required WorkspaceRole role,
   });
 }

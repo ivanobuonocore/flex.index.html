@@ -156,6 +156,11 @@ class _CreateSharedBalanceSheetState
   bool _isSubmitting = false;
   WorkspaceInvite? _createdInvite;
 
+  // Permessi granulari (integrazione richiesta esplicitamente): l'owner
+  // sceglie subito che diritti dare a chi si unirà con questo codice.
+  // Default `editor`, lo stesso comportamento di prima di questa slice.
+  WorkspaceRole _role = WorkspaceRole.editor;
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -192,7 +197,7 @@ class _CreateSharedBalanceSheetState
     final createdWorkspace = (workspaceResult as Ok<Workspace>).value;
     final inviteResult = await ref
         .read(workspaceSharingFormControllerProvider.notifier)
-        .createInvite(createdWorkspace.id);
+        .createInvite(createdWorkspace.id, role: _role);
 
     if (!mounted) return;
     setState(() {
@@ -233,6 +238,30 @@ class _CreateSharedBalanceSheetState
                         (value == null || value.trim().isEmpty)
                             ? 'Il nome è obbligatorio'
                             : null,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Chi si unisce con questo codice può',
+                        style: AppTypography.caption),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  SegmentedButton<WorkspaceRole>(
+                    segments: const [
+                      ButtonSegment(
+                        value: WorkspaceRole.editor,
+                        label: Text('Modificare'),
+                        icon: Icon(Icons.edit_outlined),
+                      ),
+                      ButtonSegment(
+                        value: WorkspaceRole.viewer,
+                        label: Text('Solo leggere'),
+                        icon: Icon(Icons.visibility_outlined),
+                      ),
+                    ],
+                    selected: {_role},
+                    onSelectionChanged: (selection) =>
+                        setState(() => _role = selection.first),
                   ),
                   if (_errorMessage != null) ...[
                     const SizedBox(height: AppSpacing.md),
@@ -373,11 +402,16 @@ class _ManageSharedBalanceSheetState
   WorkspaceInvite? _newInvite;
   String? _errorMessage;
 
+  // Permessi granulari (integrazione richiesta esplicitamente): ruolo per il
+  // prossimo codice d'invito da generare, indipendente da quello scelto alla
+  // creazione del Bilancio condiviso.
+  WorkspaceRole _inviteRole = WorkspaceRole.editor;
+
   Future<void> _createInvite() async {
     setState(() => _errorMessage = null);
     final result = await ref
         .read(workspaceSharingFormControllerProvider.notifier)
-        .createInvite(widget.workspace.id);
+        .createInvite(widget.workspace.id, role: _inviteRole);
     if (!mounted) return;
     result.fold(
       (invite) => setState(() => _newInvite = invite),
@@ -389,6 +423,18 @@ class _ManageSharedBalanceSheetState
     final failure = await ref
         .read(workspaceSharingFormControllerProvider.notifier)
         .removeMember(workspaceId: widget.workspace.id, userId: userId);
+    if (!mounted) return;
+    if (failure != null) setState(() => _errorMessage = failure.message);
+  }
+
+  Future<void> _updateMemberRole(String userId, WorkspaceRole role) async {
+    final failure = await ref
+        .read(workspaceSharingFormControllerProvider.notifier)
+        .updateMemberRole(
+          workspaceId: widget.workspace.id,
+          userId: userId,
+          role: role,
+        );
     if (!mounted) return;
     if (failure != null) setState(() => _errorMessage = failure.message);
   }
@@ -432,10 +478,39 @@ class _ManageSharedBalanceSheetState
                               contentPadding: EdgeInsets.zero,
                               leading: const Icon(Icons.person_outline),
                               title: Text(member.userId),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.person_remove_outlined),
-                                tooltip: 'Rimuovi',
-                                onPressed: () => _removeMember(member.userId),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  DropdownButton<WorkspaceRole>(
+                                    value: member.role,
+                                    underline: const SizedBox.shrink(),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: WorkspaceRole.editor,
+                                        child: Text('Può modificare'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: WorkspaceRole.viewer,
+                                        child: Text('Solo lettura'),
+                                      ),
+                                    ],
+                                    onChanged: isLoading
+                                        ? null
+                                        : (role) {
+                                            if (role != null) {
+                                              _updateMemberRole(
+                                                  member.userId, role);
+                                            }
+                                          },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                        Icons.person_remove_outlined),
+                                    tooltip: 'Rimuovi',
+                                    onPressed: () =>
+                                        _removeMember(member.userId),
+                                  ),
+                                ],
                               ),
                             ))
                         .toList(growable: false),
@@ -451,6 +526,30 @@ class _ManageSharedBalanceSheetState
                 style: TextStyle(color: Theme.of(context).colorScheme.error)),
             const SizedBox(height: AppSpacing.md),
           ],
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Nuovo invito: chi lo usa può',
+                style: AppTypography.caption),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          SegmentedButton<WorkspaceRole>(
+            segments: const [
+              ButtonSegment(
+                value: WorkspaceRole.editor,
+                label: Text('Modificare'),
+                icon: Icon(Icons.edit_outlined),
+              ),
+              ButtonSegment(
+                value: WorkspaceRole.viewer,
+                label: Text('Solo leggere'),
+                icon: Icon(Icons.visibility_outlined),
+              ),
+            ],
+            selected: {_inviteRole},
+            onSelectionChanged: (selection) =>
+                setState(() => _inviteRole = selection.first),
+          ),
+          const SizedBox(height: AppSpacing.md),
           OutlinedButton.icon(
             onPressed: isLoading ? null : _createInvite,
             icon: const Icon(Icons.add_link),

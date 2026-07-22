@@ -450,6 +450,21 @@ Non ancora presenti: settings, billing.
   compare tra l'hero e il grafico a torta, solo quando il mese selezionato nella tendina è quello
   corrente — su uno storico non avrebbe senso, ed è il chiamante (`BalanceOverviewScreen`) a
   garantirlo, non la funzione pura.
+- **Permessi granulari (viewer/editor) sui Workspace condivisi** (integrazione richiesta
+  esplicitamente) — fin dalla prima slice di "Bilancio condiviso" ogni membro aveva sempre gli
+  stessi diritti del proprietario; ora il proprietario sceglie, sia creando il Bilancio condiviso
+  sia generando un nuovo codice d'invito (`shared_balance_screen.dart`, `SegmentedButton`
+  "Modificare"/"Solo leggere"), se chi si unisce potrà scrivere o solo leggere — e può cambiare il
+  ruolo di un membro già presente in qualsiasi momento (`DropdownButton` per riga nel foglio
+  "Gestisci membri"). Nuovo `WorkspaceRole` (`viewer`/`editor`, default `editor` per non cambiare
+  il comportamento di prima) in `packages/domain`; `currentMemberRoleProvider(workspaceId)`
+  (`workspace_sharing_controller.dart`) riusa `workspaceMembersProvider` invece di una query
+  dedicata — sotto RLS un membro (non il proprietario) vede sempre e solo la propria riga in
+  `workspace_members`, quindi la sua presenza/ruolo *è già* la risposta a "che ruolo ho qui".
+  `transaction_report_screen.dart`, `note_list_screen.dart` e `task_list_screen.dart` nascondono
+  FAB, swipe-to-delete e il tocco-per-modificare quando il ruolo è `viewer` — l'applicazione
+  effettiva dei permessi resta comunque la RLS lato Supabase (`docs/database/README.md`, slice
+  27), la UI qui è solo coerenza percepita, non l'unica barriera.
 
 ## Setup locale
 

@@ -1,3 +1,5 @@
+import '../enums.dart';
+
 /// Codice d'invito per unirsi a un Bilancio condiviso (Fase 3, "Bilancio
 /// condiviso"). Un invito è a uso singolo: [usedAt]/[usedBy] valorizzati dopo
 /// il primo redeem, non più utilizzabile da quel momento (né dopo
@@ -12,6 +14,7 @@ final class WorkspaceInvite {
     required this.createdBy,
     required this.createdAt,
     required this.expiresAt,
+    this.role = WorkspaceRole.editor,
     this.usedAt,
     this.usedBy,
   });
@@ -24,6 +27,11 @@ final class WorkspaceInvite {
   final String createdBy;
   final DateTime createdAt;
   final DateTime expiresAt;
+
+  /// Ruolo che verrà assegnato in [WorkspaceMember.role] al momento del
+  /// redeem (integrazione richiesta esplicitamente: "permessi granulari") —
+  /// deciso dal proprietario qui, mai da chi redime l'invito.
+  final WorkspaceRole role;
   final DateTime? usedAt;
   final String? usedBy;
 
@@ -39,6 +47,7 @@ final class WorkspaceInvite {
       other.createdBy == createdBy &&
       other.createdAt == createdAt &&
       other.expiresAt == expiresAt &&
+      other.role == role &&
       other.usedAt == usedAt &&
       other.usedBy == usedBy;
 
@@ -50,6 +59,7 @@ final class WorkspaceInvite {
         createdBy,
         createdAt,
         expiresAt,
+        role,
         usedAt,
         usedBy,
       );

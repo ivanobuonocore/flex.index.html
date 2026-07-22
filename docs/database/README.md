@@ -916,6 +916,48 @@ Richiesta esplicita dell'utente. Nessuna tabella nuova: `projectedMonthEndExpens
 funzione pura lato client (`transaction_controller.dart`) sui dati già letti da `transactions`,
 nessuna nuova query né colonna.
 
+## Fase 3 (slice 27) — Permessi granulari (viewer/editor) sui Workspace condivisi
+
+Integrazione richiesta esplicitamente, dopo che "Bilancio condiviso" e "Note/Attività condivise"
+davano a ogni membro sempre gli stessi diritti del proprietario. `20260723150000_workspace_member_roles.sql`:
+
+- `workspace_members.role` (`text`, check `in ('viewer', 'editor')`, default `'editor'` — non
+  cambia il comportamento dei membri esistenti creati prima di questa migrazione).
+- `workspace_invites.role`: il ruolo che `redeem_workspace_invite` assegnerà al momento del
+  redeem, scelto dal proprietario quando genera l'invito — mai passato liberamente da chi lo
+  redime (che non deve potersi auto-assegnare `editor`).
+- Nuova policy `workspace_members_update_owner`: solo il proprietario può cambiare il `role` di un
+  membro (`using`/`with check` su `is_workspace_owner(workspace_id)`, la stessa funzione SECURITY
+  DEFINER già usata dalla migrazione originale).
+- Le policy di scrittura (`insert`/`update`/`delete`) di `transactions`/`notes`/`tasks` per un
+  membro sono state **sostituite** (drop + create, non additive come le altre migrazioni di
+  questo progetto) per richiedere `role = 'editor'` oltre alla sola appartenenza — le policy di
+  `select` restano invariate, un viewer deve continuare a leggere tutto.
+- `redeem_workspace_invite` ridefinita per inserire `v_invite.role` invece di lasciare il default
+  implicito.
+
+**Verificato manualmente su Postgres locale** (stesso schema fittizio `auth.uid()`/`storage.*` già
+usato per "Bilancio condiviso", cinque utenti simulati — owner, editor, viewer, un nuovo utente che
+redime un invito viewer, un membro "legacy" senza `role` esplicito):
+- un editor legge/scrive transazioni/note/attività esattamente come il proprietario;
+- un viewer legge tutto ma **ogni** scrittura (insert/update/delete su transazioni/note/attività)
+  viene bloccata dalla RLS;
+- il proprietario può cambiare il ruolo di un membro; un membro che prova ad auto-promuoversi a
+  `editor` viene bloccato (0 righe aggiornate);
+- `redeem_workspace_invite` assegna il ruolo portato dall'invito (verificato con un invito
+  `viewer`: il nuovo membro riceve `role = 'viewer'` ed è immediatamente limitato in scrittura);
+- un membro creato prima di questa migrazione (nessun `role` esplicito nell'insert) riceve il
+  default `'editor'` e mantiene l'accesso in scrittura di prima — nessuna regressione silenziosa.
+
+Mobile: `WorkspaceRole` (`viewer`/`editor`) in `packages/domain`; `WorkspaceSharingRepository`
+guadagna `updateMemberRole` e un parametro `role` su `createInvite`. Nuovo
+`currentMemberRoleProvider(workspaceId)` (in `workspace_sharing_controller.dart`) — riusa
+`workspaceMembersProvider`, dato che sotto RLS un membro (non proprietario) vede sempre e solo la
+propria riga: nessuna query dedicata necessaria per sapere "il mio ruolo qui". Le schermate
+`transaction_report_screen.dart`/`note_list_screen.dart`/`task_list_screen.dart` nascondono
+FAB/swipe-to-delete/tocco-per-modificare quando il ruolo è `viewer`; `shared_balance_screen.dart`
+guadagna un selettore di ruolo sia alla creazione dell'invito sia per un membro già presente.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

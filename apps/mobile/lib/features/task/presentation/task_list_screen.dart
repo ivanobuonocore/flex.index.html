@@ -6,6 +6,7 @@ import 'package:pip_domain/pip_domain.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/skeleton_list.dart';
+import '../../workspace/application/workspace_sharing_controller.dart';
 import '../application/task_controller.dart';
 import 'create_edit_task_sheet.dart';
 
@@ -19,14 +20,22 @@ class TaskListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tasksAsync = ref.watch(tasksProvider(workspaceId));
+    // Permessi granulari sui Workspace condivisi (integrazione richiesta
+    // esplicitamente): `null` per un Workspace personale o per il
+    // proprietario di uno condiviso, sempre accesso pieno in entrambi i
+    // casi — solo un membro con ruolo `viewer` viene limitato qui.
+    final isViewer = ref.watch(currentMemberRoleProvider(workspaceId)) ==
+        WorkspaceRole.viewer;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Attività')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () =>
-            showCreateEditTaskSheet(context, workspaceId: workspaceId),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: isViewer
+          ? null
+          : FloatingActionButton(
+              onPressed: () =>
+                  showCreateEditTaskSheet(context, workspaceId: workspaceId),
+              child: const Icon(Icons.add),
+            ),
       body: tasksAsync.when(
         loading: () => const SkeletonList(),
         error: (error, stackTrace) => ErrorView(
@@ -39,12 +48,16 @@ class TaskListScreen extends ConsumerWidget {
               icon: Icons.check_circle_outline,
               color: AppColors.categoryAttivita,
               title: 'Nessuna attività ancora',
-              message: 'Crea la tua prima attività in questo Workspace.',
-              action: FilledButton(
-                onPressed: () =>
-                    showCreateEditTaskSheet(context, workspaceId: workspaceId),
-                child: const Text('Crea la prima attività'),
-              ),
+              message: isViewer
+                  ? 'Non ci sono ancora attività in questo Workspace.'
+                  : 'Crea la tua prima attività in questo Workspace.',
+              action: isViewer
+                  ? null
+                  : FilledButton(
+                      onPressed: () => showCreateEditTaskSheet(context,
+                          workspaceId: workspaceId),
+                      child: const Text('Crea la prima attività'),
+                    ),
             );
           }
 
@@ -55,6 +68,47 @@ class TaskListScreen extends ConsumerWidget {
             itemBuilder: (context, index) {
               final task = tasks[index];
               final isDone = task.status == TaskStatus.done;
+
+              final card = Card(
+                child: ListTile(
+                  leading: Checkbox(
+                    value: isDone,
+                    activeColor: AppColors.categoryAttivita,
+                    onChanged: isViewer
+                        ? null
+                        : (_) => ref
+                            .read(taskFormControllerProvider.notifier)
+                            .updateTask(
+                              task.copyWith(
+                                  status: isDone
+                                      ? TaskStatus.todo
+                                      : TaskStatus.done),
+                            ),
+                  ),
+                  title: Text(
+                    task.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: isDone
+                        ? const TextStyle(
+                            decoration: TextDecoration.lineThrough)
+                        : null,
+                  ),
+                  subtitle: task.description == null
+                      ? null
+                      : Text(task.description!,
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: isViewer
+                      ? null
+                      : () => showCreateEditTaskSheet(
+                            context,
+                            workspaceId: workspaceId,
+                            task: task,
+                          ),
+                ),
+              );
+
+              if (isViewer) return card;
 
               return Dismissible(
                 key: ValueKey(task.id),
@@ -73,39 +127,7 @@ class TaskListScreen extends ConsumerWidget {
                 onDismissed: (_) => ref
                     .read(taskFormControllerProvider.notifier)
                     .delete(task.id),
-                child: Card(
-                  child: ListTile(
-                    leading: Checkbox(
-                      value: isDone,
-                      activeColor: AppColors.categoryAttivita,
-                      onChanged: (_) => ref
-                          .read(taskFormControllerProvider.notifier)
-                          .updateTask(
-                            task.copyWith(
-                                status:
-                                    isDone ? TaskStatus.todo : TaskStatus.done),
-                          ),
-                    ),
-                    title: Text(
-                      task.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: isDone
-                          ? const TextStyle(
-                              decoration: TextDecoration.lineThrough)
-                          : null,
-                    ),
-                    subtitle: task.description == null
-                        ? null
-                        : Text(task.description!,
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                    onTap: () => showCreateEditTaskSheet(
-                      context,
-                      workspaceId: workspaceId,
-                      task: task,
-                    ),
-                  ),
-                ),
+                child: card,
               );
             },
           );

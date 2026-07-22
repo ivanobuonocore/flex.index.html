@@ -5,7 +5,9 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_mobile/core/providers.dart';
 import 'package:pip_mobile/features/note/presentation/note_list_screen.dart';
 
+import '../../../support/fake_auth_repository.dart';
 import '../../../support/fake_note_repository.dart';
+import '../../../support/fake_workspace_sharing_repository.dart';
 
 /// Tag sulle Note resi visibili (richiesta esplicita dell'utente: erano già
 /// modellati nel dominio/persistiti dal repository, ma nessuna schermata li
@@ -33,9 +35,18 @@ void main() {
     WidgetTester tester,
     FakeNoteRepository fakeRepository,
   ) {
+    // `NoteListScreen` osserva `currentMemberRoleProvider` (permessi
+    // granulari sui Workspace condivisi): senza queste due dipendenze
+    // (mai esercitate in questi test, che riguardano un Workspace personale)
+    // fallirebbe tentando di leggere `Supabase.instance` non inizializzato.
     return tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(fakeRepository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(fakeRepository),
+          authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
+          workspaceSharingRepositoryProvider
+              .overrideWithValue(FakeWorkspaceSharingRepository()),
+        ],
         child: const MaterialApp(
           home: NoteListScreen(workspaceId: workspaceId),
         ),

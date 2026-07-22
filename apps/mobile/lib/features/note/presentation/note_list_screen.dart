@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pip_design_system/pip_design_system.dart';
+import 'package:pip_domain/pip_domain.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/skeleton_list.dart';
+import '../../workspace/application/workspace_sharing_controller.dart';
 import '../application/note_controller.dart';
 import 'create_edit_note_sheet.dart';
 
@@ -30,14 +32,22 @@ class _NoteListScreenState extends ConsumerState<NoteListScreen> {
   @override
   Widget build(BuildContext context) {
     final notesAsync = ref.watch(notesProvider(widget.workspaceId));
+    // Permessi granulari sui Workspace condivisi (integrazione richiesta
+    // esplicitamente): `null` per un Workspace personale o per il
+    // proprietario di uno condiviso, sempre accesso pieno in entrambi i
+    // casi — solo un membro con ruolo `viewer` viene limitato qui.
+    final isViewer = ref.watch(currentMemberRoleProvider(widget.workspaceId)) ==
+        WorkspaceRole.viewer;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Note')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () =>
-            showCreateEditNoteSheet(context, workspaceId: widget.workspaceId),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: isViewer
+          ? null
+          : FloatingActionButton(
+              onPressed: () => showCreateEditNoteSheet(context,
+                  workspaceId: widget.workspaceId),
+              child: const Icon(Icons.add),
+            ),
       body: notesAsync.when(
         loading: () => const SkeletonList(),
         error: (error, stackTrace) => ErrorView(
@@ -50,12 +60,16 @@ class _NoteListScreenState extends ConsumerState<NoteListScreen> {
               icon: Icons.sticky_note_2_outlined,
               color: AppColors.accentNote,
               title: 'Nessuna nota ancora',
-              message: 'Crea la tua prima nota in questo Workspace.',
-              action: FilledButton(
-                onPressed: () => showCreateEditNoteSheet(context,
-                    workspaceId: widget.workspaceId),
-                child: const Text('Crea la prima nota'),
-              ),
+              message: isViewer
+                  ? 'Non ci sono ancora note in questo Workspace.'
+                  : 'Crea la tua prima nota in questo Workspace.',
+              action: isViewer
+                  ? null
+                  : FilledButton(
+                      onPressed: () => showCreateEditNoteSheet(context,
+                          workspaceId: widget.workspaceId),
+                      child: const Text('Crea la prima nota'),
+                    ),
             );
           }
 
@@ -115,6 +129,45 @@ class _NoteListScreenState extends ConsumerState<NoteListScreen> {
                             const SizedBox(height: AppSpacing.sm),
                         itemBuilder: (context, index) {
                           final note = visibleNotes[index];
+                          final card = Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.sticky_note_2_outlined,
+                                  color: AppColors.accentNote),
+                              title: Text(note.title,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (note.content.isNotEmpty)
+                                    Text(note.content,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis),
+                                  if (note.tags.isNotEmpty) ...[
+                                    const SizedBox(height: AppSpacing.xs),
+                                    Wrap(
+                                      spacing: AppSpacing.xs,
+                                      runSpacing: AppSpacing.xs,
+                                      children: [
+                                        for (final tag in note.tags)
+                                          _TagPill(label: tag),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              onTap: isViewer
+                                  ? null
+                                  : () => showCreateEditNoteSheet(
+                                        context,
+                                        workspaceId: widget.workspaceId,
+                                        note: note,
+                                      ),
+                            ),
+                          );
+
+                          if (isViewer) return card;
+
                           return Dismissible(
                             key: ValueKey(note.id),
                             direction: DismissDirection.endToStart,
@@ -133,42 +186,7 @@ class _NoteListScreenState extends ConsumerState<NoteListScreen> {
                             onDismissed: (_) => ref
                                 .read(noteFormControllerProvider.notifier)
                                 .delete(note.id),
-                            child: Card(
-                              child: ListTile(
-                                leading: const Icon(
-                                    Icons.sticky_note_2_outlined,
-                                    color: AppColors.accentNote),
-                                title: Text(note.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (note.content.isNotEmpty)
-                                      Text(note.content,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis),
-                                    if (note.tags.isNotEmpty) ...[
-                                      const SizedBox(height: AppSpacing.xs),
-                                      Wrap(
-                                        spacing: AppSpacing.xs,
-                                        runSpacing: AppSpacing.xs,
-                                        children: [
-                                          for (final tag in note.tags)
-                                            _TagPill(label: tag),
-                                        ],
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                onTap: () => showCreateEditNoteSheet(
-                                  context,
-                                  workspaceId: widget.workspaceId,
-                                  note: note,
-                                ),
-                              ),
-                            ),
+                            child: card,
                           );
                         },
                       ),

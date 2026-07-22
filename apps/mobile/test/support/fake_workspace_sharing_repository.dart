@@ -8,6 +8,7 @@ class FakeWorkspaceSharingRepository implements WorkspaceSharingRepository {
     this.createInviteResult,
     this.redeemInviteResult,
     this.removeMemberResult,
+    this.updateMemberRoleResult,
   });
 
   final _sharedBalancesController =
@@ -18,10 +19,17 @@ class FakeWorkspaceSharingRepository implements WorkspaceSharingRepository {
   Result<WorkspaceInvite>? createInviteResult;
   Result<Workspace>? redeemInviteResult;
   Result<Unit>? removeMemberResult;
+  Result<Unit>? updateMemberRoleResult;
 
   String? lastInvitedWorkspaceId;
+  WorkspaceRole? lastInvitedRole;
   String? lastRedeemedCode;
   ({String workspaceId, String userId})? lastRemovedMember;
+  ({
+    String workspaceId,
+    String userId,
+    WorkspaceRole role
+  })? lastUpdatedMemberRole;
 
   void emitSharedBalances(List<Workspace> workspaces) =>
       _sharedBalancesController.add(workspaces);
@@ -45,8 +53,12 @@ class FakeWorkspaceSharingRepository implements WorkspaceSharingRepository {
       _membersControllerFor(workspaceId).stream;
 
   @override
-  Future<Result<WorkspaceInvite>> createInvite(String workspaceId) async {
+  Future<Result<WorkspaceInvite>> createInvite(
+    String workspaceId, {
+    WorkspaceRole role = WorkspaceRole.editor,
+  }) async {
     lastInvitedWorkspaceId = workspaceId;
+    lastInvitedRole = role;
     return createInviteResult ??
         const Result<WorkspaceInvite>.err(
             ValidationFailure('Nessun risultato configurato.'));
@@ -67,6 +79,17 @@ class FakeWorkspaceSharingRepository implements WorkspaceSharingRepository {
   }) async {
     lastRemovedMember = (workspaceId: workspaceId, userId: userId);
     return removeMemberResult ?? const Result.ok(unit);
+  }
+
+  @override
+  Future<Result<Unit>> updateMemberRole({
+    required String workspaceId,
+    required String userId,
+    required WorkspaceRole role,
+  }) async {
+    lastUpdatedMemberRole =
+        (workspaceId: workspaceId, userId: userId, role: role);
+    return updateMemberRoleResult ?? const Result.ok(unit);
   }
 
   void dispose() {

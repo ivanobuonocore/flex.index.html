@@ -45,7 +45,10 @@ class SupabaseWorkspaceSharingRepository implements WorkspaceSharingRepository {
   }
 
   @override
-  Future<Result<WorkspaceInvite>> createInvite(String workspaceId) async {
+  Future<Result<WorkspaceInvite>> createInvite(
+    String workspaceId, {
+    WorkspaceRole role = WorkspaceRole.editor,
+  }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) {
       return const Result.err(
@@ -55,7 +58,11 @@ class SupabaseWorkspaceSharingRepository implements WorkspaceSharingRepository {
     try {
       final row = await _client
           .from(_invitesTable)
-          .insert({'workspace_id': workspaceId, 'created_by': userId})
+          .insert({
+            'workspace_id': workspaceId,
+            'created_by': userId,
+            'role': role.name,
+          })
           .select()
           .single();
       return Result.ok(_inviteFromDb(row));
@@ -119,6 +126,27 @@ class SupabaseWorkspaceSharingRepository implements WorkspaceSharingRepository {
     }
   }
 
+  @override
+  Future<Result<Unit>> updateMemberRole({
+    required String workspaceId,
+    required String userId,
+    required WorkspaceRole role,
+  }) async {
+    try {
+      await _client
+          .from(_membersTable)
+          .update({'role': role.name})
+          .eq('workspace_id', workspaceId)
+          .eq('user_id', userId);
+      return const Result.ok(unit);
+    } catch (e) {
+      return Result.err(
+        UnexpectedFailure('Non è stato possibile cambiare il ruolo del membro.',
+            cause: e),
+      );
+    }
+  }
+
   Workspace _workspaceFromDb(Map<String, dynamic> row) {
     return Workspace(
       id: row['id'] as String,
@@ -139,6 +167,7 @@ class SupabaseWorkspaceSharingRepository implements WorkspaceSharingRepository {
       workspaceId: row['workspace_id'] as String,
       userId: row['user_id'] as String,
       joinedAt: DateTime.parse(row['joined_at'] as String),
+      role: WorkspaceRole.values.byName(row['role'] as String),
     );
   }
 
@@ -150,6 +179,7 @@ class SupabaseWorkspaceSharingRepository implements WorkspaceSharingRepository {
       createdBy: row['created_by'] as String,
       createdAt: DateTime.parse(row['created_at'] as String),
       expiresAt: DateTime.parse(row['expires_at'] as String),
+      role: WorkspaceRole.values.byName(row['role'] as String),
       usedAt: row['used_at'] == null
           ? null
           : DateTime.parse(row['used_at'] as String),
