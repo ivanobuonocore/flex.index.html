@@ -10,6 +10,7 @@ import '../../auth/application/session_controller.dart';
 import '../../export/presentation/data_export_sheet.dart';
 import '../../notifications/application/push_notification_controller.dart';
 import '../../notifications/data/push_notification_service.dart';
+import '../../pwa_install/application/install_prompt_controller.dart';
 import '../../reminder/application/calendar_sync_controller.dart';
 
 /// Profilo (docs/product/06-information-architecture.md, "Profilo"). In Fase
@@ -132,6 +133,7 @@ class ProfileScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.lg),
               const _GoogleCalendarCard(),
             ],
+            const _InstallAppCard(),
             const SizedBox(height: AppSpacing.xl),
             OutlinedButton.icon(
               onPressed: isSigningOut
@@ -452,4 +454,62 @@ class _GoogleCalendarCard extends ConsumerWidget {
   String _formatDateTime(DateTime dateTime) =>
       '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')} '
       '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+}
+
+/// Banner "Aggiungi alla schermata Home" (richiesta esplicita dell'utente,
+/// "anche solo migliorie grafiche"). Nascosto del tutto finché il browser
+/// non emette l'evento `beforeinstallprompt` (Chrome/Edge desktop e Android;
+/// mai su iOS Safari, che non lo supporta — coerente con quanto già scritto
+/// sopra per le notifiche push su iPhone) o se l'app è già installata —
+/// niente contenitore vuoto, stesso principio di [_NotificationsCard].
+class _InstallAppCard extends ConsumerWidget {
+  const _InstallAppCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final available =
+        ref.watch(installAvailableProvider).asData?.value ?? false;
+    if (!available) return const SizedBox.shrink();
+
+    final isBusy = ref.watch(promptInstallControllerProvider).isLoading;
+
+    return Column(
+      children: [
+        const SizedBox(height: AppSpacing.lg),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.install_mobile_outlined),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text('Installa l\'app', style: AppTypography.heading3),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Aggiungi PIP alla schermata Home per aprirla come '
+                  'un\'app, anche a schermo intero.',
+                  style: AppTypography.caption,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                ElevatedButton.icon(
+                  onPressed: isBusy
+                      ? null
+                      : () => ref
+                          .read(promptInstallControllerProvider.notifier)
+                          .promptInstall(),
+                  icon: const Icon(Icons.add_to_home_screen_outlined),
+                  label: const Text('Installa'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

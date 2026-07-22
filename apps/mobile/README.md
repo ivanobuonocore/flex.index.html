@@ -384,6 +384,13 @@ Non ancora presenti: settings, billing.
   recapitata — non è verificabile senza un browser reale: su iPhone funziona solo dopo aver
   aggiunto il sito alla schermata Home (icona Condividi → Aggiungi a Home, richiede iOS 16.4+),
   mai da una scheda Safari normale.
+- Lo stesso per il banner di installazione PWA (`features/pwa_install`): la parte web-only è
+  verificata con `flutter analyze` e un vero `flutter build web` con dart2js, ma l'evento
+  `beforeinstallprompt` non è simulabile in `flutter test` — se e quando il browser lo emette
+  davvero (Chrome/Edge desktop e Android; mai su iOS Safari, che non lo supporta affatto) va
+  verificato manualmente. La disponibilità del prompt è comunque un provider runtime testabile con
+  un fake (`FakeInstallPromptService`), a differenza delle notifiche push che restano gated da una
+  costante di compilazione mai vera nei test.
 - **Nessuna migrazione/Edge Function di questo progetto è mai stata applicata a un progetto
   Supabase reale da questa sessione**: serve un token di accesso Supabase (`supabase login`) che
   non è mai stato disponibile qui. Ogni `infrastructure/supabase/migrations/*.sql` scritto va
@@ -675,6 +682,25 @@ Non ancora presenti: settings, billing.
   quegli override (`workspace_navigation_test.dart`, preesistente) ha iniziato a far fallire l'intera
   schermata invece di limitarsi a trattare il ruolo come "nessuno". Stesso identico bug già
   documentato sopra per `_TodayHighlights`/`linkedDocumentIdsProvider`, stessa correzione.
+- **Banner "Aggiungi alla schermata Home" (installazione PWA)** (richiesta esplicita dell'utente)
+  — nuovo `features/pwa_install/`, stesso pattern a tre file già stabilito per
+  `features/notifications/` (interfaccia `InstallPromptService` + `_stub.dart` + `_web.dart`,
+  import condizionale `if (dart.library.js_interop)`). L'implementazione web ascolta l'evento
+  browser `beforeinstallprompt` (proprietario di Chromium/Edge, non nello standard W3C — extension
+  type minimo `_BeforeInstallPromptEvent` con solo `prompt()`, dato che non è nei binding generati
+  di `package:web`), lo intercetta con `preventDefault()` per poterlo mostrare su richiesta invece
+  che automaticamente, ed espone `promptInstall()`; l'evento standard `appinstalled` segna
+  l'installazione avvenuta. Nuova card `_InstallAppCard` in `profile_screen.dart`, stesso stile di
+  `_NotificationsCard`: nascosta del tutto finché `installAvailableProvider` non emette `true`
+  (browser non Chromium/Edge, app già installata, o iOS Safari che non lo supporta affatto — copy
+  coerente con quanto già scritto per le notifiche push su iOS). A differenza delle card
+  Notifiche/Google Calendar (gated da una costante di compilazione mai vera nei test), qui la
+  disponibilità è un provider runtime: **testabile per intero con un fake**
+  (`FakeInstallPromptService`), non solo dichiarata non verificabile. **Non verificabile in questa
+  sandbox**: solo il comportamento reale dell'evento nel browser (nessun browser nel test runner,
+  `beforeinstallprompt` non è simulabile) — verificato che `flutter build web` compili
+  correttamente la forma dell'interop, comportamento a runtime da verificare manualmente in
+  Chrome/Edge, stesso limite già accettato per le notifiche push.
 
 ## Setup locale
 
