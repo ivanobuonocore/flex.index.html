@@ -67,5 +67,40 @@ void main() {
 
       expect(withGroup, isNot(equals(withoutGroup)));
     });
+
+    test('googleEventId di default è null (mai sincronizzato)', () {
+      final event = CalendarEvent(
+        id: 'e1',
+        workspaceId: 'w1',
+        title: 'Dentista',
+        startsAt: startsAt,
+        durationMinutes: 30,
+        createdAt: createdAt,
+      );
+
+      expect(event.googleEventId, isNull);
+    });
+
+    test('googleEventId diverso distingue due eventi altrimenti identici', () {
+      final synced = CalendarEvent(
+        id: 'e1',
+        workspaceId: 'w1',
+        title: 'Dentista',
+        startsAt: startsAt,
+        durationMinutes: 30,
+        createdAt: createdAt,
+        googleEventId: 'google-1',
+      );
+      final notSynced = CalendarEvent(
+        id: 'e1',
+        workspaceId: 'w1',
+        title: 'Dentista',
+        startsAt: startsAt,
+        durationMinutes: 30,
+        createdAt: createdAt,
+      );
+
+      expect(synced, isNot(equals(notSynced)));
+    });
   });
 }

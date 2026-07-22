@@ -18,6 +18,16 @@ abstract final class AppEnv {
   static const String vapidPublicKey =
       String.fromEnvironment('VAPID_PUBLIC_KEY');
 
+  /// `true` solo se chi compila l'app ha già abilitato il provider Google nel
+  /// dashboard Supabase (Authentication → Providers, con lo scope Calendar) e
+  /// creato un OAuth Client su Google Cloud Console — passi manuali fuori dal
+  /// codice, vedi `infrastructure/supabase/README.md`. Nessun segreto qui
+  /// dentro (a differenza di VAPID non serve alcun valore al client, solo un
+  /// interruttore): nascondere il pulsante "Connetti Google Calendar" finché
+  /// non è vero evita di mostrare un'azione che fallirebbe sempre.
+  static const bool googleCalendarEnabled =
+      bool.fromEnvironment('GOOGLE_CALENDAR_ENABLED');
+
   static void assertConfigured() {
     if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
       throw StateError(

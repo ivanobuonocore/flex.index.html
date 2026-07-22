@@ -10,6 +10,7 @@ import '../../auth/application/session_controller.dart';
 import '../../export/presentation/data_export_sheet.dart';
 import '../../notifications/application/push_notification_controller.dart';
 import '../../notifications/data/push_notification_service.dart';
+import '../../reminder/application/calendar_sync_controller.dart';
 
 /// Profilo (docs/product/06-information-architecture.md, "Profilo"). In Fase
 /// 1: identità dell'account, logout, preferenza di tema e Memoria.
@@ -89,6 +90,10 @@ class ProfileScreen extends ConsumerWidget {
             if (AppEnv.vapidPublicKey.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.lg),
               const _NotificationsCard(),
+            ],
+            if (AppEnv.googleCalendarEnabled) ...[
+              const SizedBox(height: AppSpacing.lg),
+              const _GoogleCalendarCard(),
             ],
             const SizedBox(height: AppSpacing.xl),
             OutlinedButton.icon(
@@ -290,4 +295,124 @@ class _NotificationsCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Sync con Google Calendar (integrazione richiesta esplicitamente). Nascosta
+/// del tutto se l'app non è stata compilata con
+/// `--dart-define=GOOGLE_CALENDAR_ENABLED=true` (vedi [AppEnv.googleCalendarEnabled])
+/// — richiede che il provider Google sia già abilitato nel dashboard Supabase,
+/// stesso principio già usato per [_NotificationsCard]/VAPID.
+class _GoogleCalendarCard extends ConsumerWidget {
+  const _GoogleCalendarCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final connectionAsync = ref.watch(calendarConnectionProvider);
+    final isBusy = ref.watch(calendarSyncFormControllerProvider).isLoading;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.event_available_outlined),
+                const SizedBox(width: AppSpacing.sm),
+                Text('Google Calendar', style: AppTypography.heading3),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            connectionAsync.when(
+              data: (connection) =>
+                  _statusContent(context, ref, connection, isBusy),
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+              error: (_, __) => Text(
+                'Non è stato possibile verificare lo stato del collegamento.',
+                style: AppTypography.caption,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statusContent(
+    BuildContext context,
+    WidgetRef ref,
+    CalendarConnection? connection,
+    bool isBusy,
+  ) {
+    if (connection == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Collega Google Calendar per far comparire lì i tuoi '
+            'Appuntamenti creati in PIP.',
+            style: AppTypography.caption,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          ElevatedButton.icon(
+            onPressed: isBusy ? null : () => _connect(context, ref),
+            icon: const Icon(Icons.link),
+            label: const Text('Connetti Google Calendar'),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          connection.lastSyncedAt != null
+              ? 'Connesso — ultima sincronizzazione ${_formatDateTime(connection.lastSyncedAt!)}.'
+              : 'Connesso — prima sincronizzazione in corso.',
+          style: AppTypography.caption,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        OutlinedButton.icon(
+          onPressed: isBusy ? null : () => _disconnect(context, ref),
+          icon: const Icon(Icons.link_off),
+          label: const Text('Scollega'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _connect(BuildContext context, WidgetRef ref) async {
+    final failure =
+        await ref.read(calendarSyncFormControllerProvider.notifier).connect();
+    if (!context.mounted) return;
+    if (failure != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(failure.message)));
+    }
+    // Il collegamento vero e proprio si completa in modo asincrono, dopo il
+    // redirect OAuth (vedi SupabaseCalendarSyncRepository) — nessun dato
+    // nuovo da leggere subito qui.
+  }
+
+  Future<void> _disconnect(BuildContext context, WidgetRef ref) async {
+    final failure = await ref
+        .read(calendarSyncFormControllerProvider.notifier)
+        .disconnect();
+    if (!context.mounted) return;
+    if (failure != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(failure.message)));
+    }
+  }
+
+  String _formatDateTime(DateTime dateTime) =>
+      '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')} '
+      '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
 }

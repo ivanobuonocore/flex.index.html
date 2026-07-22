@@ -95,6 +95,24 @@ class SupabaseCalendarEventRepository implements CalendarEventRepository {
     }
   }
 
+  @override
+  Future<Result<Unit>> syncToGoogleCalendar({
+    required String eventId,
+    required bool deleted,
+  }) async {
+    // Best-effort (vedi doc del metodo in CalendarEventRepository): un
+    // errore qui non deve mai bloccare create/delete già riuscite.
+    try {
+      await _client.functions.invoke('sync-calendar-event', body: {
+        'eventId': eventId,
+        'deleted': deleted,
+      });
+    } catch (_) {
+      // Ignorato deliberatamente: vedi commento sopra.
+    }
+    return const Result.ok(unit);
+  }
+
   CalendarEvent _toDomain(Map<String, dynamic> row) {
     return CalendarEvent(
       id: row['id'] as String,
@@ -113,6 +131,7 @@ class SupabaseCalendarEventRepository implements CalendarEventRepository {
       deletedAt: row['deleted_at'] != null
           ? DateTime.parse(row['deleted_at'] as String)
           : null,
+      googleEventId: row['google_event_id'] as String?,
     );
   }
 }

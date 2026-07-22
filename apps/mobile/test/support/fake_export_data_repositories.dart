@@ -141,6 +141,11 @@ class FakeInstantCalendarEventRepository implements CalendarEventRepository {
   @override
   Future<Result<Unit>> deleteRecurrenceGroup(String recurrenceGroupId) =>
       throw UnimplementedError();
+
+  @override
+  Future<Result<Unit>> syncToGoogleCalendar(
+          {required String eventId, required bool deleted}) =>
+      throw UnimplementedError();
 }
 
 class FakeInstantMemoryRepository implements MemoryRepository {

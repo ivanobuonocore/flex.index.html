@@ -12,6 +12,7 @@ import '../features/note/data/supabase_note_repository.dart';
 import '../features/notifications/data/supabase_push_subscription_repository.dart';
 import '../features/recurring_transaction/data/supabase_recurring_transaction_repository.dart';
 import '../features/reminder/data/supabase_calendar_event_repository.dart';
+import '../features/reminder/data/supabase_calendar_sync_repository.dart';
 import '../features/search/data/supabase_search_repository.dart';
 import '../features/task/data/supabase_task_repository.dart';
 import '../features/transaction/data/supabase_transaction_repository.dart';
@@ -87,4 +88,11 @@ final recurringTransactionRepositoryProvider =
     Provider<RecurringTransactionRepository>((ref) {
   return SupabaseRecurringTransactionRepository(
       ref.watch(supabaseClientProvider));
+});
+
+final calendarSyncRepositoryProvider = Provider<CalendarSyncRepository>((ref) {
+  final repository =
+      SupabaseCalendarSyncRepository(ref.watch(supabaseClientProvider));
+  ref.onDispose(repository.dispose);
+  return repository;
 });

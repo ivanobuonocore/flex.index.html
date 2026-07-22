@@ -11,6 +11,9 @@ class FakeCalendarEventRepository implements CalendarEventRepository {
   CalendarEvent? lastCreated;
   String? lastDeletedId;
   String? lastDeletedRecurrenceGroupId;
+  String? lastSyncedEventId;
+  bool? lastSyncedDeleted;
+  int syncCallCount = 0;
 
   void emit(List<CalendarEvent> events) => _controller.add(events);
 
@@ -45,6 +48,17 @@ class FakeCalendarEventRepository implements CalendarEventRepository {
   @override
   Future<Result<Unit>> deleteRecurrenceGroup(String recurrenceGroupId) async {
     lastDeletedRecurrenceGroupId = recurrenceGroupId;
+    return const Result.ok(unit);
+  }
+
+  @override
+  Future<Result<Unit>> syncToGoogleCalendar({
+    required String eventId,
+    required bool deleted,
+  }) async {
+    syncCallCount += 1;
+    lastSyncedEventId = eventId;
+    lastSyncedDeleted = deleted;
     return const Result.ok(unit);
   }
 

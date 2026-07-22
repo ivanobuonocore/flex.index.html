@@ -1083,6 +1083,73 @@ reale del Web Speech API in un browser vero (richiederebbe un ambiente browser r
 disponibile in questa sandbox) e il permesso microfono su un dispositivo mobile reale (nessuna
 cartella `android`/`ios` in questo repository, vedi sopra).
 
+## Fase 3 (slice 31) — Sync con Google Calendar
+
+Integrazione richiesta esplicitamente. **Deviazione dal piano originale**: il piano prevedeva un
+flusso "cattura del token" generico; l'implementazione usa `supabase_flutter`'s `auth.
+linkIdentity(OAuthProvider.google, scopes: 'https://www.googleapis.com/auth/calendar.events')` —
+Supabase gestisce l'intero redirect OAuth e lo scambio codice/token, il client non vede mai il
+client secret di Google (CLAUDE.md, "mai il frontend collegato direttamente a un provider", qui
+esteso per analogia a un provider OAuth terzo, non solo un LLM).
+
+`20260723170000_google_calendar_sync.sql`:
+
+- `calendar_connections` (nuova tabella): un account Google per utente (`user_id` primary key,
+  come `push_subscriptions`), RLS `user_id = auth.uid()` su select/insert/update/delete.
+- `get_my_calendar_connection()` (funzione `security definer`, filtrata su `where user_id =
+  auth.uid()` — stesso principio di sicurezza già usato per `is_workspace_owner`/
+  `redeem_workspace_invite`): restituisce solo `google_calendar_id`/`last_synced_at`/`created_at`,
+  mai `google_refresh_token`. **Decisione di sicurezza presa durante l'implementazione**: il
+  client mobile non osserva `calendar_connections` in streaming come le altre entità dell'app — un
+  canale realtime Supabase (`postgres_changes`) invierebbe l'intera riga, token incluso, a ogni
+  aggiornamento. Lo stato "connesso" è quindi una singola chiamata (`fetchConnectionStatus`,
+  `FutureProvider` non `StreamProvider`), non un dato realtime.
+- `calendar_events.google_event_id` (additiva): collega ogni Promemoria al suo gemello su Google,
+  scritto solo da `sync-calendar-event`, mai dal client — evita un loop di sync nelle due direzioni.
+
+Tre nuove Edge Function (`infrastructure/supabase/README.md` per il dettaglio):
+`save-calendar-connection` (JWT del chiamante, salva il refresh token catturato dalla sessione
+subito dopo `linkIdentity`), `sync-calendar-event` (JWT del chiamante, stesso pattern di
+`send-test-push`/`send-budget-alert`: crea/cancella su Google, best-effort, mai un errore che
+blocca la create/delete locale già riuscita), `pull-google-calendar-events` (service role, stesso
+pattern di `send-due-reminders`, cron ogni 10 minuti: importa gli eventi Google nuovi/modificati
+nella sezione Appuntamenti locale).
+
+Mobile: nuovo `CalendarSyncRepository` (`beginConnect`/`disconnect`/`fetchConnectionStatus`) e
+`CalendarConnection` in `packages/domain`; `SupabaseCalendarSyncRepository` ascolta `auth.
+onAuthStateChange` fin dalla costruzione perché Supabase espone `session.providerRefreshToken`
+solo nel primo evento subito dopo un collegamento riuscito, mai persistito lato client — se il
+repository non fosse già "vivo" in quel momento il token andrebbe perso, ma nel flusso reale
+dell'app l'utente è necessariamente sulla schermata Profilo (da cui ha toccato "Connetti") quando
+torna dal redirect. `CalendarEventRepository.syncToGoogleCalendar` (nuovo metodo, chiamato da
+`CalendarEventFormController.create`/`delete`) è best-effort come `BudgetRepository.
+checkBudgetAlert` (slice 28). Nuova card "Google Calendar" in Profilo, nascosta finché l'app non è
+compilata con `--dart-define=GOOGLE_CALENDAR_ENABLED=true` (stesso principio di gating già usato
+per VAPID, qui però senza alcun valore da passare al client — solo un interruttore). **Limite
+noto**: `deleteSeries` (cancellare un'intera serie ricorrente) non sincronizza la cancellazione con
+Google — richiederebbe di risalire a ogni singolo id della serie prima della cancellazione, fuori
+scopo per questa integrazione.
+
+**Verificato manualmente su Postgres locale** (stesso schema fittizio `auth.uid()` già usato per
+le altre migrazioni, due utenti simulati — Alice/Bob): Alice inserisce/legge/aggiorna/cancella la
+propria riga; Bob non vede la riga di Alice né tramite `select` diretto né tramite
+`get_my_calendar_connection()`; ogni tentativo di Bob di inserire/aggiornare/cancellare la riga di
+Alice viene bloccato dalla RLS (0 righe interessate, nessuna eccezione necessaria oltre al reject
+dell'insert). Verificato anche `deno check`/`deno lint`/`deno fmt --check` sulle tre nuove Edge
+Function; test del trigger di sync (`calendar_event_controller_test.dart`: `create`/`delete`
+chiamano `syncToGoogleCalendar` con i parametri giusti, un `create` fallito non la chiama); entità
+`CalendarConnection`/campo `CalendarEvent.googleEventId` testati in `packages/domain`; test
+widget che la card "Google Calendar" resta nascosta senza `GOOGLE_CALENDAR_ENABLED` (il valore
+opposto non è testabile: è una costante di compilazione, non sovrascrivibile a runtime da
+`flutter test` — stesso limite già accettato per `_NotificationsCard`/VAPID, mai forzato a `true`
+in nessun test di questo progetto).
+
+**Non verificato in questa sessione**: nessun progetto Google Cloud/Supabase reale disponibile,
+quindi nessun flusso OAuth reale, nessuna chiamata reale all'API Google Calendar, e nessuna verifica
+di pg_cron/pg_net per `pull-google-calendar-events` (richiederebbero un progetto Supabase remoto
+con il provider Google abilitato — passi manuali documentati in
+`infrastructure/supabase/README.md`).
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

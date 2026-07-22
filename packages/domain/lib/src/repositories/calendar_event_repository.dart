@@ -25,4 +25,15 @@ abstract interface class CalendarEventRepository {
   /// (richiesta esplicita dell'utente: "eliminare un'intera serie di
   /// promemoria ricorrenti", non una occorrenza alla volta).
   Future<Result<Unit>> deleteRecurrenceGroup(String recurrenceGroupId);
+
+  /// Sincronizza (crea o cancella) l'evento [eventId] su Google Calendar, se
+  /// l'utente ha collegato un account (Fase 3, "Sync con Google Calendar" —
+  /// integrazione richiesta esplicitamente). Interamente best-effort come
+  /// [BudgetRepository.checkBudgetAlert]: nessun [Failure] bloccante mai
+  /// propagato — la Edge Function decide da sé se l'utente è collegato,
+  /// senza che il chiamante debba saperlo.
+  Future<Result<Unit>> syncToGoogleCalendar({
+    required String eventId,
+    required bool deleted,
+  });
 }

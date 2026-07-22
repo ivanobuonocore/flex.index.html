@@ -81,6 +81,16 @@ npx supabase db push
   scritti solo dalla Edge Function `send-budget-alert`, mai dal client. Puramente additiva
   (`add column if not exists`), nessuna RLS nuova da verificare (le policy di `category_budgets`
   esistenti si applicano identiche alle due colonne in più).
+- `migrations/20260723170000_google_calendar_sync.sql` — `calendar_connections` (nuova tabella,
+  Fase 3, "Sync con Google Calendar" — integrazione richiesta esplicitamente): un account Google
+  per utente, RLS `user_id = auth.uid()` su select/insert/update/delete. Il `google_refresh_token`
+  non è mai letto dal client mobile: `get_my_calendar_connection()` (funzione `security definer`,
+  filtrata su `auth.uid()` come `is_workspace_owner`/`redeem_workspace_invite`) restituisce solo i
+  campi non sensibili. Aggiunge anche `calendar_events.google_event_id` (additiva). Verificato
+  manualmente su Postgres locale con due utenti simulati: insert/update/delete della propria riga
+  riusciti, ogni tentativo cross-utente (select/insert/update/delete della riga altrui) bloccato
+  dalla RLS, `get_my_calendar_connection()` isolato per utente nonostante `security definer` —
+  dettagli in `docs/database/README.md`.
 
 Le altre entità del Domain Model (Memory, Agent, ...) avranno le proprie migrazioni quando le
 rispettive feature verranno implementate (`docs/product/26-execution-blueprint.md`) — lo schema
@@ -174,6 +184,59 @@ npx supabase functions deploy send-budget-alert
 **Non verificato in questa sessione**: stessa limitazione di `send-test-push` (nessuna chiamata
 HTTP reale né notifica recapitata a un browser) — verificato staticamente con `deno check`/`deno
 lint`/`deno fmt --check`.
+
+## Sync con Google Calendar
+
+Tre nuove Edge Function (Fase 3, integrazione richiesta esplicitamente) — `save-calendar-
+connection`, `sync-calendar-event`, `pull-google-calendar-events` — nessuna delle quali collega
+mai il frontend direttamente a Google (CLAUDE.md, esteso per analogia a un provider terzo): tutte
+usano il refresh token salvato in `calendar_connections`, mai visibile al client.
+
+- **`save-calendar-connection`** (JWT del chiamante): riceve il `refreshToken` che
+  `SupabaseCalendarSyncRepository` cattura dalla sessione subito dopo `auth.linkIdentity`, lo
+  salva sotto RLS.
+- **`sync-calendar-event`** (JWT del chiamante, stesso pattern di `send-test-push`/
+  `send-budget-alert`): invocata direttamente da `CalendarEventFormController` dopo aver
+  creato/cancellato un Promemoria, crea/cancella il gemello su Google Calendar
+  (`events.insert`/`events.delete`) e scrive `calendar_events.google_event_id`. Best-effort:
+  nessun account collegato, o Google non raggiungibile, ritorna `{ ok: true, synced: false }`, mai
+  un errore che invaliderebbe la create/delete locale già riuscita.
+- **`pull-google-calendar-events`** (service role, stessa giustificazione di `send-due-reminders`:
+  deve leggere `calendar_connections` di tutti gli utenti collegati, non solo di un chiamante) —
+  invocata da un cron job Postgres ogni 10 minuti, importa gli eventi nuovi/modificati su Google
+  nella sezione Appuntamenti dell'utente e cancella (soft delete) quelli rimossi su Google. Un
+  evento con `google_event_id` già presente localmente non viene mai ricreato, per non creare un
+  loop con la direzione opposta.
+
+Richiede due passi manuali fuori dal codice, come VAPID/pg_cron già presenti nel progetto:
+
+1. **Google Cloud Console**: creare un OAuth Client ID (tipo "Web application"), abilitare la
+   Google Calendar API, aggiungere l'URL di redirect Supabase (`https://<PROJECT_REF>.supabase.
+   co/auth/v1/callback`) tra gli "Authorized redirect URIs".
+2. **Dashboard Supabase** (Authentication → Providers): abilitare il provider Google con il Client
+   ID/Secret creati sopra.
+
+Segreti da impostare (mai il Client Secret nel bundle client — solo qui):
+
+```
+npx supabase secrets set \
+  GOOGLE_CLIENT_ID=<client-id> \
+  GOOGLE_CLIENT_SECRET=<client-secret>
+
+npx supabase functions deploy save-calendar-connection
+npx supabase functions deploy sync-calendar-event
+npx supabase functions deploy pull-google-calendar-events
+```
+
+Cron (`pg_cron`/`pg_net`, non abilitati di default — vedi la sezione Promemoria più sotto per
+come abilitarli): blocco commentato in fondo a
+`migrations/20260723170000_google_calendar_sync.sql`, stesso formato di `send-due-reminders` ma
+ogni 10 minuti invece che ogni minuto.
+
+**Non verificato in questa sessione**: nessun progetto Google Cloud/Supabase reale disponibile,
+quindi nessun flusso OAuth reale né chiamata reale all'API Google Calendar — verificato
+staticamente con `deno check`/`deno lint`/`deno fmt --check` sulle tre function, e con la RLS di
+`calendar_connections` su Postgres locale (vedi `docs/database/README.md`).
 
 ## Nota su Realtime
 

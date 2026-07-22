@@ -514,6 +514,32 @@ Non ancora presenti: settings, billing.
   questo repository non ha ancora cartelle `android/`/`ios/` (solo `web/`), quindi il permesso
   microfono a runtime (`AndroidManifest.xml`/`Info.plist`) non è ancora applicabile — da aggiungere
   quando quei target verranno generati con `flutter create`.
+- **Sync con Google Calendar** (integrazione richiesta esplicitamente) — nuova card "Google
+  Calendar" in Profilo (`profile_screen.dart`), nascosta finché l'app non è compilata con
+  `--dart-define=GOOGLE_CALENDAR_ENABLED=true` (`AppEnv.googleCalendarEnabled`, stesso principio di
+  gating già usato per `AppEnv.vapidPublicKey`/notifiche — qui però non serve alcun valore al
+  client, solo un interruttore: nessun segreto Google finisce mai nel bundle dell'app). Il
+  collegamento riusa `supabase_flutter`'s `auth.linkIdentity(OAuthProvider.google, scopes:
+  'https://www.googleapis.com/auth/calendar.events')` — mai un flusso OAuth scritto a mano, mai il
+  frontend collegato direttamente a Google (CLAUDE.md, esteso per analogia a qualsiasi provider
+  terzo): Supabase gestisce il redirect e lo scambio codice/token, il client non vede mai il
+  client secret. `SupabaseCalendarSyncRepository` ascolta `auth.onAuthStateChange` fin dalla
+  costruzione perché Supabase espone `session.providerRefreshToken` solo nel primo evento subito
+  dopo un collegamento riuscito, mai persistito — lo invia una sola volta alla nuova Edge Function
+  `save-calendar-connection`, che lo salva sotto RLS in `calendar_connections`.
+
+  Il refresh token non è mai letto dal client mobile: lo stato "connesso/non connesso" mostrato in
+  Profilo passa da `get_my_calendar_connection()` (funzione Postgres `security definer` che
+  restituisce solo i campi non sensibili — vedi la migrazione), non da uno `.stream()` realtime
+  come le altre entità dell'app (un `postgres_changes` realtime invierebbe l'intera riga, token
+  incluso, ad ogni aggiornamento). `CalendarEventRepository.syncToGoogleCalendar` (chiamata da
+  `CalendarEventFormController.create`/`delete`, stesso principio best-effort di
+  `BudgetRepository.checkBudgetAlert`) invoca la nuova Edge Function `sync-calendar-event` per
+  creare/cancellare il gemello Google di un Promemoria; `pull-google-calendar-events` (cron,
+  service role, stesso pattern di `send-due-reminders`) importa in senso opposto gli eventi
+  creati/modificati direttamente su Google. **Limite noto**: `deleteSeries` (cancellare un'intera
+  serie ricorrente) non sincronizza oggi la cancellazione con Google — richiederebbe di risalire a
+  ogni singolo id della serie, fuori scopo per questa integrazione.
 
 ## Setup locale
 

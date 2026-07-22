@@ -28,25 +28,38 @@ class CalendarEventFormController extends AutoDisposeAsyncNotifier<void> {
     int? reminderMinutesBefore,
   }) async {
     state = const AsyncLoading();
-    final result = await ref.read(calendarEventRepositoryProvider).createEvent(
-          workspaceId: workspaceId,
-          title: title,
-          startsAt: startsAt,
-          durationMinutes: durationMinutes,
-          reminderMinutesBefore: reminderMinutesBefore,
-        );
+    final repository = ref.read(calendarEventRepositoryProvider);
+    final result = await repository.createEvent(
+      workspaceId: workspaceId,
+      title: title,
+      startsAt: startsAt,
+      durationMinutes: durationMinutes,
+      reminderMinutesBefore: reminderMinutesBefore,
+    );
     state = const AsyncData(null);
+    if (result is Ok<CalendarEvent>) {
+      await repository.syncToGoogleCalendar(
+          eventId: result.value.id, deleted: false);
+    }
     return result.fold((_) => null, (failure) => failure);
   }
 
   Future<Failure?> delete(String eventId) async {
     state = const AsyncLoading();
-    final result =
-        await ref.read(calendarEventRepositoryProvider).deleteEvent(eventId);
+    final repository = ref.read(calendarEventRepositoryProvider);
+    final result = await repository.deleteEvent(eventId);
     state = const AsyncData(null);
+    if (result is Ok<Unit>) {
+      await repository.syncToGoogleCalendar(eventId: eventId, deleted: true);
+    }
     return result.fold((_) => null, (failure) => failure);
   }
 
+  /// Sincronizza solo la cancellazione locale con Google: eliminare un'intera
+  /// serie ricorrente richiederebbe di risalire a ogni singolo `eventId`
+  /// della serie prima della cancellazione (oggi `deleteRecurrenceGroup`
+  /// lavora per `recurrenceGroupId`, non per id singoli) — fuori scopo per
+  /// questa integrazione, limite noto documentato in `docs/database/README.md`.
   Future<Failure?> deleteSeries(String recurrenceGroupId) async {
     state = const AsyncLoading();
     final result = await ref

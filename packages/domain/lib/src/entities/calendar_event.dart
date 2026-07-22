@@ -16,6 +16,7 @@ final class CalendarEvent {
     this.notifiedAt,
     this.recurrenceGroupId,
     this.deletedAt,
+    this.googleEventId,
   });
 
   final String id;
@@ -44,6 +45,15 @@ final class CalendarEvent {
   /// Soft delete (Domain Model, "Principi del modello").
   final DateTime? deletedAt;
 
+  /// Id dell'evento gemello su Google Calendar (Fase 3, "Sync con Google
+  /// Calendar" — integrazione richiesta esplicitamente), `null` se l'utente
+  /// non ha collegato un account o se la sincronizzazione non è ancora
+  /// avvenuta. Scritto solo dalla Edge Function `sync-calendar-event`, mai
+  /// dal client — evita di risincronizzare all'infinito lo stesso evento
+  /// anche nella direzione Google → PIP (`pull-google-calendar-events`
+  /// ignora un evento il cui id è già presente qui).
+  final String? googleEventId;
+
   CalendarEvent copyWith({
     String? title,
     DateTime? startsAt,
@@ -64,6 +74,7 @@ final class CalendarEvent {
       notifiedAt: notifiedAt,
       recurrenceGroupId: recurrenceGroupId,
       deletedAt: deletedAt,
+      googleEventId: googleEventId,
     );
   }
 
@@ -81,7 +92,8 @@ final class CalendarEvent {
       other.createdAt == createdAt &&
       other.notifiedAt == notifiedAt &&
       other.recurrenceGroupId == recurrenceGroupId &&
-      other.deletedAt == deletedAt;
+      other.deletedAt == deletedAt &&
+      other.googleEventId == googleEventId;
 
   @override
   int get hashCode => Object.hash(
@@ -97,6 +109,7 @@ final class CalendarEvent {
         notifiedAt,
         recurrenceGroupId,
         deletedAt,
+        googleEventId,
       );
 
   @override

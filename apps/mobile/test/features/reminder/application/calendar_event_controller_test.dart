@@ -58,6 +58,36 @@ void main() {
     expect(fakeRepository.lastCreated, event);
   });
 
+  test(
+      'create con successo sincronizza il nuovo evento su Google Calendar '
+      '(integrazione richiesta esplicitamente)', () async {
+    fakeRepository.createResult = Result.ok(event);
+
+    await container.read(calendarEventFormControllerProvider.notifier).create(
+          workspaceId: 'w1',
+          title: 'Dentista',
+          startsAt: DateTime.utc(2026, 1, 10, 15),
+        );
+
+    expect(fakeRepository.syncCallCount, 1);
+    expect(fakeRepository.lastSyncedEventId, 'e1');
+    expect(fakeRepository.lastSyncedDeleted, isFalse);
+  });
+
+  test('create fallito non chiama la sincronizzazione con Google Calendar',
+      () async {
+    fakeRepository.createResult = const Result.err(
+        ValidationFailure('Il titolo del promemoria è obbligatorio.'));
+
+    await container.read(calendarEventFormControllerProvider.notifier).create(
+          workspaceId: 'w1',
+          title: '',
+          startsAt: DateTime.utc(2026, 1, 10, 15),
+        );
+
+    expect(fakeRepository.syncCallCount, 0);
+  });
+
   test('create con titolo vuoto ritorna un ValidationFailure', () async {
     fakeRepository.createResult = const Result.err(
         ValidationFailure('Il titolo del promemoria è obbligatorio.'));
@@ -80,6 +110,18 @@ void main() {
 
     expect(failure, isNull);
     expect(fakeRepository.lastDeletedId, 'e1');
+  });
+
+  test(
+      'delete sincronizza la cancellazione su Google Calendar (integrazione '
+      'richiesta esplicitamente)', () async {
+    await container
+        .read(calendarEventFormControllerProvider.notifier)
+        .delete('e1');
+
+    expect(fakeRepository.syncCallCount, 1);
+    expect(fakeRepository.lastSyncedEventId, 'e1');
+    expect(fakeRepository.lastSyncedDeleted, isTrue);
   });
 
   test('deleteSeries delega al repository con il recurrenceGroupId', () async {

@@ -10,6 +10,7 @@ export 'src/shared_balance_category.dart';
 export 'src/system_workspace_category.dart';
 
 export 'src/entities/agent.dart';
+export 'src/entities/calendar_connection.dart';
 export 'src/entities/calendar_event.dart';
 export 'src/entities/category_budget.dart';
 export 'src/entities/chat.dart';
@@ -31,6 +32,7 @@ export 'src/entities/workspace_member.dart';
 export 'src/repositories/auth_repository.dart';
 export 'src/repositories/budget_repository.dart';
 export 'src/repositories/calendar_event_repository.dart';
+export 'src/repositories/calendar_sync_repository.dart';
 export 'src/repositories/chat_repository.dart';
 export 'src/repositories/document_repository.dart';
 export 'src/repositories/memory_repository.dart';
