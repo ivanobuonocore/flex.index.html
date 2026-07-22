@@ -232,6 +232,63 @@ void main() {
   });
 
   testWidgets(
+      'il pulsante "Categorie di spesa" mostra il dettaglio con la somma totale',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final groceries = Transaction(
+      id: 't-groceries',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Spesa',
+      amountCents: 5000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      category: TransactionCategory.alimentari,
+    );
+    final transport = Transaction(
+      id: 't-transport',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Biglietto bus',
+      amountCents: 1500,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      category: TransactionCategory.trasporti,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([groceries, transport]);
+    fakeBudget.emit(const []);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Categorie di spesa'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Totale: 65,00 €'), findsOneWidget);
+    expect(find.text('Alimentari'), findsOneWidget);
+    expect(find.text('Trasporti'), findsOneWidget);
+  });
+
+  testWidgets(
       'il pulsante Condividi riepilogo apre il foglio con saldo e copia negli appunti',
       (tester) async {
     final fakeTransaction = FakeTransactionRepository();

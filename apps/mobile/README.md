@@ -421,6 +421,18 @@ Non ancora presenti: settings, billing.
   CanvasKit non recupera i font emoji a colori del sistema operativo nello stesso modo del
   renderer HTML, che invece usa il testo nativo del browser. `flutter build web --web-renderer
   html` risolve; nessun cambiamento di codice necessario.
+- **Bilancio: pulsante "Categorie di spesa" con la somma totale visibile** (richiesta esplicita
+  dell'utente: "vorrei si potesse vedere magari con un tasto la somma di tutte le categorie di
+  spese fatte") — prima l'unico modo per vedere il dettaglio per categoria delle Uscite era
+  toccare la pillola "Uscite" dell'hero (un gesto poco scopribile, non sembra un pulsante); ora un
+  `OutlinedButton` esplicito sotto l'hero apre lo stesso `showModalBottomSheet`
+  (`_showCategoryBreakdown`, riusato senza modifiche alla logica). Lo sheet mostra anche la somma
+  di tutte le categorie in testa ("Totale: ..."), prima calcolata solo per le percentuali e mai
+  mostrata come testo. Le categorie di spesa esistevano già (`TransactionCategory`, Fase 3 slice
+  7C) — nessuna nuova categoria da generare, solo questa mancanza di visibilità da correggere. La
+  Chat sa già rispondere a "quanto ho speso questo mese" e "quanto ho speso in <categoria>" tramite
+  lo strumento `query_balance_summary` dell'Edge Function `ai-chat` (vedi sezione Edge Function più
+  sotto) — nessun cambiamento necessario lì.
 
 ## Setup locale
 

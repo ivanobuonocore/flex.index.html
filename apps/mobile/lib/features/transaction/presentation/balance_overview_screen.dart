@@ -194,6 +194,24 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                 expenseByCategory: expenseByCategory,
                 previousMonthPercentChange: balanceChangePercent,
               ),
+              if (expenseByCategory.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                // Pulsante esplicito (richiesta dell'utente: "vorrei si
+                // potesse vedere magari con un tasto la somma di tutte le
+                // categorie di spese fatte") — prima l'unico modo per
+                // arrivare allo stesso dettaglio era toccare la pillola
+                // "Uscite" dell'hero, un gesto poco scopribile perché non
+                // sembra un pulsante.
+                OutlinedButton.icon(
+                  onPressed: () => _showCategoryBreakdown(
+                    context,
+                    title: 'Categorie di spesa',
+                    byCategory: expenseByCategory,
+                  ),
+                  icon: const Icon(Icons.category_outlined),
+                  label: const Text('Categorie di spesa'),
+                ),
+              ],
               const SizedBox(height: AppSpacing.md),
               _BalancePieChart(incomeCents: income, expenseCents: expense),
               const SizedBox(height: AppSpacing.lg),
@@ -497,7 +515,12 @@ class _HeroStatPill extends StatelessWidget {
 
 /// Elenco delle categorie (ordinate per importo decrescente) di Entrate o
 /// Uscite del mese in evidenza — richiesta esplicita dell'utente: un
-/// dettaglio raggiungibile toccando le pillole Entrate/Uscite dell'hero.
+/// dettaglio raggiungibile toccando le pillole Entrate/Uscite dell'hero, o il
+/// pulsante "Categorie di spesa" subito sotto (stesso sheet, stesso dato).
+/// Mostra sempre la somma di tutte le categorie in testa (richiesta esplicita
+/// dell'utente: "vorrei si potesse vedere... la somma di tutte le categorie
+/// di spese fatte") — prima veniva solo calcolata per le percentuali, senza
+/// comparire mai come testo.
 void _showCategoryBreakdown(
   BuildContext context, {
   required String title,
@@ -519,6 +542,11 @@ void _showCategoryBreakdown(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: AppTypography.heading3),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Totale: ${_formatAmount(total)}',
+              style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: AppSpacing.sm),
             for (final entry in entries) ...[
               _CategoryBreakdownTile(
