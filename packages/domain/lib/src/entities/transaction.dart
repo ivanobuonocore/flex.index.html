@@ -23,6 +23,7 @@ final class Transaction {
     this.deletedAt,
     this.category = TransactionCategory.altro,
     this.documentId,
+    this.tags = const [],
   });
 
   final String id;
@@ -61,12 +62,18 @@ final class Transaction {
   /// Soft delete (Domain Model, "Principi del modello").
   final DateTime? deletedAt;
 
+  /// Tag liberi assegnati manualmente dall'utente (integrazione richiesta
+  /// esplicitamente) — stesso pattern di [Note.tags]: mai popolati dall'AI
+  /// Engine, `extract_transactions` non li tocca.
+  final List<String> tags;
+
   Transaction copyWith({
     String? description,
     int? amountCents,
     DateTime? occurredAt,
     TransactionStatus? status,
     TransactionCategory? category,
+    List<String>? tags,
   }) {
     return Transaction(
       id: id,
@@ -83,6 +90,7 @@ final class Transaction {
       deletedAt: deletedAt,
       category: category ?? this.category,
       documentId: documentId,
+      tags: tags ?? this.tags,
     );
   }
 
@@ -102,7 +110,8 @@ final class Transaction {
       other.createdAt == createdAt &&
       other.deletedAt == deletedAt &&
       other.category == category &&
-      other.documentId == documentId;
+      other.documentId == documentId &&
+      _listEquals(other.tags, tags);
 
   @override
   int get hashCode => Object.hash(
@@ -120,9 +129,19 @@ final class Transaction {
         deletedAt,
         category,
         documentId,
+        Object.hashAll(tags),
       );
 
   @override
   String toString() =>
       'Transaction(id: $id, type: $type, description: $description, amountCents: $amountCents, status: $status)';
+}
+
+bool _listEquals(List<String> a, List<String> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }

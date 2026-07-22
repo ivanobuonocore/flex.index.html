@@ -134,4 +134,70 @@ void main() {
     expect(fakeRepository.lastAttachedDocumentId, isNull);
     expect(find.text('Allega scontrino'), findsOneWidget);
   });
+
+  testWidgets(
+      'aggiungere un tag e creare la transazione lo passa al repository',
+      (tester) async {
+    final fakeRepository = FakeTransactionRepository();
+    addTearDown(fakeRepository.dispose);
+    fakeRepository.createResult = Result.ok(transaction);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeRepository),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showCreateEditTransactionSheet(context,
+                  workspaceId: workspaceId),
+              child: const Text('Apri'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Apri'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Descrizione'), 'Benzina');
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Importo (€)'), '20');
+    final tagField = find.widgetWithText(TextFormField, 'Aggiungi un tag');
+    await tester.ensureVisible(tagField);
+    await tester.enterText(tagField, 'auto');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(Chip, 'auto'), findsOneWidget);
+
+    final submitButton = find.text('Crea transazione');
+    await tester.ensureVisible(submitButton);
+    await tester.tap(submitButton);
+    await tester.pumpAndSettle();
+
+    expect(fakeRepository.lastCreatedTags, ['auto']);
+  });
+
+  testWidgets(
+      'modificare una transazione esistente preserva i tag già presenti',
+      (tester) async {
+    final taggedTransaction = transaction.copyWith(tags: ['lavoro']);
+    final fakeRepository = FakeTransactionRepository();
+    addTearDown(fakeRepository.dispose);
+    fakeRepository.updateResult = Result.ok(taggedTransaction);
+
+    await pumpSheet(tester, fakeRepository, transaction: taggedTransaction);
+
+    expect(find.widgetWithText(Chip, 'lavoro'), findsOneWidget);
+
+    final submitButton = find.text('Salva');
+    await tester.ensureVisible(submitButton);
+    await tester.tap(submitButton);
+    await tester.pumpAndSettle();
+
+    expect(fakeRepository.lastUpdated?.tags, ['lavoro']);
+  });
 }

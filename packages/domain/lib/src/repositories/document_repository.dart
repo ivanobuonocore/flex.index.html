@@ -36,4 +36,13 @@ abstract interface class DocumentRepository {
   /// Chat, di cui la UI conosce solo [Message.attachmentIds] (id soli), non
   /// l'oggetto completo.
   Future<Result<Document>> getDocument(String documentId);
+
+  /// Sostituisce interamente i tag di un Document (integrazione richiesta
+  /// esplicitamente) — un Document non ha un `copyWith`/update generico
+  /// (nome, file e metadata restano immutabili dopo il caricamento), quindi
+  /// i tag sono l'unico campo modificabile dopo la creazione.
+  Future<Result<Document>> updateTags({
+    required String documentId,
+    required List<String> tags,
+  });
 }

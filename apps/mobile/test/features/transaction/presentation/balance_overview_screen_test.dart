@@ -288,6 +288,56 @@ void main() {
     expect(find.text('Trasporti'), findsOneWidget);
   });
 
+  testWidgets('una transazione confermata con tag mostra le pillole dei tag',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final tagged = Transaction(
+      id: 't-tagged',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Benzina',
+      amountCents: 2000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      tags: const ['auto', 'lavoro'],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([tagged]);
+    fakeBudget.emit(const []);
+    await tester.pumpAndSettle();
+
+    // La riga della transazione è sotto hero/grafico/budget: va scorsa in
+    // vista prima che il finder la trovi (stesso pattern già usato altrove
+    // per liste lunghe in una singola Scrollable).
+    await tester.scrollUntilVisible(
+      find.text('Benzina'),
+      300,
+      scrollable: find.byType(Scrollable),
+    );
+
+    expect(find.text('auto'), findsOneWidget);
+    expect(find.text('lavoro'), findsOneWidget);
+  });
+
   testWidgets(
       'il pulsante Condividi riepilogo apre il foglio con saldo e copia negli appunti',
       (tester) async {

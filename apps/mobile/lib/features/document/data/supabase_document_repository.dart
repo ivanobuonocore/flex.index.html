@@ -143,6 +143,26 @@ class SupabaseDocumentRepository implements DocumentRepository {
     }
   }
 
+  @override
+  Future<Result<Document>> updateTags({
+    required String documentId,
+    required List<String> tags,
+  }) async {
+    try {
+      final row = await _client
+          .from(_table)
+          .update({'tags': tags})
+          .eq('id', documentId)
+          .select()
+          .single();
+      return Result.ok(_toDomain(row));
+    } catch (e) {
+      return Result.err(
+        UnexpectedFailure('Non è stato possibile aggiornare i tag.', cause: e),
+      );
+    }
+  }
+
   Document _toDomain(Map<String, dynamic> row) {
     return Document(
       id: row['id'] as String,
@@ -157,6 +177,7 @@ class SupabaseDocumentRepository implements DocumentRepository {
       deletedAt: row['deleted_at'] != null
           ? DateTime.parse(row['deleted_at'] as String)
           : null,
+      tags: (row['tags'] as List<dynamic>).cast<String>(),
     );
   }
 }

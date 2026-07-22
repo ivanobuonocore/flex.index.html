@@ -109,6 +109,11 @@ class FakeInstantDocumentRepository implements DocumentRepository {
   @override
   Future<Result<Document>> getDocument(String documentId) =>
       throw UnimplementedError();
+
+  @override
+  Future<Result<Document>> updateTags(
+          {required String documentId, required List<String> tags}) =>
+      throw UnimplementedError();
 }
 
 class FakeInstantCalendarEventRepository implements CalendarEventRepository {
@@ -177,7 +182,8 @@ class FakeInstantTransactionRepository implements TransactionRepository {
           required int amountCents,
           String currency = 'EUR',
           required DateTime occurredAt,
-          TransactionCategory category = TransactionCategory.altro}) =>
+          TransactionCategory category = TransactionCategory.altro,
+          List<String> tags = const []}) =>
       throw UnimplementedError();
 
   @override

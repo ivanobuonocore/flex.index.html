@@ -894,6 +894,22 @@ gate in più nel redirect di `appRouterProvider`: un utente autenticato con
 stesse cercando di andare; completarla o saltarla (entrambi chiamano
 `AuthController.completeOnboarding`) lo libera in modo permanente.
 
+## Fase 3 (slice 25) — Tag su Transazioni e Documenti
+
+Richiesta esplicita dell'utente (prima di una serie di integrazioni suggerite e confermate).
+`20260723140000_transaction_document_tags.sql`: `transactions.tags`/`documents.tags` (`text[] not
+null default '{}'`) — stesso pattern già usato per `notes.tags` fin dalla migrazione originale,
+qui aggiunto con un'`alter table` perché le due tabelle esistevano già senza quella colonna.
+Nessuna RLS nuova (i tag sono solo un campo in più sulle righe esistenti, già coperte dalle policy
+di `transactions`/`documents`). Gestiti solo dal client, mai dall'AI Engine: `extract_transactions`
+in `ai-chat` non li tocca.
+
+`DocumentRepository` guadagna `updateTags({documentId, tags})`: a differenza di Note/Transazioni,
+un Document non ha un `copyWith`/update generico (nome e file restano immutabili dopo il
+caricamento), quindi i tag sono l'unico campo modificabile dopo la creazione — con un piccolo
+foglio dedicato (`_EditTagsSheet` in `document_list_screen.dart`) invece di riusare una sheet di
+creazione/modifica come per Note/Transazioni.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

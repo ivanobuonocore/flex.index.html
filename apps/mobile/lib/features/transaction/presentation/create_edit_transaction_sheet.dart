@@ -61,6 +61,8 @@ class _CreateEditTransactionSheetState
       widget.transaction?.type ?? TransactionType.expense;
   late TransactionCategory _category =
       widget.transaction?.category ?? TransactionCategory.altro;
+  final _tagInputController = TextEditingController();
+  late List<String> _tags = List.of(widget.transaction?.tags ?? const []);
   String? _errorMessage;
 
   /// Stato locale (non letto da `widget.transaction`, che non si aggiorna da
@@ -76,7 +78,22 @@ class _CreateEditTransactionSheetState
   void dispose() {
     _descriptionController.dispose();
     _amountController.dispose();
+    _tagInputController.dispose();
     super.dispose();
+  }
+
+  // Stesso pattern del form Nota (`create_edit_note_sheet.dart`): un tag per
+  // invio/virgola, normalizzato in minuscolo.
+  void _addTagFromInput() {
+    final raw =
+        _tagInputController.text.replaceAll(',', '').trim().toLowerCase();
+    _tagInputController.clear();
+    if (raw.isEmpty || _tags.contains(raw)) return;
+    setState(() => _tags = [..._tags, raw]);
+  }
+
+  void _removeTag(String tag) {
+    setState(() => _tags = _tags.where((t) => t != tag).toList());
   }
 
   Future<void> _pickDate() async {
@@ -174,6 +191,7 @@ class _CreateEditTransactionSheetState
     if (amountCents == null) return;
 
     setState(() => _errorMessage = null);
+    _addTagFromInput();
 
     final controller = ref.read(transactionFormControllerProvider.notifier);
     final failure = _isEditing
@@ -183,6 +201,7 @@ class _CreateEditTransactionSheetState
               amountCents: amountCents,
               occurredAt: _occurredAt,
               category: _category,
+              tags: _tags,
             ),
           )
         : await controller.create(
@@ -192,6 +211,7 @@ class _CreateEditTransactionSheetState
             amountCents: amountCents,
             occurredAt: _occurredAt,
             category: _category,
+            tags: _tags,
           );
 
     if (!mounted) return;
@@ -294,6 +314,32 @@ class _CreateEditTransactionSheetState
                   );
                 }).toList(growable: false),
               ),
+              const SizedBox(height: AppSpacing.md),
+              TextFormField(
+                controller: _tagInputController,
+                decoration: const InputDecoration(
+                  labelText: 'Aggiungi un tag',
+                  helperText: 'Invio o virgola per aggiungerlo',
+                ),
+                onFieldSubmitted: (_) => _addTagFromInput(),
+                onChanged: (value) {
+                  if (value.endsWith(',')) _addTagFromInput();
+                },
+              ),
+              if (_tags.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    for (final tag in _tags)
+                      Chip(
+                        label: Text(tag),
+                        onDeleted: () => _removeTag(tag),
+                      ),
+                  ],
+                ),
+              ],
               if (_isEditing) ...[
                 const SizedBox(height: AppSpacing.md),
                 _ReceiptAttachmentRow(

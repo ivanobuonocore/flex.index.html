@@ -35,6 +35,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
     String currency = 'EUR',
     required DateTime occurredAt,
     TransactionCategory category = TransactionCategory.altro,
+    List<String> tags = const [],
   }) async {
     if (description.trim().isEmpty) {
       return const Result.err(ValidationFailure(
@@ -58,6 +59,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
             'status': TransactionStatus.confirmed.name,
             'created_by_ai': false,
             'category': category.name,
+            'tags': tags,
           })
           .select()
           .single();
@@ -88,6 +90,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
             'amount_cents': transaction.amountCents,
             'occurred_at': transaction.occurredAt.toIso8601String(),
             'category': transaction.category.name,
+            'tags': transaction.tags,
           })
           .eq('id', transaction.id)
           .select()
@@ -174,6 +177,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
           : null,
       category: TransactionCategory.values.byName(row['category'] as String),
       documentId: row['document_id'] as String?,
+      tags: (row['tags'] as List<dynamic>).cast<String>(),
     );
   }
 }

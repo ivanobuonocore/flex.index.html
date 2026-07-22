@@ -433,6 +433,16 @@ Non ancora presenti: settings, billing.
   Chat sa già rispondere a "quanto ho speso questo mese" e "quanto ho speso in <categoria>" tramite
   lo strumento `query_balance_summary` dell'Edge Function `ai-chat` (vedi sezione Edge Function più
   sotto) — nessun cambiamento necessario lì.
+- **Tag su Transazioni e Documenti** (integrazione richiesta esplicitamente, prima di una serie di
+  altre) — stesso pattern già usato per le Note: `create_edit_transaction_sheet.dart` guadagna lo
+  stesso campo chip-input della sheet Nota, e il Bilancio mostra le pillole dei tag sotto ogni
+  transazione confermata. I Documenti non hanno un form di modifica generico (nome e file restano
+  immutabili dopo il caricamento): un nuovo pulsante "Modifica tag" per riga apre un piccolo foglio
+  dedicato (`_EditTagsSheet`), e `document_list_screen.dart` guadagna la stessa striscia di filtro
+  rapido per tag già presente nelle Note. `DocumentRepository.updateTags` è l'unico modo per
+  cambiare un Document dopo la creazione — non un `copyWith` generico, che non avrebbe senso dato
+  che gli altri campi sono immutabili. Mai popolati dall'AI Engine: `extract_transactions` in
+  `ai-chat` resta invariato.
 
 ## Setup locale
 

@@ -24,6 +24,7 @@ abstract interface class TransactionRepository {
     String currency = 'EUR',
     required DateTime occurredAt,
     TransactionCategory category = TransactionCategory.altro,
+    List<String> tags = const [],
   });
 
   Future<Result<Transaction>> updateTransaction(Transaction transaction);

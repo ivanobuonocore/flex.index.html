@@ -20,6 +20,7 @@ class FakeTransactionRepository implements TransactionRepository {
   String? lastConfirmedId;
   String? lastDeletedId;
   TransactionCategory? lastCreatedCategory;
+  List<String>? lastCreatedTags;
   String? lastAttachedTransactionId;
   String? lastAttachedDocumentId;
   bool attachDocumentCalled = false;
@@ -39,8 +40,10 @@ class FakeTransactionRepository implements TransactionRepository {
     String currency = 'EUR',
     required DateTime occurredAt,
     TransactionCategory category = TransactionCategory.altro,
+    List<String> tags = const [],
   }) async {
     lastCreatedCategory = category;
+    lastCreatedTags = tags;
     final result = createResult ??
         const Result<Transaction>.err(
             ValidationFailure('Nessun risultato configurato.'));

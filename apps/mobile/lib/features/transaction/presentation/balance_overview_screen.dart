@@ -1082,6 +1082,17 @@ class _ConfirmedTransactionTile extends StatelessWidget {
                     _CategoryBadge(category: transaction.category),
                   ],
                 ),
+                if (transaction.tags.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Wrap(
+                    spacing: AppSpacing.xs,
+                    runSpacing: AppSpacing.xs,
+                    children: [
+                      for (final tag in transaction.tags)
+                        _TransactionTagPill(label: tag),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -1091,6 +1102,34 @@ class _ConfirmedTransactionTile extends StatelessWidget {
             style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Pillola compatta per un tag di Transazione — solo lettura (stesso ruolo di
+/// `_TagPill` in `note_list_screen.dart`, qui col colore del Bilancio invece
+/// di quello delle Note).
+class _TransactionTagPill extends StatelessWidget {
+  const _TransactionTagPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.categoryBilancio.withOpacity(0.14),
+        borderRadius: AppRadii.buttonRadius,
+      ),
+      child: Text(
+        label,
+        style: AppTypography.caption.copyWith(
+          color: AppColors.categoryBilancio,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

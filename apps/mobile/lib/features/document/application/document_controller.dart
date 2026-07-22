@@ -71,6 +71,21 @@ class DocumentFormController extends AutoDisposeAsyncNotifier<void> {
     return result.fold((_) => null, (failure) => failure);
   }
 
+  /// Sostituisce interamente i tag di un Document (integrazione richiesta
+  /// esplicitamente), stesso pattern di [Note.tags].
+  Future<Failure?> updateTags({
+    required String documentId,
+    required List<String> tags,
+  }) async {
+    state = const AsyncLoading();
+    final result = await ref.read(documentRepositoryProvider).updateTags(
+          documentId: documentId,
+          tags: tags,
+        );
+    state = const AsyncData(null);
+    return result.fold((_) => null, (failure) => failure);
+  }
+
   /// Recupera un URL firmato e lo apre esternamente (browser/app associata).
   Future<Failure?> open(Document document) async {
     final result =
