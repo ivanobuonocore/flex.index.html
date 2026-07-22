@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../../core/providers.dart';
 import '../../../shared/widgets/error_view.dart';
@@ -955,12 +956,80 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
   bool _isUploadingPhoto = false;
   bool _showEmojiPicker = false;
 
+  // Dettatura vocale (integrazione richiesta esplicitamente). `SpeechToText`
+  // risolve da sé l'implementazione per piattaforma (canale nativo su
+  // mobile/desktop, Web Speech API su web tramite il plugin federato
+  // `speech_to_text_web`) — nessun ramo `kIsWeb` scritto a mano qui.
+  final _speech = SpeechToText();
+  bool _speechAvailable = false;
+  bool _isListening = false;
+
   bool get _canAttachPhoto => widget.documentsWorkspaceId != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _initSpeech();
+  }
+
+  /// Il pulsante di dettatura compare solo se `initialize()` ha successo:
+  /// niente bottone che poi fallisce silenziosamente al tocco (richiesta
+  /// esplicita, rischio segnalato: il supporto varia per browser — buono su
+  /// Chrome/Edge, spesso assente su Safari). Su mobile `initialize()` è
+  /// anche il punto in cui viene richiesto il permesso microfono a runtime.
+  /// Un errore qui (piattaforma senza plugin registrato, API non
+  /// disponibile) equivale semplicemente a "non disponibile", non a un
+  /// crash: stesso trattamento del caso "API assente".
+  Future<void> _initSpeech() async {
+    var available = false;
+    try {
+      available = await _speech.initialize(
+        onStatus: (status) {
+          if ((status == 'done' || status == 'notListening') && mounted) {
+            setState(() => _isListening = false);
+          }
+        },
+        onError: (_) {
+          if (mounted) setState(() => _isListening = false);
+        },
+      );
+    } catch (_) {
+      available = false;
+    }
+    if (mounted) setState(() => _speechAvailable = available);
+  }
+
+  /// Avvia/ferma la dettatura. Il testo trascritto sostituisce in tempo
+  /// reale il contenuto del campo — l'utente vede e può correggere prima di
+  /// inviare ("l'AI suggerisce, l'utente decide", stesso principio già
+  /// applicato al resto della Chat, qui per la trascrizione).
+  Future<void> _toggleListening() async {
+    if (_isListening) {
+      await _speech.stop();
+      if (mounted) setState(() => _isListening = false);
+      return;
+    }
+    setState(() => _isListening = true);
+    try {
+      await _speech.listen(
+        onResult: (result) {
+          _controller.value = TextEditingValue(
+            text: result.recognizedWords,
+            selection:
+                TextSelection.collapsed(offset: result.recognizedWords.length),
+          );
+        },
+      );
+    } catch (_) {
+      if (mounted) setState(() => _isListening = false);
+    }
+  }
 
   @override
   void dispose() {
     _controller.dispose();
     _focusNode.dispose();
+    if (_isListening) _speech.stop();
     super.dispose();
   }
 
@@ -998,6 +1067,10 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     final content = _controller.text;
     if (content.trim().isEmpty) return;
 
+    if (_isListening) {
+      await _speech.stop();
+      if (mounted) setState(() => _isListening = false);
+    }
     setState(() => _errorMessage = null);
 
     var attachmentIds = const <String>[];
@@ -1165,6 +1238,16 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                       (isSending || !_canAttachPhoto) ? null : _pickPhoto,
                   icon: const Icon(Icons.add_photo_alternate_outlined),
                 ),
+                if (_speechAvailable)
+                  IconButton(
+                    tooltip:
+                        _isListening ? 'Ferma dettatura' : 'Dettatura vocale',
+                    onPressed: isSending ? null : _toggleListening,
+                    icon: Icon(
+                      _isListening ? Icons.mic : Icons.mic_none_outlined,
+                      color: _isListening ? theme.colorScheme.error : null,
+                    ),
+                  ),
                 Expanded(
                   child: TextField(
                     controller: _controller,

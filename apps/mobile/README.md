@@ -498,6 +498,22 @@ Non ancora presenti: settings, billing.
   principio già usato per la notifica budget. `parseReceiptExtractionResponse` (funzione pura in
   `supabase_transaction_repository.dart`) isola la conversione della risposta JSON in un
   `ReceiptExtraction`, testabile senza mockare il client Supabase.
+- **Dettatura vocale in Chat** (integrazione richiesta esplicitamente) — nuovo pulsante microfono in
+  `_MessageInput` (`chat_home_screen.dart`, tra il bottone foto e il campo testo), visibile solo se
+  `SpeechToText.initialize()` ha successo: niente bottone che poi fallisce silenzioso al tocco
+  (rischio esplicito: il supporto varia per browser, buono su Chrome/Edge, spesso assente su
+  Safari). Mentre ascolta, il testo trascritto sostituisce in tempo reale il contenuto del campo —
+  l'utente vede e può correggere prima di inviare ("l'AI suggerisce, l'utente decide", stesso
+  principio già applicato al resto della Chat). Un solo package (`speech_to_text`, non due
+  implementazioni separate come inizialmente previsto — vedi `docs/database/README.md`, slice 30,
+  per il motivo): il plugin risolve da sé l'implementazione per piattaforma, canale nativo su
+  mobile/desktop oppure il Web Speech API su web tramite il proprio plugin federato
+  (`speech_to_text_web`, già basato su `package:web`), nessun ramo `kIsWeb` scritto a mano in questo
+  progetto. Un errore di `initialize()`/`listen()` (piattaforma senza plugin registrato o senza
+  supporto) equivale semplicemente a "non disponibile", mai un crash. **Nota sulle piattaforme**:
+  questo repository non ha ancora cartelle `android/`/`ios/` (solo `web/`), quindi il permesso
+  microfono a runtime (`AndroidManifest.xml`/`Info.plist`) non è ancora applicabile — da aggiungere
+  quando quei target verranno generati con `flutter create`.
 
 ## Setup locale
 

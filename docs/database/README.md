@@ -1039,6 +1039,50 @@ selezionare/caricare un file reale (`file_picker`, non mockabile in questi test 
 documentato per l'allegato scontrino originale) e nessuna chiamata Anthropic reale (richiederebbe
 un progetto Supabase remoto o Docker).
 
+## Fase 3 (slice 30) — Dettatura vocale in Chat
+
+Integrazione richiesta esplicitamente. Il piano originale (elaborato prima di verificare il
+pacchetto) prevedeva due implementazioni separate — Web Speech API scritta a mano via
+`package:web`/JS interop per il web, `speech_to_text` per mobile — per poi scoprire, leggendo il
+sorgente del pacchetto, che `speech_to_text` **include già** un'implementazione web federata
+(`speech_to_text_web.dart`) basata esattamente sullo stesso `package:web`/`dart:js_interop`/
+`dart:js_interop_unsafe` con lo stesso feature-detection (`SpeechRecognition`/
+`webkitSpeechRecognition`) che si sarebbe dovuto scrivere da zero. Deviazione dal piano scelta per
+manutenibilità (Engineering Constitution): un solo pacchetto testato dalla community invece di due
+implementazioni parallele con lo stesso comportamento atteso — nessun ramo `kIsWeb` scritto a mano
+in `chat_home_screen.dart`, il plugin risolve da sé quale implementazione usare in base alla
+piattaforma di build.
+
+Nuovo pulsante microfono in `_MessageInput` (tra il bottone foto e il campo testo, stesso pattern
+`tooltip`/`onPressed: isSending ? null : ...` dei bottoni vicini), visibile solo se
+`SpeechToText.initialize()` ha successo (anche un'eccezione, es. nessun plugin registrato, viene
+trattata come "non disponibile", mai un crash) — rischio esplicito già nel piano originale: il
+supporto del Web Speech API varia per browser, buono su Chrome/Edge, spesso assente/parziale su
+Safari. Mentre ascolta, `onResult` sostituisce in tempo reale il testo del campo con la
+trascrizione — l'utente vede e corregge prima di inviare, `_submit()` ferma automaticamente
+l'ascolto se ancora attivo.
+
+**Nota sulle piattaforme**: questo repository non ha ancora le cartelle `android/`/`ios/` (solo
+`web/`, coerente con "Sito web pubblicato" citato altrove in questa sessione) — il permesso
+microfono a runtime richiesto dal plugin su mobile reale (dichiarazioni in
+`AndroidManifest.xml`/`Info.plist`) non è quindi ancora applicabile a questo repository, da
+aggiungere quando quei target verranno generati con `flutter create`.
+
+Verificato: `flutter analyze` pulito; test widget con
+[`SpeechToTextPlatform.instance`](https://pub.dev/packages/speech_to_text_platform_interface)
+sostituito da un fake (`FakeSpeechToTextPlatform` — lo stesso seam di test ufficiale del plugin
+federato, usato anche dalla sua implementazione web reale): pulsante nascosto quando
+`initialize()` fallisce, pulsante visibile altrimenti, avvio/arresto dell'ascolto, trascrizione
+che sostituisce il testo del campo. **Scoperta rilevante durante la scrittura dei test**:
+`SpeechToText()` è una factory che ritorna sempre lo stesso singleton di processo — una volta che
+`initialize()` ha successo una volta, il suo flag interno resta permanentemente "vero" e le
+chiamate successive non interpellano più `SpeechToTextPlatform.instance` — per questo l'unico test
+che porta `initialize()` a un successo è l'ultimo del file (l'ordine dei test non è arbitrario, è
+documentato nel commento in testa al file). **Non verificato in questa sessione**: il supporto
+reale del Web Speech API in un browser vero (richiederebbe un ambiente browser reale, non
+disponibile in questa sandbox) e il permesso microfono su un dispositivo mobile reale (nessuna
+cartella `android`/`ios` in questo repository, vedi sopra).
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:
