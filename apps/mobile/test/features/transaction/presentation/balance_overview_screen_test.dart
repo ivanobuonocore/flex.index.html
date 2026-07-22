@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -280,6 +281,55 @@ void main() {
     expect(find.text('Altro'), findsOneWidget);
     expect(find.text('1000,00 €'), findsOneWidget);
     expect(find.text('200,00 €'), findsOneWidget);
+  });
+
+  testWidgets(
+      'toccare una categoria nel dettaglio apre l\'andamento negli ultimi 6 mesi',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final salary = Transaction(
+      id: 't-salary',
+      workspaceId: 'w-personal',
+      type: TransactionType.income,
+      description: 'Stipendio',
+      amountCents: 100000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      category: TransactionCategory.stipendio,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([salary]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Entrate'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Entrate per categoria'), findsOneWidget);
+
+    await tester.tap(find.text('Stipendio'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Stipendio — ultimi 6 mesi'), findsOneWidget);
+    expect(find.byType(BarChart), findsOneWidget);
   });
 
   testWidgets(

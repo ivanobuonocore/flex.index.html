@@ -329,6 +329,88 @@ void main() {
     });
   });
 
+  group('categoryMonthlyTotals', () {
+    test('calcola lo speso di una categoria per ciascun mese indicato', () {
+      final juneBarbiere = Transaction(
+        id: 'c1',
+        workspaceId: workspaceId,
+        type: TransactionType.expense,
+        description: 'Barbiere',
+        amountCents: 2300,
+        occurredAt: DateTime.utc(2026, 6, 5),
+        status: TransactionStatus.confirmed,
+        createdAt: DateTime.utc(2026, 6, 5),
+        category: TransactionCategory.svago,
+      );
+      final juneSpesa = Transaction(
+        id: 'c2',
+        workspaceId: workspaceId,
+        type: TransactionType.expense,
+        description: 'Spesa',
+        amountCents: 5000,
+        occurredAt: DateTime.utc(2026, 6, 10),
+        status: TransactionStatus.confirmed,
+        createdAt: DateTime.utc(2026, 6, 10),
+        category: TransactionCategory.alimentari,
+      );
+      final julyBarbiere = Transaction(
+        id: 'c3',
+        workspaceId: workspaceId,
+        type: TransactionType.expense,
+        description: 'Barbiere',
+        amountCents: 2500,
+        occurredAt: DateTime.utc(2026, 7, 5),
+        status: TransactionStatus.confirmed,
+        createdAt: DateTime.utc(2026, 7, 5),
+        category: TransactionCategory.svago,
+      );
+
+      final months = [DateTime.utc(2026, 6, 1), DateTime.utc(2026, 7, 1)];
+      final totals = categoryMonthlyTotals(
+        [juneBarbiere, juneSpesa, julyBarbiere],
+        months,
+        TransactionCategory.svago,
+        type: TransactionType.expense,
+      );
+
+      expect(totals, [2300, 2500]);
+    });
+
+    test('non somma entrate e uscite della stessa categoria', () {
+      final expense = Transaction(
+        id: 'c4',
+        workspaceId: workspaceId,
+        type: TransactionType.expense,
+        description: 'Uscita',
+        amountCents: 1000,
+        occurredAt: DateTime.utc(2026, 6, 5),
+        status: TransactionStatus.confirmed,
+        createdAt: DateTime.utc(2026, 6, 5),
+        category: TransactionCategory.altro,
+      );
+      final income = Transaction(
+        id: 'c5',
+        workspaceId: workspaceId,
+        type: TransactionType.income,
+        description: 'Entrata',
+        amountCents: 9000,
+        occurredAt: DateTime.utc(2026, 6, 6),
+        status: TransactionStatus.confirmed,
+        createdAt: DateTime.utc(2026, 6, 6),
+        category: TransactionCategory.altro,
+      );
+
+      final totals = categoryMonthlyTotals(
+        [expense, income],
+        [DateTime.utc(2026, 6, 1)],
+        TransactionCategory.altro,
+        type: TransactionType.expense,
+      );
+
+      expect(totals, [1000]);
+    });
+  });
+
   group('projectedMonthEndExpenseCents', () {
     test('estrapola linearmente sui giorni del mese', () {
       // 15 giugno (30 giorni nel mese): metà mese esatta, 500€ spesi -> 1000€

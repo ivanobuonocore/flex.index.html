@@ -193,6 +193,8 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                 incomeByCategory: incomeByCategory,
                 expenseByCategory: expenseByCategory,
                 previousMonthPercentChange: balanceChangePercent,
+                transactions: transactions,
+                selectedMonth: selectedMonth,
               ),
               if (expenseByCategory.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.sm),
@@ -207,6 +209,9 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                     context,
                     title: 'Categorie di spesa',
                     byCategory: expenseByCategory,
+                    transactions: transactions,
+                    selectedMonth: selectedMonth,
+                    type: TransactionType.expense,
                   ),
                   icon: const Icon(Icons.category_outlined),
                   label: const Text('Categorie di spesa'),
@@ -324,6 +329,8 @@ class _BalanceHeroCard extends StatelessWidget {
     required this.incomeByCategory,
     required this.expenseByCategory,
     required this.previousMonthPercentChange,
+    required this.transactions,
+    required this.selectedMonth,
   });
 
   final int balanceCents;
@@ -335,6 +342,12 @@ class _BalanceHeroCard extends StatelessWidget {
   /// `null` quando il mese precedente ha saldo 0 (nessun confronto
   /// sensato — vedi `percentChange`), non mostrato in quel caso.
   final double? previousMonthPercentChange;
+
+  /// Passate solo per l'andamento per categoria (richiesta esplicita
+  /// dell'utente), aperto dal tocco su una riga di `_CategoryBreakdownTile`
+  /// dentro `_showCategoryBreakdown` — non usate altrove in questo widget.
+  final List<Transaction> transactions;
+  final DateTime selectedMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -385,6 +398,9 @@ class _BalanceHeroCard extends StatelessWidget {
                             context,
                             title: 'Entrate per categoria',
                             byCategory: incomeByCategory,
+                            transactions: transactions,
+                            selectedMonth: selectedMonth,
+                            type: TransactionType.income,
                           ),
                 ),
               ),
@@ -400,6 +416,9 @@ class _BalanceHeroCard extends StatelessWidget {
                             context,
                             title: 'Uscite per categoria',
                             byCategory: expenseByCategory,
+                            transactions: transactions,
+                            selectedMonth: selectedMonth,
+                            type: TransactionType.expense,
                           ),
                 ),
               ),
@@ -573,6 +592,9 @@ void _showCategoryBreakdown(
   BuildContext context, {
   required String title,
   required Map<TransactionCategory, int> byCategory,
+  required List<Transaction> transactions,
+  required DateTime selectedMonth,
+  required TransactionType type,
 }) {
   final entries = byCategory.entries.toList()
     ..sort((a, b) => b.value.compareTo(a.value));
@@ -601,6 +623,13 @@ void _showCategoryBreakdown(
                 category: entry.key,
                 amountCents: entry.value,
                 percent: total == 0 ? 0 : entry.value / total * 100,
+                onTap: () => _showCategoryTrend(
+                  context,
+                  category: entry.key,
+                  transactions: transactions,
+                  selectedMonth: selectedMonth,
+                  type: type,
+                ),
               ),
               const SizedBox(height: AppSpacing.xs),
             ],
@@ -616,34 +645,173 @@ class _CategoryBreakdownTile extends StatelessWidget {
     required this.category,
     required this.amountCents,
     required this.percent,
+    required this.onTap,
   });
 
   final TransactionCategory category;
   final int amountCents;
   final double percent;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final meta = TransactionCategoryMeta.of(category);
-    return Row(
-      children: [
-        Icon(meta.icon, color: meta.color, size: 20),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Text(meta.label, style: AppTypography.body),
-        ),
-        Text(
-          '${percent.toStringAsFixed(0)}%',
-          style: AppTypography.caption.copyWith(
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadii.buttonRadius,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+          child: Row(
+            children: [
+              Icon(meta.icon, color: meta.color, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(meta.label, style: AppTypography.body),
+              ),
+              Text(
+                '${percent.toStringAsFixed(0)}%',
+                style: AppTypography.caption.copyWith(
+                  color:
+                      Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                _formatAmount(amountCents),
+                style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Icon(Icons.chevron_right,
+                  size: 18,
+                  color:
+                      Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
+            ],
           ),
         ),
-        const SizedBox(width: AppSpacing.sm),
-        Text(
-          _formatAmount(amountCents),
-          style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+/// Andamento di una singola categoria negli ultimi 6 mesi (richiesta
+/// esplicita dell'utente: "andamento per categoria nel tempo"), aperto
+/// toccando una riga di [_CategoryBreakdownTile] — stessa finestra di
+/// [_TrendChart] (`lastMonths(selectedMonth, 6)`), nessuna nuova
+/// aggregazione: [categoryMonthlyTotals] compone funzioni pure già esistenti.
+void _showCategoryTrend(
+  BuildContext context, {
+  required TransactionCategory category,
+  required List<Transaction> transactions,
+  required DateTime selectedMonth,
+  required TransactionType type,
+}) {
+  final months = lastMonths(selectedMonth, 6);
+  final values =
+      categoryMonthlyTotals(transactions, months, category, type: type);
+  final meta = TransactionCategoryMeta.of(category);
+
+  showModalBottomSheet(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md, 0, AppSpacing.md, AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(meta.icon, color: meta.color, size: 20),
+                const SizedBox(width: AppSpacing.sm),
+                Text('${meta.label} — ultimi 6 mesi',
+                    style: AppTypography.heading3),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _CategoryTrendChart(
+                months: months, values: values, color: meta.color),
+          ],
         ),
-      ],
+      ),
+    ),
+  );
+}
+
+class _CategoryTrendChart extends StatelessWidget {
+  const _CategoryTrendChart({
+    required this.months,
+    required this.values,
+    required this.color,
+  });
+
+  final List<DateTime> months;
+  final List<int> values;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxValue = values.fold<int>(0, (max, v) => v > max ? v : max);
+
+    return SizedBox(
+      height: 180,
+      child: maxValue == 0
+          ? const Center(
+              child: Text('Nessun importo confermato in questo periodo.'),
+            )
+          : BarChart(
+              BarChartData(
+                maxY: maxValue * 1.2,
+                gridData: const FlGridData(show: false),
+                borderData: FlBorderData(show: false),
+                titlesData: FlTitlesData(
+                  leftTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) {
+                        final index = value.toInt();
+                        if (index < 0 || index >= months.length) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.xs),
+                          child: Text(
+                            _italianMonthsShort[months[index].month - 1],
+                            style: AppTypography.caption,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                barGroups: [
+                  for (var i = 0; i < values.length; i++)
+                    BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: values[i].toDouble(),
+                          color: color,
+                          width: 12,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
     );
   }
 }
