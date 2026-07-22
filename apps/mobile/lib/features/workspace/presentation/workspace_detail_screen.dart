@@ -7,6 +7,7 @@ import 'package:pip_domain/pip_domain.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../../document/application/document_controller.dart';
+import '../../memory/application/memory_controller.dart';
 import '../../note/application/note_controller.dart';
 import '../../reminder/application/calendar_event_controller.dart';
 import '../../task/application/task_controller.dart';
@@ -14,8 +15,8 @@ import '../../transaction/application/transaction_controller.dart';
 import '../application/workspace_controller.dart';
 
 /// Home del Workspace (docs/product/06-information-architecture.md, "Home del
-/// Workspace"): nome, descrizione, anteprima Note/Task/Documenti/Chat/
-/// Promemoria, menu verso le altre sezioni. Knowledge/Memoria/Impostazioni
+/// Workspace"): nome, descrizione, anteprima Note/Task/Documenti/Bilancio/
+/// Promemoria/Memoria, menu verso le altre sezioni. Knowledge/Impostazioni
 /// non sono ancora implementate (fasi successive) e vengono mostrate come
 /// "Prossimamente" — comunica lo stato reale, non è un placeholder finto.
 class WorkspaceDetailScreen extends ConsumerWidget {
@@ -59,7 +60,6 @@ class _WorkspaceDetailBody extends ConsumerWidget {
 
   static const _comingSoon = [
     (icon: Icons.hub_outlined, label: 'Knowledge Base'),
-    (icon: Icons.psychology_outlined, label: 'Memoria'),
     (icon: Icons.settings_outlined, label: 'Impostazioni'),
   ];
 
@@ -71,6 +71,7 @@ class _WorkspaceDetailBody extends ConsumerWidget {
     final documentsAsync = ref.watch(documentsProvider(workspace.id));
     final transactionsAsync = ref.watch(transactionsProvider(workspace.id));
     final eventsAsync = ref.watch(calendarEventsProvider(workspace.id));
+    final memoriesAsync = ref.watch(workspaceMemoriesProvider(workspace.id));
 
     return CustomScrollView(
       slivers: [
@@ -282,6 +283,44 @@ class _WorkspaceDetailBody extends ConsumerWidget {
                         .toList(growable: false),
                   );
                 },
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              _SectionHeader(
+                title: 'Memoria',
+                onSeeAll: () =>
+                    context.push('/workspace/${workspace.id}/memories'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              memoriesAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (_, __) =>
+                    const Text('Non è stato possibile caricare la memoria.'),
+                data: (memories) => memories.isEmpty
+                    ? const _EmptySectionHint(
+                        message: 'Nessuna memoria. Toccando "Vedi tutte" '
+                            'puoi aggiungerne una.',
+                      )
+                    : Column(
+                        children: memories
+                            .take(3)
+                            .map((memory) => Card(
+                                  child: ListTile(
+                                    leading:
+                                        const Icon(Icons.psychology_outlined),
+                                    title: Text(
+                                      memory.content,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    onTap: () => context.push(
+                                        '/workspace/${workspace.id}/memories'),
+                                  ),
+                                ))
+                            .toList(growable: false),
+                      ),
               ),
               const SizedBox(height: AppSpacing.lg),
               Text('Prossimamente', style: AppTypography.heading3),

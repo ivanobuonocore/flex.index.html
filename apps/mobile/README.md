@@ -248,6 +248,12 @@ Implementate, con dati reali via Supabase:
   system prompt di ogni turno futuro perché l'AI possa davvero usarle, non solo scriverle.
   `MemoryListScreen` (Profilo → "Memoria") mostra e permette di cancellare, nessuna creazione
   manuale — coerente con `MemoryRepository`, che non espone alcun metodo di creazione.
+- **memory (livello Workspace)** (richiesta esplicita dell'utente) — a differenza del Globale,
+  creata manualmente ("Chat unica" non sa a quale Workspace collegare un ricordo pronunciato al
+  suo interno). `WorkspaceMemoryListScreen` (`/workspace/:id/memories`, anche in anteprima nella
+  Home del Workspace), FAB con un dialog minimale per aggiungerla, conferma via dialog prima di
+  cancellare su swipe. Livello Conversazione fuori scope: con un'unica conversazione per utente
+  coinciderebbe sempre col Globale.
 
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):

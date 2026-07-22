@@ -695,17 +695,40 @@ Mobile: `features/memory/` (data/application/presentation) con lo stesso pattern
 nessuna creazione manuale: le memorie nascono solo dall'AI), `MemoryListScreen` raggiungibile da
 Profilo → "Memoria" (`/profile/memories`), nessun pulsante "+" per lo stesso motivo.
 
+## Fase 3 (slice 16) — Memoria: livello Workspace
+
+Estende la slice 15 al livello **Workspace** (Domain Model). Il livello **Conversazione** resta
+fuori scope, per un motivo architetturale: "Chat unica" (Slice 7B) ha reso la Chat un'unica
+conversazione globale per utente — con una sola conversazione per utente, "memoria per questa
+conversazione" coinciderebbe sempre col livello Globale, zero valore reale da costruire ora.
+
+`20260723090000_memories_workspace_level.sql`: nessuna nuova colonna (già presenti dalla slice
+15) — solo le tre policy RLS mancanti per `level = 'workspace'`, stesso pattern a join di
+notes/tasks (`exists (select 1 from workspaces w where w.id = memories.workspace_id and
+w.owner_id = auth.uid())`), più un indice su `workspace_id`. Verificato su Postgres locale: un
+utente non vede né può cancellare la memoria-Workspace di un altro, un insert su un Workspace non
+posseduto viene respinto dalla RLS.
+
+A differenza del Globale (scritto solo dall'AI Engine), il livello Workspace è creato
+**manualmente dall'utente** in questa slice: la Chat unica non ha modo di sapere a quale Workspace
+collegare un ricordo pronunciato al suo interno. `MemoryRepository` guadagna
+`watchWorkspaceMemories`/`createWorkspaceMemory` (nessun tocco lato `ai-chat`).
+
+Mobile: nuova `WorkspaceMemoryListScreen` (`/workspace/:id/memories`), FAB con un dialog minimale
+per aggiungere una memoria (niente sheet completo, un solo campo testo). Sezione "Memoria" in
+`WorkspaceDetailScreen` (anteprima + "Vedi tutte"), rimossa dall'elenco "Prossimamente" dove era
+segnaposto dalla Fase 1. Conferma via dialog prima di cancellare su swipe (diversamente dal
+Globale, che resta immediato): anticipa la richiesta "conferma su swipe-to-delete" applicata anche
+qui.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:
 arriveranno con le rispettive feature (`docs/product/26-execution-blueprint.md`). Memory ha ora
-una migrazione, ma solo per il livello Globale (vedi slice 15 sopra) — Workspace e Conversazione
-restano da implementare.
+una migrazione per Globale e Workspace (slice 15/16) — il livello Conversazione resta fuori scope
+finché la Chat non tornerà a supportare più conversazioni parallele (vedi slice 16 sopra).
 
 Note tecniche aperte dal Domain Model, da risolvere prima di quelle migrazioni:
 
 - `workspace_agents` come tabella di giunzione per la relazione many-to-many Agent↔Workspace.
-- Vincolo di coerenza tra `Memory.level` e l'owner valorizzato (già applicato lato dominio in
-  `packages/domain/lib/src/entities/memory.dart` con un `assert`; da replicare come `check`
-  constraint quando la tabella verrà creata).
 - Pattern polimorfico `entity_type` + `entity_id` per `Timeline Event`.

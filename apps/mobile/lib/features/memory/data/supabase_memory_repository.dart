@@ -24,6 +24,47 @@ class SupabaseMemoryRepository implements MemoryRepository {
   }
 
   @override
+  Stream<List<Memory>> watchWorkspaceMemories(String workspaceId) {
+    return _client
+        .from(_table)
+        .stream(primaryKey: ['id'])
+        .eq('workspace_id', workspaceId)
+        .order('updated_at', ascending: false)
+        .map((rows) => rows.map(_toDomain).toList(growable: false));
+  }
+
+  @override
+  Future<Result<Memory>> createWorkspaceMemory({
+    required String workspaceId,
+    required String content,
+  }) async {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) {
+      return const Result.err(
+          ValidationFailure('Il contenuto della memoria è obbligatorio.'));
+    }
+
+    try {
+      final row = await _client
+          .from(_table)
+          .insert({
+            'content': trimmed,
+            'level': 'workspace',
+            'origin': 'user',
+            'workspace_id': workspaceId,
+          })
+          .select()
+          .single();
+      return Result.ok(_toDomain(row));
+    } catch (e) {
+      return Result.err(
+        UnexpectedFailure('Non è stato possibile salvare la memoria.',
+            cause: e),
+      );
+    }
+  }
+
+  @override
   Future<Result<Unit>> deleteMemory(String memoryId) async {
     try {
       await _client.from(_table).delete().eq('id', memoryId);
@@ -37,14 +78,18 @@ class SupabaseMemoryRepository implements MemoryRepository {
   }
 
   Memory _toDomain(Map<String, dynamic> row) {
+    final level = (row['level'] as String) == 'workspace'
+        ? MemoryLevel.workspace
+        : MemoryLevel.global;
     return Memory(
       id: row['id'] as String,
       content: row['content'] as String,
-      level: MemoryLevel.global,
+      level: level,
       origin: (row['origin'] as String) == 'ai'
           ? MemoryOrigin.ai
           : MemoryOrigin.user,
       userId: row['user_id'] as String?,
+      workspaceId: row['workspace_id'] as String?,
       updatedAt: DateTime.parse(row['updated_at'] as String),
     );
   }
