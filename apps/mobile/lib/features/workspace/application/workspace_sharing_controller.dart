@@ -90,9 +90,10 @@ final currentMemberRoleProvider =
   // sottoscrizione partirebbe in ritardo, dopo che l'evento è già stato
   // emesso (osservato nei test, dove uno StreamController broadcast non
   // riproduce gli eventi persi a un iscritto tardivo).
-  final userId = ref.watch(sessionControllerProvider).value?.id;
+  final userId = ref.watch(sessionControllerProvider).asData?.value?.id;
   final members =
-      ref.watch(workspaceMembersProvider(workspaceId)).value ?? const [];
+      ref.watch(workspaceMembersProvider(workspaceId)).asData?.value ??
+          const [];
   if (userId == null) return null;
   for (final member in members) {
     if (member.userId == userId) return member.role;

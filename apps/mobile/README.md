@@ -645,6 +645,36 @@ Non ancora presenti: settings, billing.
     ritorna `null` in modo sicuro su qualunque stato diverso da dati) sia in `_TodayHighlights` sia
     in `linkedDocumentIdsProvider` — scoperto grazie ai nuovi test widget di questa stessa slice,
     non in produzione.
+- **Miniature immagine per i Documenti** (richiesta esplicita dell'utente, "anche solo migliorie
+  grafiche") — estratto in un nuovo widget condiviso `shared/widgets/document_thumbnail.dart` il
+  pattern già usato da `_AttachmentImage` in `chat_home_screen.dart` per gli allegati foto in Chat
+  (`documentDownloadUrlProvider` + `Image.network` con stati di caricamento/errore), parametrizzato
+  per dimensione. Riusato sia dalla Chat (che perde la sua versione locale duplicata) sia da
+  `document_list_screen.dart`, dove un documento `image/*` mostra ora una vera miniatura 48×48 al
+  posto dell'icona generica per tipo di file.
+- **Andamento per categoria nel tempo nel Bilancio** (richiesta esplicita dell'utente) — il tocco
+  su una categoria nel dettaglio Entrate/Uscite (`_CategoryBreakdownTile`, già raggiungibile dalle
+  pillole dell'hero o dal pulsante "Categorie di spesa") apre un nuovo sheet con un grafico a barre
+  dell'andamento di quella categoria negli ultimi 6 mesi. Nessuna nuova aggregazione: nuova funzione
+  pura `categoryMonthlyTotals` in `transaction_controller.dart`, composizione di `lastMonths`/
+  `confirmedThisMonth`/`amountCentsByCategory` già esistenti (richiede esplicitamente il tipo
+  entrata/uscita, per non sommare per sbaglio import ed export della stessa categoria nello stesso
+  mese). Il grafico (`_CategoryTrendChart`) riusa esattamente lo stile `BarChart` già stabilito da
+  `_TrendChart`.
+- **Pulsante "azione rapida" su un Workspace** (richiesta esplicita dell'utente) — nuovo
+  `FloatingActionButton` in `workspace_detail_screen.dart` che apre un `showModalBottomSheet` con
+  quattro `ListTile` (Nota/Attività/Transazione/Promemoria — i Documenti restano esclusi, si
+  caricano con un file picker, non con una sheet di testo), ciascuno instrada alla sheet di
+  creazione già esistente per quella entità. Gating: nascosto per un membro con ruolo `viewer`,
+  stesso principio già applicato a ogni altro pulsante di creazione nei Workspace condivisi
+  (`currentMemberRoleProvider`). **Bug scoperto e corretto in questa slice**: lo stesso
+  `currentMemberRoleProvider` (`workspace_sharing_controller.dart`) leggeva `sessionControllerProvider`/
+  `workspaceMembersProvider` con `.value` invece di `.asData?.value` — innocuo finché ogni schermata
+  che lo usava veniva sempre montata con quei provider già sovrascritti nei test, ma il nuovo FAB fa
+  sì che `WorkspaceDetailScreen` lo osservi incondizionatamente fin dalla prima build: un test senza
+  quegli override (`workspace_navigation_test.dart`, preesistente) ha iniziato a far fallire l'intera
+  schermata invece di limitarsi a trattare il ruolo come "nessuno". Stesso identico bug già
+  documentato sopra per `_TodayHighlights`/`linkedDocumentIdsProvider`, stessa correzione.
 
 ## Setup locale
 
