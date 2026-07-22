@@ -116,6 +116,7 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
               availableMonths.length <= 1) {
             return const EmptyState(
               icon: Icons.pie_chart_outline,
+              color: AppColors.categoryBilancio,
               title: 'Nessuna transazione ancora',
               message:
                   'Scrivi una spesa o un\'entrata in una Chat (es. "barbiere 23€") oppure '

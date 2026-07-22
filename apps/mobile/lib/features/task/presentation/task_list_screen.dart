@@ -37,6 +37,7 @@ class TaskListScreen extends ConsumerWidget {
           if (tasks.isEmpty) {
             return EmptyState(
               icon: Icons.check_circle_outline,
+              color: AppColors.categoryAttivita,
               title: 'Nessuna attività ancora',
               message: 'Crea la tua prima attività in questo Workspace.',
               action: FilledButton(

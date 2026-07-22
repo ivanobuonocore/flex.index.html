@@ -48,6 +48,7 @@ class _NoteListScreenState extends ConsumerState<NoteListScreen> {
           if (notes.isEmpty) {
             return EmptyState(
               icon: Icons.sticky_note_2_outlined,
+              color: AppColors.accentNote,
               title: 'Nessuna nota ancora',
               message: 'Crea la tua prima nota in questo Workspace.',
               action: FilledButton(

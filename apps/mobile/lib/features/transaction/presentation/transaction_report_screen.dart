@@ -70,6 +70,7 @@ class TransactionReportScreen extends ConsumerWidget {
           if (confirmed.isEmpty && pending.isEmpty) {
             return EmptyState(
               icon: Icons.account_balance_wallet_outlined,
+              color: AppColors.categoryBilancio,
               title: 'Nessuna transazione ancora',
               message: 'Aggiungi entrate o uscite, oppure scrivile in Chat.',
               action: FilledButton(

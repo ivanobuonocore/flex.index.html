@@ -60,6 +60,7 @@ class SharedBalanceScreen extends ConsumerWidget {
               if (workspaces.isEmpty)
                 const EmptyState(
                   icon: Icons.people_outline,
+                  color: AppColors.categoryBilancio,
                   title: 'Nessun Bilancio condiviso ancora',
                   message:
                       'Creane uno per condividere le spese con un\'altra persona, '

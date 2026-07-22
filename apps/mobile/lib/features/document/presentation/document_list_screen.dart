@@ -99,6 +99,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
           if (documents.isEmpty) {
             return EmptyState(
               icon: Icons.upload_file_outlined,
+              color: AppColors.categoryDocumenti,
               title: 'Nessun documento ancora',
               message: _errorMessage ??
                   'Carica il tuo primo file in questo Workspace.',

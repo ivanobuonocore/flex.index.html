@@ -91,6 +91,7 @@ class _ReminderListScreenState extends ConsumerState<ReminderListScreen> {
                 if (events.isEmpty) {
                   return EmptyState(
                     icon: Icons.notifications_outlined,
+                    color: AppColors.categoryAppuntamenti,
                     title: 'Nessun promemoria ancora',
                     message:
                         'Creane uno, oppure scrivi in Chat "ricordami di..." '

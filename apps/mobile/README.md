@@ -316,6 +316,12 @@ Implementate, con dati reali via Supabase:
   indeterminata (si ripete finché il widget è a schermo, come un `CircularProgressIndicator`): nei
   test va verificata con `pump()` a durata limitata, non `pumpAndSettle()` — stessa lezione già
   imparata altrove in questo progetto.
+- **empty state illustrati** (richiesta esplicita dell'utente) — `EmptyState` (shared/widgets/) ha
+  ora un'icona più grande su un doppio cerchio sfumato ("illustrazione", stesso trattamento
+  gradiente/glow già usato per hero del saldo e striscia Sezioni) invece della singola icona grigia
+  di prima, con un parametro `color` opzionale per intonare la tinta alla sezione (Bilancio, Note,
+  Attività, Documenti, Appuntamenti — le stesse tinte già usate per badge di categoria e Sezioni).
+  Nessuna dipendenza nuova: solo widget, nessuna immagine/asset.
 - **export (dati completi)** (richiesta esplicita dell'utente) — Profilo → "Esporta i miei dati":
   un JSON con Note/Attività/Documenti (solo metadata, non i file)/Promemoria/Memoria di ogni
   Workspace, più Transazioni e Memoria globale. Lettura one-shot (`.first` su ogni stream, non
