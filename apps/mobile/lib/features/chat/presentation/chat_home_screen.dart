@@ -1033,20 +1033,6 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     super.dispose();
   }
 
-  /// Applica un suggerimento rapido (richiesta esplicita dell'utente: "chip
-  /// di suggerimento in Chat") scrivendo il testo nel campo — non invia
-  /// subito: "Ricorda che..." e "Aggiungi alla lista" sono prefissi da
-  /// completare, non frasi pronte, e lo stesso comportamento per tutti i chip
-  /// (anche quelli già completi, es. il saldo) resta più prevedibile di due
-  /// meccaniche diverse a seconda del testo.
-  void _applySuggestion(String text) {
-    _controller.value = TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
-    );
-    _focusNode.requestFocus();
-  }
-
   Future<void> _pickPhoto() async {
     final result = await FilePicker.platform
         .pickFiles(type: FileType.image, withData: true);
@@ -1200,22 +1186,6 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error)),
               const SizedBox(height: AppSpacing.sm),
             ],
-            // Nascosti appena l'utente inizia a scrivere (richiesta esplicita
-            // dell'utente: chip di suggerimento) — `ValueListenableBuilder`
-            // su `_controller` invece di un listener manuale + `setState`.
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _controller,
-              builder: (context, value, child) {
-                if (value.text.isNotEmpty || isSending) {
-                  return const SizedBox.shrink();
-                }
-                return child!;
-              },
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: _QuickSuggestionsRow(onSelected: _applySuggestion),
-              ),
-            ),
             Row(
               children: [
                 IconButton(
@@ -1276,69 +1246,6 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
             if (_showEmojiPicker) ...[
               const SizedBox(height: AppSpacing.sm),
               _EmojiPicker(onSelected: _insertEmoji),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _QuickSuggestion {
-  const _QuickSuggestion(
-      {required this.label, required this.text, required this.icon});
-
-  final String label;
-  final String text;
-  final IconData icon;
-}
-
-/// Chip di suggerimento rapido sopra il campo di testo (richiesta esplicita
-/// dell'utente: "chip di suggerimento in Chat") — copre le tre azioni più
-/// comuni già supportate dall'assistente (saldo del mese: query di sola
-/// lettura sui dati reali; Memoria: `remember_fact`; liste: `manage_tasks`),
-/// senza dover ricordare come formularle.
-const _quickSuggestions = [
-  _QuickSuggestion(
-    label: 'Chiedi il saldo',
-    text: 'Quanto ho speso questo mese?',
-    icon: Icons.account_balance_wallet_outlined,
-  ),
-  _QuickSuggestion(
-    label: 'Ricorda che...',
-    text: 'Ricorda che ',
-    icon: Icons.psychology_outlined,
-  ),
-  _QuickSuggestion(
-    label: 'Aggiungi alla lista',
-    text: 'Aggiungi alla lista: ',
-    icon: Icons.checklist_outlined,
-  ),
-];
-
-class _QuickSuggestionsRow extends StatelessWidget {
-  const _QuickSuggestionsRow({required this.onSelected});
-
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    // `SingleChildScrollView` + `Row`, non `ListView.separated`: alcuni test
-    // esistenti usano `find.byType(ListView)` assumendo che ce ne sia una
-    // sola (la lista messaggi) — un secondo `ListView` qui li romperebbe.
-    return SizedBox(
-      height: 36,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (final suggestion in _quickSuggestions) ...[
-              ActionChip(
-                avatar: Icon(suggestion.icon, size: 16),
-                label: Text(suggestion.label),
-                onPressed: () => onSelected(suggestion.text),
-              ),
-              const SizedBox(width: AppSpacing.xs),
             ],
           ],
         ),

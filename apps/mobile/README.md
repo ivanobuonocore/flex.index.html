@@ -42,12 +42,10 @@ Implementate, con dati reali via Supabase:
   vecchio `workspaceId` della Chat). Si può allegare una foto a un messaggio: va sempre nella
   sezione Documenti (`Document` con `chat_id`, stesso bucket riusato — nessuna nuova
   infrastruttura) e l'assistente la "vede" tramite il supporto immagini di Claude.
-- **chat (chip di suggerimento)** (richiesta esplicita dell'utente) — tre `ActionChip` sopra il
-  campo di testo ("Chiedi il saldo", "Ricorda che...", "Aggiungi alla lista"): scrivono il testo nel
-  campo (non inviano subito, i due prefissi vanno completati) e spariscono appena l'utente inizia a
-  scrivere (`ValueListenableBuilder` sul `TextEditingController`, non un listener manuale). Riga
-  scorrevole con `SingleChildScrollView` + `Row`, non una seconda `ListView`: alcuni test esistenti
-  assumevano un solo `ListView` in albero (la lista messaggi) e si rompevano con una seconda.
+- **chat (chip di suggerimento)** (richiesta esplicita dell'utente, poi **rimossa** — vedi il punto
+  più sotto) — tre `ActionChip` sopra il campo di testo ("Chiedi il saldo", "Ricorda che...",
+  "Aggiungi alla lista"): scrivevano il testo nel campo (non inviavano subito, i due prefissi
+  andavano completati) e sparivano appena l'utente iniziava a scrivere.
 - **chat (scroll automatico)** (bug segnalato dall'utente: "quando risponde non si blocca la
   pagina ma che esca di seguito senza scatti, come una normale conversazione su whatsapp") — la
   lista messaggi scorre automaticamente in fondo a ogni nuovo messaggio (proprio o
@@ -588,6 +586,20 @@ Non ancora presenti: settings, billing.
   l'`AppBar`. Nessuna modifica di logica in questa slice: solo widget di presentazione, verificato
   che l'intera suite di test esistente (208 in `apps/mobile`, 40 in `packages/domain`) continuasse
   a passare invariata.
+- **Chat: suggerimenti integrati nelle risposte invece di pulsanti fissi** (richiesta esplicita
+  dell'utente: "non mi piacciono quei pulsanti... vorrei fossero integrate nelle risposte
+  dell'assistente non come pulsanti sotto") — rimossi del tutto `_QuickSuggestionsRow`/
+  `_QuickSuggestion`/`_applySuggestion` da `chat_home_screen.dart` (i tre `ActionChip` "Chiedi il
+  saldo"/"Ricorda che..."/"Aggiungi alla lista" sopra il campo di testo, introdotti in una slice
+  precedente): nessun elemento toccabile dedicato li sostituisce, per scelta esplicita dell'utente
+  (opzione "solo testo naturale, nessun pulsante" tra quelle proposte). Il system prompt
+  dell'Edge Function `ai-chat` (`ASSISTANT_PERSONA`) guadagna invece un paragrafo che invita
+  l'assistente a proporre lui stesso, a parole e quando naturale nel contesto, le stesse tre azioni
+  (es. "Vuoi che te lo ricordi?") — nessuna garanzia che compaia a ogni risposta (è una linea guida
+  di stile, non un pulsante deterministico): coerente con "l'assistente è un collaboratore
+  proattivo", non verificabile con un test automatico (dipende dal comportamento reale del
+  modello). Rimosso anche l'unico test che assumeva i tre chip fissi
+  (`chat_home_screen_test.dart`).
 
 ## Setup locale
 
