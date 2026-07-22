@@ -257,6 +257,13 @@ Implementate, con dati reali via Supabase:
 - **transaction (scontrino allegato)** (richiesta esplicita dell'utente) — un Document persistente
   collegato alla Transazione (diverso dalla foto temporanea letta dall'AI per estrarne l'importo),
   gestito dal form di modifica: allega/apri/rimuovi. Icona scontrino nell'elenco quando presente.
+- **transaction (andamento multi-mese + confronto mese precedente)** (richiesta esplicita
+  dell'utente) — nell'hero del saldo, un badge "vs mese scorso" (percentuale di variazione rispetto
+  al mese precedente quello selezionato nella tendina; nascosto se il mese precedente ha saldo 0,
+  nessun confronto sensato). Sotto il grafico a torta, un grafico a barre `fl_chart` con gli ultimi
+  6 mesi (entrate/uscite confermate affiancate), calcolato sullo stesso mese di riferimento della
+  tendina. Logica pura in `transaction_controller.dart` (`percentChange`, `lastMonths`,
+  `monthlyTotals`), nessuna nuova tabella: aggrega le stesse transazioni già caricate.
 - **memory (prima slice minima)** (richiesta esplicita dell'utente) — solo il livello Globale:
   l'AI salva una nota quando l'utente dice esplicitamente "ricorda che..." (tool `remember_fact`,
   sempre disponibile come le query di sola lettura), e le memorie salvate vengono iniettate nel

@@ -135,6 +135,20 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
           final expenseByCategory = amountCentsByCategory(
               confirmed.where((t) => t.type == TransactionType.expense));
 
+          // Confronto col mese precedente (richiesta esplicita dell'utente) e
+          // andamento degli ultimi 6 mesi, calcolati sul mese selezionato
+          // nella tendina (non sempre il mese corrente): stessa logica pura
+          // già usata sopra, solo applicata anche al mese prima e allo
+          // storico.
+          final previousMonth =
+              DateTime(selectedMonth.year, selectedMonth.month - 1);
+          final previousBalance = balanceCents(
+              confirmedThisMonth(transactions, now: previousMonth));
+          final balanceChangePercent =
+              percentChange(current: balance, previous: previousBalance);
+          final trend =
+              monthlyTotals(transactions, lastMonths(selectedMonth, 6));
+
           return ListView(
             padding: const EdgeInsets.all(AppSpacing.md),
             children: [
@@ -177,9 +191,12 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                 expenseCents: expense,
                 incomeByCategory: incomeByCategory,
                 expenseByCategory: expenseByCategory,
+                previousMonthPercentChange: balanceChangePercent,
               ),
               const SizedBox(height: AppSpacing.md),
               _BalancePieChart(incomeCents: income, expenseCents: expense),
+              const SizedBox(height: AppSpacing.lg),
+              _TrendChart(trend: trend),
               const SizedBox(height: AppSpacing.lg),
               _BudgetSection(expenseByCategory: expenseByCategory),
               if (pending.isNotEmpty) ...[
@@ -274,6 +291,7 @@ class _BalanceHeroCard extends StatelessWidget {
     required this.expenseCents,
     required this.incomeByCategory,
     required this.expenseByCategory,
+    required this.previousMonthPercentChange,
   });
 
   final int balanceCents;
@@ -281,6 +299,10 @@ class _BalanceHeroCard extends StatelessWidget {
   final int expenseCents;
   final Map<TransactionCategory, int> incomeByCategory;
   final Map<TransactionCategory, int> expenseByCategory;
+
+  /// `null` quando il mese precedente ha saldo 0 (nessun confronto
+  /// sensato — vedi `percentChange`), non mostrato in quel caso.
+  final double? previousMonthPercentChange;
 
   @override
   Widget build(BuildContext context) {
@@ -313,6 +335,10 @@ class _BalanceHeroCard extends StatelessWidget {
             _formatSignedAmount(balanceCents),
             style: AppTypography.heading1.copyWith(color: Colors.white),
           ),
+          if (previousMonthPercentChange != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            _PercentChangeBadge(percentChange: previousMonthPercentChange!),
+          ],
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [
@@ -346,6 +372,46 @@ class _BalanceHeroCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Badge "vs mese scorso" (richiesta esplicita dell'utente: "confronto col
+/// mese precedente") — saldo migliorato (percentuale ≥ 0) in verde con
+/// freccia su, peggiorato in rosso con freccia giù. Sfondo bianco
+/// traslucido come [_HeroStatPill]: stessa ragione, il verde/rosso pieno
+/// perderebbe leggibilità sul gradiente dell'hero.
+class _PercentChangeBadge extends StatelessWidget {
+  const _PercentChangeBadge({required this.percentChange});
+
+  final double percentChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final isImprovement = percentChange >= 0;
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: AppRadii.buttonRadius,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isImprovement ? Icons.arrow_upward : Icons.arrow_downward,
+            size: 14,
+            color: isImprovement ? AppColors.success : AppColors.error,
+          ),
+          const SizedBox(width: 2),
+          Text(
+            '${percentChange.abs().toStringAsFixed(0)}% vs mese scorso',
+            style: AppTypography.caption
+                .copyWith(color: Colors.white.withOpacity(0.9)),
           ),
         ],
       ),
@@ -723,6 +789,160 @@ class _BalancePieChartState extends State<_BalancePieChart> {
           ),
         ),
       ),
+    );
+  }
+}
+
+const _italianMonthsShort = [
+  'Gen',
+  'Feb',
+  'Mar',
+  'Apr',
+  'Mag',
+  'Giu',
+  'Lug',
+  'Ago',
+  'Set',
+  'Ott',
+  'Nov',
+  'Dic',
+];
+
+/// Grafico "andamento nel tempo" (richiesta esplicita dell'utente: "vorrei
+/// vedere l'andamento delle mie spese negli ultimi mesi"): entrate/uscite
+/// confermate degli ultimi 6 mesi, una coppia di barre per mese — stessa
+/// coppia di colori del grafico a torta sopra, per coerenza visiva.
+class _TrendChart extends StatelessWidget {
+  const _TrendChart({required this.trend});
+
+  final List<MonthlyTotals> trend;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final incomeColor = AppColors.heroGradient[0];
+    final expenseColor = AppColors.heroGradient[1];
+
+    final maxValue = trend.fold<int>(
+        0,
+        (max, m) => [max, m.incomeCents, m.expenseCents]
+            .reduce((a, b) => a > b ? a : b));
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: AppRadii.standardRadius,
+        boxShadow: AppShadows.glow(color: incomeColor, isDark: isDark),
+      ),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Andamento ultimi 6 mesi', style: AppTypography.heading3),
+              const SizedBox(height: AppSpacing.md),
+              SizedBox(
+                height: 180,
+                child: maxValue == 0
+                    ? const Center(
+                        child: Text(
+                            'Nessun importo confermato in questo periodo.'),
+                      )
+                    : BarChart(
+                        BarChartData(
+                          maxY: maxValue * 1.2,
+                          gridData: const FlGridData(show: false),
+                          borderData: FlBorderData(show: false),
+                          titlesData: FlTitlesData(
+                            leftTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            rightTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            topTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                getTitlesWidget: (value, meta) {
+                                  final index = value.toInt();
+                                  if (index < 0 || index >= trend.length) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final month = trend[index].month;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(
+                                        top: AppSpacing.xs),
+                                    child: Text(
+                                      _italianMonthsShort[month.month - 1],
+                                      style: AppTypography.caption,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                          barGroups: [
+                            for (var i = 0; i < trend.length; i++)
+                              BarChartGroupData(
+                                x: i,
+                                barRods: [
+                                  BarChartRodData(
+                                    toY: trend[i].incomeCents.toDouble(),
+                                    color: incomeColor,
+                                    width: 8,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  BarChartRodData(
+                                    toY: trend[i].expenseCents.toDouble(),
+                                    color: expenseColor,
+                                    width: 8,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ],
+                                barsSpace: 4,
+                              ),
+                          ],
+                        ),
+                      ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                children: [
+                  _TrendLegendDot(color: incomeColor, label: 'Entrate'),
+                  const SizedBox(width: AppSpacing.md),
+                  _TrendLegendDot(color: expenseColor, label: 'Uscite'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TrendLegendDot extends StatelessWidget {
+  const _TrendLegendDot({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        Text(label, style: AppTypography.caption),
+      ],
     );
   }
 }

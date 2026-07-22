@@ -357,9 +357,16 @@ void main() {
     fakeTransaction.emit([groceries]);
     // _BudgetSection non esiste nell'albero finché transazioni/Workspace non
     // hanno dati (gate su transactionsAsync.when): un pump() intermedio fa
-    // montare quel widget e sottoscriversi a budgetsProvider PRIMA
-    // dell'emit sotto — altrimenti, essendo _controller un broadcast
-    // StreamController, l'emissione andrebbe persa (nessun listener ancora).
+    // montare la ListView. Non basta più da solo (redesign con grafico
+    // "andamento ultimi 6 mesi", più in alto nella ListView): _BudgetSection
+    // ora ricade oltre il cacheExtent di default finché non si scorre, quindi
+    // resta fuori dall'albero e non si sottoscrive a budgetsProvider in
+    // tempo — uno scroll esplicito prima dell'emit lo porta dentro
+    // cacheExtent così la sottoscrizione parte PRIMA dell'emissione sotto
+    // (altrimenti, essendo _controller un broadcast StreamController,
+    // l'emissione andrebbe persa: nessun listener ancora, nessun replay).
+    await tester.pump();
+    await tester.drag(find.byType(ListView), const Offset(0, -1200));
     await tester.pump();
     fakeBudget.emit([budget]);
     await tester.pumpAndSettle();
@@ -402,8 +409,11 @@ void main() {
 
     fakeWorkspace.emit([personalWorkspace]);
     fakeTransaction.emit([personalIncome]);
-    // Vedi commento nel test precedente: pump() intermedio prima dell'emit
-    // di fakeBudget, altrimenti l'emissione sul broadcast stream va persa.
+    // Vedi commento nel test precedente: pump() + scroll intermedi prima
+    // dell'emit di fakeBudget, altrimenti l'emissione sul broadcast stream va
+    // persa (_BudgetSection non ancora dentro cacheExtent).
+    await tester.pump();
+    await tester.drag(find.byType(ListView), const Offset(0, -1200));
     await tester.pump();
     fakeBudget.emit(const []);
     await tester.pumpAndSettle();
@@ -419,5 +429,49 @@ void main() {
 
     expect(fakeBudget.lastSetCategory, TransactionCategory.alimentari);
     expect(fakeBudget.lastSetMonthlyLimitCents, 30000);
+  });
+
+  testWidgets(
+      'mostra il grafico "Andamento ultimi 6 mesi" e il badge vs mese scorso',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final lastMonth = DateTime(now.year, now.month - 1, 15);
+    // Mese scorso: 500,00 € di entrate. Mese corrente: 1.000,00 € (vedi
+    // personalIncome) → +100% rispetto al mese scorso.
+    final lastMonthIncome = Transaction(
+      id: 't-last-month',
+      workspaceId: 'w-personal',
+      type: TransactionType.income,
+      description: 'Stipendio mese scorso',
+      amountCents: 50000,
+      occurredAt: lastMonth,
+      status: TransactionStatus.confirmed,
+      createdAt: lastMonth,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([personalIncome, lastMonthIncome]);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('vs mese scorso'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Andamento ultimi 6 mesi'), 300);
+    expect(find.text('Andamento ultimi 6 mesi'), findsOneWidget);
   });
 }

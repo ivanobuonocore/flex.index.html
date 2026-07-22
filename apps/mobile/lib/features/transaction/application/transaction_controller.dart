@@ -143,3 +143,53 @@ Map<TransactionCategory, int> amountCentsByCategory(
   }
   return totals;
 }
+
+/// Percentuale di variazione tra due importi (richiesta esplicita
+/// dell'utente: "confronto col mese precedente"). `null` se [previous] è 0:
+/// nessun confronto sensato ("+∞%"), non una divisione per zero mascherata.
+double? percentChange({required int current, required int previous}) {
+  if (previous == 0) return null;
+  return (current - previous) / previous.abs() * 100;
+}
+
+/// Gli ultimi [months] mesi fino a [reference] incluso, dal più vecchio al
+/// più recente — usati per il grafico "andamento nel tempo" (richiesta
+/// esplicita dell'utente).
+List<DateTime> lastMonths(DateTime reference, int months) {
+  return List.generate(
+    months,
+    (i) => DateTime(reference.year, reference.month - (months - 1 - i)),
+    growable: false,
+  );
+}
+
+/// Entrate/uscite confermate di un singolo mese, per il grafico "andamento
+/// nel tempo".
+class MonthlyTotals {
+  const MonthlyTotals({
+    required this.month,
+    required this.incomeCents,
+    required this.expenseCents,
+  });
+
+  final DateTime month;
+  final int incomeCents;
+  final int expenseCents;
+}
+
+/// Applica [confirmedThisMonth]/[totalIncomeCents]/[totalExpenseCents] a
+/// ciascuno dei [months] — pure, testabile senza Riverpod, stessa logica già
+/// usata altrove in questo file per un singolo mese.
+List<MonthlyTotals> monthlyTotals(
+  List<Transaction> transactions,
+  List<DateTime> months,
+) {
+  return months.map((month) {
+    final confirmed = confirmedThisMonth(transactions, now: month);
+    return MonthlyTotals(
+      month: month,
+      incomeCents: totalIncomeCents(confirmed),
+      expenseCents: totalExpenseCents(confirmed),
+    );
+  }).toList(growable: false);
+}

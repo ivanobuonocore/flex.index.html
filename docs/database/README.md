@@ -806,6 +806,31 @@ un semplice `Column`): la riga in più poteva superare l'altezza disponibile su 
 tastiera aperta — trovato durante i test widget (`RenderFlex overflow`), non solo in teoria.
 Icona scontrino nell'elenco Transazioni confermate di `TransactionReportScreen` quando presente.
 
+## Fase 3 (slice 21) — Andamento multi-mese e confronto col mese precedente nel Bilancio
+
+Nessuna migrazione: aggrega le stesse `transactions` già caricate da `transactionsProvider(null)`,
+nessuna nuova tabella o colonna necessaria.
+
+`transaction_controller.dart`: `percentChange({current, previous})` — `null` se `previous` è 0
+(nessun confronto sensato, non una divisione per zero mascherata); usa `previous.abs()` come base
+così un saldo precedente negativo non inverte il segno del risultato. `lastMonths(reference,
+months)` — gli ultimi N mesi fino a `reference` incluso, dal più vecchio al più recente.
+`monthlyTotals(transactions, months)` — entrate/uscite confermate per ciascuno dei mesi indicati,
+riusando `confirmedThisMonth`/`totalIncomeCents`/`totalExpenseCents` già esistenti.
+
+Mobile (`balance_overview_screen.dart`): `_BalanceHeroCard` mostra un badge "vs mese scorso" sotto
+il saldo (verde/freccia su se il saldo è migliorato, rosso/freccia giù altrimenti), calcolato sul
+saldo del mese selezionato nella tendina contro il mese immediatamente precedente. Sotto il
+grafico a torta, `_TrendChart` (nuovo, `fl_chart` `BarChart`) mostra gli ultimi 6 mesi con una
+coppia di barre entrate/uscite per mese, stessa palette blu/viola del resto del Bilancio.
+
+Bug trovato nei test widget esistenti (non nella logica nuova): `_BudgetSection` (slice 18) è ora
+più in basso nella `ListView` di quanto arrivi il `cacheExtent` di default finché non si scorre —
+`ListView(children: [...])` non è eager come si potrebbe pensare, usa comunque il protocollo
+sliver lazy. I test che emettevano il budget dopo un solo `pump()` perdevano l'emissione
+(`_BudgetSection` non ancora montato = non ancora sottoscritto a `budgetsProvider`, broadcast
+stream senza replay): corretto aggiungendo uno scroll esplicito prima dell'emit.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

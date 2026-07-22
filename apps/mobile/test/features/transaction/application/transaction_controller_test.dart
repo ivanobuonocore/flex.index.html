@@ -220,4 +220,91 @@ void main() {
       expect(balanceCents(const []), 0);
     });
   });
+
+  group('percentChange', () {
+    test('calcola la percentuale di variazione', () {
+      expect(percentChange(current: 120, previous: 100), 20);
+      expect(percentChange(current: 80, previous: 100), -20);
+    });
+
+    test('previous 0 ritorna null (nessun confronto sensato)', () {
+      expect(percentChange(current: 50, previous: 0), isNull);
+    });
+
+    test('previous negativo usa il valore assoluto come base', () {
+      expect(percentChange(current: -50, previous: -100), 50);
+    });
+  });
+
+  group('lastMonths', () {
+    test('ritorna N mesi consecutivi fino al riferimento incluso, in ordine',
+        () {
+      // DateTime locale (non .utc): lastMonths preserva il tipo del
+      // riferimento passato, coerente con DateTime.now() usato altrove in
+      // questo file per il mese corrente.
+      final months = lastMonths(DateTime(2026, 3, 1), 3);
+      expect(months, [
+        DateTime(2026, 1, 1),
+        DateTime(2026, 2, 1),
+        DateTime(2026, 3, 1),
+      ]);
+    });
+
+    test('attraversa correttamente il cambio anno', () {
+      final months = lastMonths(DateTime(2026, 1, 1), 3);
+      expect(months, [
+        DateTime(2025, 11, 1),
+        DateTime(2025, 12, 1),
+        DateTime(2026, 1, 1),
+      ]);
+    });
+  });
+
+  group('monthlyTotals', () {
+    test('calcola entrate/uscite confermate per ciascun mese indicato', () {
+      final juneIncome = Transaction(
+        id: 'j1',
+        workspaceId: workspaceId,
+        type: TransactionType.income,
+        description: 'Stipendio',
+        amountCents: 150000,
+        occurredAt: DateTime.utc(2026, 6, 1),
+        status: TransactionStatus.confirmed,
+        createdAt: DateTime.utc(2026, 6, 1),
+      );
+      final julyExpense = Transaction(
+        id: 'j2',
+        workspaceId: workspaceId,
+        type: TransactionType.expense,
+        description: 'Barbiere',
+        amountCents: 2300,
+        occurredAt: DateTime.utc(2026, 7, 5),
+        status: TransactionStatus.confirmed,
+        createdAt: DateTime.utc(2026, 7, 5),
+      );
+      final julyPending = Transaction(
+        id: 'j3',
+        workspaceId: workspaceId,
+        type: TransactionType.expense,
+        description: 'Suggerita, non confermata',
+        amountCents: 9999,
+        occurredAt: DateTime.utc(2026, 7, 10),
+        status: TransactionStatus.pending,
+        createdAt: DateTime.utc(2026, 7, 10),
+      );
+
+      final months = [DateTime.utc(2026, 6, 1), DateTime.utc(2026, 7, 1)];
+      final totals =
+          monthlyTotals([juneIncome, julyExpense, julyPending], months);
+
+      expect(totals, hasLength(2));
+      expect(totals[0].month, DateTime.utc(2026, 6, 1));
+      expect(totals[0].incomeCents, 150000);
+      expect(totals[0].expenseCents, 0);
+      expect(totals[1].month, DateTime.utc(2026, 7, 1));
+      expect(totals[1].incomeCents, 0);
+      // La pending non conta: solo julyExpense (confirmed).
+      expect(totals[1].expenseCents, 2300);
+    });
+  });
 }
