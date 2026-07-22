@@ -48,6 +48,8 @@ class MessageFormController extends AutoDisposeAsyncNotifier<void> {
     required String? workspaceId,
     required String content,
     List<String> attachmentIds = const [],
+    String? remindersWorkspaceId,
+    String? tasksWorkspaceId,
   }) async {
     state = const AsyncLoading();
     try {
@@ -56,6 +58,8 @@ class MessageFormController extends AutoDisposeAsyncNotifier<void> {
             workspaceId: workspaceId,
             content: content,
             attachmentIds: attachmentIds,
+            remindersWorkspaceId: remindersWorkspaceId,
+            tasksWorkspaceId: tasksWorkspaceId,
           );
       return result.fold((_) => null, (failure) => failure);
     } catch (e) {

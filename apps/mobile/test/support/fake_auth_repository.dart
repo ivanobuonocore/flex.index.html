@@ -12,7 +12,11 @@ class FakeAuthRepository implements AuthRepository {
 
   Result<User>? signInResult;
   Result<User>? signUpResult;
+  Result<Unit>? updateThemeModeResult;
+  Result<Unit>? completeOnboardingResult;
   bool signOutCalled = false;
+  bool completeOnboardingCalled = false;
+  AppThemeMode? lastThemeMode;
 
   void emit(User? user) => _controller.add(user);
 
@@ -53,6 +57,18 @@ class FakeAuthRepository implements AuthRepository {
     signOutCalled = true;
     emit(null);
     return const Result.ok(unit);
+  }
+
+  @override
+  Future<Result<Unit>> updateThemeMode(AppThemeMode mode) async {
+    lastThemeMode = mode;
+    return updateThemeModeResult ?? const Result.ok(unit);
+  }
+
+  @override
+  Future<Result<Unit>> completeOnboarding() async {
+    completeOnboardingCalled = true;
+    return completeOnboardingResult ?? const Result.ok(unit);
   }
 
   void dispose() => _controller.close();

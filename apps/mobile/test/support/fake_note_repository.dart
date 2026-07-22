@@ -11,6 +11,7 @@ class FakeNoteRepository implements NoteRepository {
   Note? lastCreated;
   Note? lastUpdated;
   String? lastDeletedId;
+  List<String>? lastCreatedTags;
 
   void emit(List<Note> notes) => _controller.add(notes);
 
@@ -24,6 +25,7 @@ class FakeNoteRepository implements NoteRepository {
     String content = '',
     List<String> tags = const [],
   }) async {
+    lastCreatedTags = tags;
     final result = createResult ??
         const Result<Note>.err(
             ValidationFailure('Nessun risultato configurato.'));

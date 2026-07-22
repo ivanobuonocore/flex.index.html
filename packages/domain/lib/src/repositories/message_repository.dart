@@ -22,5 +22,7 @@ abstract interface class MessageRepository {
     required String? workspaceId,
     required String content,
     List<String> attachmentIds = const [],
+    String? remindersWorkspaceId,
+    String? tasksWorkspaceId,
   });
 }

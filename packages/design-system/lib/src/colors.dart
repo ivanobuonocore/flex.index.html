@@ -49,4 +49,16 @@ abstract final class AppColors {
     Color(0xFFFF5DA2), // rosa
     Color(0xFF39E1FF), // ciano
   ];
+
+  // Gradiente "premium" per superfici ampie in primo piano (redesign estetico
+  // 2.0 — richiesta esplicita dell'utente: "molto tecnologica", "profondità"),
+  // usato per l'header della Chat e l'hero del saldo nel Bilancio. Stessa
+  // famiglia cromatica di siriGlow ma solo due tonalità: una campitura larga
+  // con quattro colori risulterebbe troppo "rumorosa" su una superficie
+  // grande, a differenza del piccolo cerchio del pulsante Chat. Comune a
+  // light e dark mode, stesso principio di siriGlow.
+  static const List<Color> heroGradient = [
+    Color(0xFF2563EB), // blu primario
+    Color(0xFF7C3AED), // viola secondario
+  ];
 }

@@ -21,6 +21,7 @@ dependencies:
   url_launcher: ^6.3.1
   web: ^1.1.0
   fl_chart: ^0.68.0
+  speech_to_text: ^7.0.0
 
   pip_shared:
     path: ../../packages/shared
@@ -33,6 +34,11 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  # Fake di SpeechToTextPlatform per testare la dettatura vocale (vedi
+  # test/support/fake_speech_to_text_platform.dart) senza un canale nativo
+  # reale: transitiva di speech_to_text, dichiarata qui perché importata
+  # direttamente nei test.
+  speech_to_text_platform_interface: ^2.4.0
 
 flutter:
   uses-material-design: true

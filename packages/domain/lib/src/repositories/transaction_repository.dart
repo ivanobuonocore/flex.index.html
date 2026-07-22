@@ -1,5 +1,6 @@
 import 'package:pip_shared/pip_shared.dart';
 
+import '../entities/receipt_extraction.dart';
 import '../entities/transaction.dart';
 import '../enums.dart';
 
@@ -24,6 +25,7 @@ abstract interface class TransactionRepository {
     String currency = 'EUR',
     required DateTime occurredAt,
     TransactionCategory category = TransactionCategory.altro,
+    List<String> tags = const [],
   });
 
   Future<Result<Transaction>> updateTransaction(Transaction transaction);
@@ -36,4 +38,19 @@ abstract interface class TransactionRepository {
   /// dall'AI) sia per "elimina" (transazione `confirmed`) — stessa
   /// operazione, etichetta diversa in UI a seconda di [Transaction.status].
   Future<Result<Unit>> deleteTransaction(String transactionId);
+
+  /// Collega un Documento (es. una foto di scontrino) alla Transazione, o lo
+  /// scollega se [documentId] è `null` (richiesta esplicita dell'utente:
+  /// "scontrino allegato alla Transazione").
+  Future<Result<Transaction>> attachDocument({
+    required String transactionId,
+    required String? documentId,
+  });
+
+  /// Lettura automatica (OCR via AI Engine) di uno scontrino/ricevuta già
+  /// allegato (integrazione richiesta esplicitamente). Ritorna `null` — mai
+  /// un [Failure] bloccante — se la foto non è leggibile come scontrino o il
+  /// servizio AI non è disponibile: l'utente compila comunque il form a
+  /// mano in quel caso, come oggi.
+  Future<Result<ReceiptExtraction?>> extractReceiptData(String documentId);
 }

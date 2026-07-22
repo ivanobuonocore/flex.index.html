@@ -22,6 +22,8 @@ final class Transaction {
     this.createdByAi = false,
     this.deletedAt,
     this.category = TransactionCategory.altro,
+    this.documentId,
+    this.tags = const [],
   });
 
   final String id;
@@ -31,6 +33,14 @@ final class Transaction {
   /// messaggio di Chat (traccia la fonte, AI Constitution, Principio 3 —
   /// Trasparenza).
   final String? chatId;
+
+  /// Scontrino/ricevuta allegata (richiesta esplicita dell'utente: "scontrino
+  /// allegato alla Transazione") — un [Document] persistente e consultabile
+  /// dopo, non solo la foto temporanea che l'AI legge per estrarre
+  /// l'importo. Gestito solo tramite [TransactionRepository.attachDocument],
+  /// non tramite [copyWith] (nessun modo pulito di rappresentare "rimuovi
+  /// l'allegato" in un copyWith che usa `?? this.x`).
+  final String? documentId;
 
   final TransactionType type;
   final String description;
@@ -52,12 +62,18 @@ final class Transaction {
   /// Soft delete (Domain Model, "Principi del modello").
   final DateTime? deletedAt;
 
+  /// Tag liberi assegnati manualmente dall'utente (integrazione richiesta
+  /// esplicitamente) — stesso pattern di [Note.tags]: mai popolati dall'AI
+  /// Engine, `extract_transactions` non li tocca.
+  final List<String> tags;
+
   Transaction copyWith({
     String? description,
     int? amountCents,
     DateTime? occurredAt,
     TransactionStatus? status,
     TransactionCategory? category,
+    List<String>? tags,
   }) {
     return Transaction(
       id: id,
@@ -73,6 +89,8 @@ final class Transaction {
       createdAt: createdAt,
       deletedAt: deletedAt,
       category: category ?? this.category,
+      documentId: documentId,
+      tags: tags ?? this.tags,
     );
   }
 
@@ -91,7 +109,9 @@ final class Transaction {
       other.createdByAi == createdByAi &&
       other.createdAt == createdAt &&
       other.deletedAt == deletedAt &&
-      other.category == category;
+      other.category == category &&
+      other.documentId == documentId &&
+      _listEquals(other.tags, tags);
 
   @override
   int get hashCode => Object.hash(
@@ -108,9 +128,20 @@ final class Transaction {
         createdAt,
         deletedAt,
         category,
+        documentId,
+        Object.hashAll(tags),
       );
 
   @override
   String toString() =>
       'Transaction(id: $id, type: $type, description: $description, amountCents: $amountCents, status: $status)';
+}
+
+bool _listEquals(List<String> a, List<String> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }

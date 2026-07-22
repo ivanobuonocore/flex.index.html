@@ -39,6 +39,7 @@ void main() {
       name: 'Ada',
       plan: UserPlan.free,
       createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
     );
     final workspace = Workspace(
       id: 'w1',
@@ -72,7 +73,7 @@ void main() {
     fakeChat.emit(const []);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Workspace'));
+    await tester.tap(find.text('Spazi'));
     await tester.pumpAndSettle();
 
     // La Home Chat mostra anch'essa un'anteprima "Workspace recenti" (Slice

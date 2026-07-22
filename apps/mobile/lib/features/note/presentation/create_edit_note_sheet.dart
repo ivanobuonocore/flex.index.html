@@ -40,6 +40,8 @@ class _CreateEditNoteSheetState extends ConsumerState<_CreateEditNoteSheet> {
   late final _titleController = TextEditingController(text: widget.note?.title);
   late final _contentController =
       TextEditingController(text: widget.note?.content);
+  final _tagInputController = TextEditingController();
+  late List<String> _tags = List.of(widget.note?.tags ?? const []);
   String? _errorMessage;
 
   bool get _isEditing => widget.note != null;
@@ -48,12 +50,30 @@ class _CreateEditNoteSheetState extends ConsumerState<_CreateEditNoteSheet> {
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
+    _tagInputController.dispose();
     super.dispose();
+  }
+
+  // Un tag per invio/virgola (richiesta esplicita dell'utente: "chip-input
+  // nel form Nota"): normalizzato in minuscolo e senza spazi ai bordi, così
+  // "Lavoro" e "lavoro" non finiscono per essere due tag distinti nel filtro
+  // rapido della lista.
+  void _addTagFromInput() {
+    final raw =
+        _tagInputController.text.replaceAll(',', '').trim().toLowerCase();
+    _tagInputController.clear();
+    if (raw.isEmpty || _tags.contains(raw)) return;
+    setState(() => _tags = [..._tags, raw]);
+  }
+
+  void _removeTag(String tag) {
+    setState(() => _tags = _tags.where((t) => t != tag).toList());
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _errorMessage = null);
+    _addTagFromInput();
 
     final controller = ref.read(noteFormControllerProvider.notifier);
     final failure = _isEditing
@@ -61,6 +81,7 @@ class _CreateEditNoteSheetState extends ConsumerState<_CreateEditNoteSheet> {
             widget.note!.copyWith(
               title: _titleController.text,
               content: _contentController.text,
+              tags: _tags,
               updatedAt: DateTime.now(),
             ),
           )
@@ -68,6 +89,7 @@ class _CreateEditNoteSheetState extends ConsumerState<_CreateEditNoteSheet> {
             workspaceId: widget.workspaceId,
             title: _titleController.text,
             content: _contentController.text,
+            tags: _tags,
           );
 
     if (!mounted) return;
@@ -114,6 +136,32 @@ class _CreateEditNoteSheetState extends ConsumerState<_CreateEditNoteSheet> {
               decoration: const InputDecoration(labelText: 'Contenuto'),
               maxLines: 5,
             ),
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              controller: _tagInputController,
+              decoration: const InputDecoration(
+                labelText: 'Aggiungi un tag',
+                helperText: 'Invio o virgola per aggiungerlo',
+              ),
+              onFieldSubmitted: (_) => _addTagFromInput(),
+              onChanged: (value) {
+                if (value.endsWith(',')) _addTagFromInput();
+              },
+            ),
+            if (_tags.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  for (final tag in _tags)
+                    Chip(
+                      label: Text(tag),
+                      onDeleted: () => _removeTag(tag),
+                    ),
+                ],
+              ),
+            ],
             if (_errorMessage != null) ...[
               const SizedBox(height: AppSpacing.md),
               Text(_errorMessage!,

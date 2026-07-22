@@ -7,12 +7,17 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/chat/presentation/chat_home_screen.dart';
 import '../../features/document/presentation/document_list_screen.dart';
+import '../../features/memory/presentation/memory_list_screen.dart';
+import '../../features/memory/presentation/workspace_memory_list_screen.dart';
 import '../../features/note/presentation/note_list_screen.dart';
+import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/reminder/presentation/reminder_list_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 import '../../features/task/presentation/task_list_screen.dart';
 import '../../features/transaction/presentation/balance_overview_screen.dart';
 import '../../features/transaction/presentation/transaction_report_screen.dart';
+import '../../features/workspace/presentation/shared_balance_screen.dart';
 import '../../features/workspace/presentation/workspace_detail_screen.dart';
 import '../../features/workspace/presentation/workspace_list_screen.dart';
 import 'app_shell.dart';
@@ -31,12 +36,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // mentre la sessione iniziale viene ancora risolta.
       if (session.isLoading) return null;
 
-      final isAuthenticated = session.value != null;
+      final user = session.value;
       final isOnAuthRoute = state.matchedLocation == '/login' ||
           state.matchedLocation == '/register';
+      final isOnOnboardingRoute = state.matchedLocation == '/onboarding';
 
-      if (!isAuthenticated && !isOnAuthRoute) return '/login';
-      if (isAuthenticated && isOnAuthRoute) return '/chat';
+      if (user == null) return isOnAuthRoute ? null : '/login';
+
+      // Onboarding leggero al primo accesso (richiesta esplicita
+      // dell'utente): un gate in più tra il login e il resto dell'app,
+      // finché `User.onboardingCompleted` non è vero — una volta completato
+      // (o saltato) non ci si torna più.
+      final needsOnboarding = !user.onboardingCompleted;
+      if (needsOnboarding) return isOnOnboardingRoute ? null : '/onboarding';
+      if (isOnAuthRoute || isOnOnboardingRoute) return '/chat';
       return null;
     },
     routes: [
@@ -44,6 +57,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/register',
           builder: (context, state) => const RegisterScreen()),
+      GoRoute(
+          path: '/onboarding',
+          builder: (context, state) => const OnboardingScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
             AppShell(navigationShell: navigationShell),
@@ -88,6 +104,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                           workspaceId: state.pathParameters['id']!,
                         ),
                       ),
+                      GoRoute(
+                        path: 'reminders',
+                        builder: (context, state) => ReminderListScreen(
+                          workspaceId: state.pathParameters['id']!,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'memories',
+                        builder: (context, state) => WorkspaceMemoryListScreen(
+                          workspaceId: state.pathParameters['id']!,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -97,8 +125,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                  path: '/balance',
-                  builder: (context, state) => const BalanceOverviewScreen()),
+                path: '/balance',
+                builder: (context, state) => const BalanceOverviewScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'shared',
+                    builder: (context, state) => const SharedBalanceScreen(),
+                  ),
+                ],
+              ),
             ],
           ),
           StatefulShellBranch(
@@ -119,8 +154,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                  path: '/profile',
-                  builder: (context, state) => const ProfileScreen()),
+                path: '/profile',
+                builder: (context, state) => const ProfileScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'memories',
+                    builder: (context, state) => const MemoryListScreen(),
+                  ),
+                ],
+              ),
             ],
           ),
         ],

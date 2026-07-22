@@ -42,6 +42,12 @@ Implementate, con dati reali via Supabase:
   vecchio `workspaceId` della Chat). Si può allegare una foto a un messaggio: va sempre nella
   sezione Documenti (`Document` con `chat_id`, stesso bucket riusato — nessuna nuova
   infrastruttura) e l'assistente la "vede" tramite il supporto immagini di Claude.
+- **chat (chip di suggerimento)** (richiesta esplicita dell'utente) — tre `ActionChip` sopra il
+  campo di testo ("Chiedi il saldo", "Ricorda che...", "Aggiungi alla lista"): scrivono il testo nel
+  campo (non inviano subito, i due prefissi vanno completati) e spariscono appena l'utente inizia a
+  scrivere (`ValueListenableBuilder` sul `TextEditingController`, non un listener manuale). Riga
+  scorrevole con `SingleChildScrollView` + `Row`, non una seconda `ListView`: alcuni test esistenti
+  assumevano un solo `ListView` in albero (la lista messaggi) e si rompevano con una seconda.
 - **chat (scroll automatico)** (bug segnalato dall'utente: "quando risponde non si blocca la
   pagina ma che esca di seguito senza scatti, come una normale conversazione su whatsapp") — la
   lista messaggi scorre automaticamente in fondo a ogni nuovo messaggio (proprio o
@@ -97,13 +103,249 @@ Implementate, con dati reali via Supabase:
   categorie di Transazione (badge colorato in ogni riga del Bilancio), Note/Attività/Documenti
   nelle rispettive liste.
 
+- **transaction (Bilancio condiviso)** (Fase 3, "Bilancio condiviso" — richiesta esplicita
+  dell'utente: condividere il Bilancio con un'altra persona che ha un proprio account, mantenendo
+  ciascuno il proprio Bilancio personale separato) — nuova schermata `SharedBalanceScreen`
+  (`/balance/shared`, raggiungibile da un'icona nell'AppBar del Bilancio globale): crea un Bilancio
+  condiviso (un Workspace libero, categoria `sharedBalanceCategory`) e mostra subito un codice
+  d'invito da condividere, oppure unisciti a uno con un codice ricevuto. La condivisione riguardava
+  inizialmente **solo le Transazioni** (poi estesa a Note/Attività, vedi sotto) — i Documenti
+  restano visibili solo al proprietario, anche per un Workspace di cui qualcun altro è membro. Il
+  Bilancio globale (`/balance`) esclude i Bilanci condivisi dal totale aggregato: restano due
+  Bilanci separati, mai mescolati. Nuove tabelle `workspace_members`/`workspace_invites` e funzione
+  `redeem_workspace_invite` (SECURITY DEFINER) — vedi `docs/database/README.md` per il dettaglio
+  delle RLS (additive, non una riscrittura di quelle esistenti) e due bug reali trovati e corretti
+  verificando su Postgres locale con due utenti simulati (ricorsione infinita tra le RLS di
+  `workspaces`/`workspace_members`, colonna ambigua nella funzione di redeem).
+- **note/task (Note/Attività condivise)** (richiesta esplicita dell'utente: estendere la
+  condivisione oltre il Bilancio) — stesso meccanismo `workspace_members` sopra, esteso con policy
+  RLS additive `notes_*_member`/`tasks_*_member` (select/insert/update/delete). Nessun codice
+  mobile nuovo: `WorkspaceDetailScreen`/`NoteListScreen`/`TaskListScreen` sono già generiche per
+  qualunque Workspace, quindi mostrano automaticamente le righe ora visibili a un membro grazie
+  alla RLS — solo il testo del foglio "Bilancio condiviso creato!" è stato aggiornato per avvisare
+  che ora si condividono anche Note e Attività. Documenti restano esclusi.
+
+- **reminder (Promemoria via Chat)** (Fase 3, "Promemoria via Chat" — CLAUDE.md, richiesta
+  esplicita dell'utente di notifiche push vere, non un semplice elenco in app) — nuova
+  `ReminderListScreen` (`/workspace/:id/reminders`, sezione "Promemoria" anche nella Home del
+  Workspace) per creare/eliminare promemoria manualmente in qualunque Workspace; scrivendo in Chat
+  "ricordami di... [orario]" l'assistente li registra da solo nella sezione Appuntamenti (nuovo
+  tool Anthropic `create_reminder` in `ai-chat`, stesso principio di `extract_transactions` ma
+  senza stato pending/confirmed — un promemoria è reversibile con uno swipe, non un dato
+  finanziario). L'invio effettivo della notifica push è una nuova Edge Function,
+  `send-due-reminders`, invocata ogni minuto da un cron job Postgres (`pg_cron`) — l'unica function
+  di questo progetto che usa la service role, giustificato esplicitamente (nessun JWT utente da
+  inoltrare, un cron non è una richiesta autenticata). Vedi `docs/database/README.md` per il
+  dettaglio (attivazione del cron, verifiche fatte e non fatte).
+
+- **Redesign estetico 2.0 + Q&A su dati reali in Chat** (richiesta esplicita dell'utente: "la chat
+  deve assumere una veste grafica prioritaria", "il Bilancio... deve essere molto tecnologica")
+  — Chat Home e Bilancio rivestiti con un gradiente "hero" condiviso (`GradientAppBar`, nuovo
+  widget in `shared/widgets/`), bolle utente e saldo con più profondità/ombre colorate, categorie
+  come pillole, grafico con il netto al centro del donut. Il pulsante di invio in Chat e il
+  pulsante Chat della bottom nav restano invariati (richiesta esplicita). In `ai-chat`, due nuovi
+  tool di sola lettura sempre attivi (`query_balance_summary`, `query_reminders`) permettono
+  all'assistente di rispondere a domande come "quanto ho speso questo mese" o "ho appuntamenti il
+  mese prossimo" citando i dati reali, non inventati — vedi `docs/database/README.md`, Fase 3
+  slice 10, per il dettaglio del secondo giro con Anthropic necessario per queste risposte.
+
+- **Redesign estetico 2.0 (seguito, poi corretto)** — un primo giro ha provato una palette
+  multicolore ispirata al pulsante Chat (`AppShadows.siriGlow`) per grafico/Workspace/bottom nav;
+  **l'utente ha chiesto esplicitamente "una sola palette di colori blu che tende al viola"**, quindi
+  `AppShadows.siriGlow` è stata rimossa: ovunque tranne il pulsante Chat (invariato, l'unico con
+  gradiente animato a più colori) si usa solo `AppColors.heroGradient`. `WorkspaceCard` sostituisce
+  la Card piatta (elevation 0 nel tema globale) con superficie neutra + ombra neutra e una sottile
+  barra di accento a sinistra nel colore della categoria (non un alone colorato per categoria: "più
+  professionale"); la bottom nav ha un alone blu tenue centrato sul pulsante Chat, le 4 voci
+  laterali più piccole da ferme. Corretto anche un rendering mancato: le emoji a colori richiedono
+  `flutter build web --web-renderer html` (limitazione nota di CanvasKit, il renderer di default su
+  desktop, che non carica i font emoji a colori) — un build era stato fatto senza quel flag, da qui
+  l'assenza del colore.
+
+- **Bilancio: storico, pillole, profondità reale nel grafico** (richiesta esplicita dell'utente) —
+  tendina del mese di riferimento (sempre include il mese corrente, più ogni mese con almeno una
+  transazione confermata) che ricalcola hero/grafico/elenco confermate; le transazioni in attesa di
+  conferma restano non filtrate per mese, per design. Le icone +/- accanto a entrate/uscite sono
+  emoji (💰/💸). Le transazioni confermate sono ora "pillole" sopraelevate (angoli molto arrotondati
+  + ombra) invece della Card piatta. Il grafico ha un'ombra sagomata sul donut stesso (una copia
+  scura semi-trasparente dello stesso anello, leggermente spostata) oltre all'alone della Card, per
+  un rilievo che segue la forma circolare, non solo il rettangolo intorno.
+
+- **Chat: sezioni nascondibili, Q&A con totale esplicito, "Spazi"** — la striscia "Sezioni" in Chat
+  ha un'intestazione con freccia per comprimerla/espanderla (richiesta esplicita dell'utente:
+  "vorrei fosse nascondibile"). L'istruzione di `query_balance_summary`/`query_reminders` in
+  `ai-chat` ora richiede esplicitamente un totale dichiarato in una frase diretta, non un elenco di
+  transazioni (richiesta esplicita: "non soltanto riportarmi le transazioni... ma farmi un
+  totale"). "Workspace" è stato rinominato "Spazi" nell'etichetta della bottom nav e nel titolo
+  della schermata (icona `space_dashboard`) — nessuna classe/route interna rinominata, solo il
+  testo visibile.
+
+- **Appuntamenti: calendario mensile a quadratini** (richiesta esplicita dell'utente: "un
+  calendario fatto a quadratini (giorni) dove su ogni giorno viene riportato l'appuntamento") —
+  `ReminderListScreen` mostra ora un calendario mensile (nessuna nuova dipendenza pub: fatto a mano
+  con `GridView.count`, dato che pub.dev non è raggiungibile in questo sandbox per verificarne una
+  nuova) con un puntino sui giorni che hanno almeno un promemoria; toccare un giorno filtra
+  l'elenco sotto a quel giorno (toccarlo di nuovo toglie il filtro). Un promemoria scritto in Chat
+  (es. "lunedì prossimo devo andare dal barbiere") continua a passare dallo stesso tool
+  `create_reminder` di sempre: compare quindi automaticamente nel calendario non appena creato,
+  senza bisogno di alcuna modifica lato server. L'invio della notifica push resta quello già
+  costruito in precedenza (`send-due-reminders` + `pg_cron`, già configurato dall'utente).
+
+- **Appuntamenti: giorno con impegni più caratteristico, "oggi" con un pallino, feedback al tocco
+  del grafico** (richiesta esplicita dell'utente) — nella cella del calendario il giorno di "oggi"
+  ora è solo un piccolo pallino sotto il numero (prima aveva un bordo colorato pieno, che lo
+  confondeva visivamente con i giorni con impegni); un giorno con almeno un promemoria ha invece
+  uno sfondo pieno tinto (`Color.alphaBlend`, deterministico anche sopra sfondi diversi in
+  light/dark) — più caratteristico di un semplice puntino. Il grafico a torta del Bilancio
+  (`_BalancePieChart`) ora è `Stateful`: toccando/passando il cursore su una fetta
+  (`PieTouchData.touchCallback`) il centro del donut mostra l'etichetta e l'importo di quella
+  fetta al posto del "Netto" e la fetta toccata si ingrandisce leggermente (`radius` maggiore) —
+  nessun nuovo widget esterno, solo stato locale.
+
+- **Bilancio: dettaglio per categoria; Appuntamenti: stato notifiche** (richiesta esplicita
+  dell'utente, "2 e 3" di una lista di migliorie proposte) — le pillole Entrate/Uscite dell'hero
+  del Bilancio ora sono toccabili (solo se l'importo non è zero): aprono un
+  `showModalBottomSheet` con l'elenco delle categorie di quel tipo, ordinate per importo
+  decrescente, con percentuale sul totale (nuova funzione pura `amountCentsByCategory` in
+  `transaction_controller.dart`, testata separatamente dal widget). In Appuntamenti, un banner
+  fisso sopra il calendario (`_NotificationStatusBanner`, gated su `AppEnv.vapidPublicKey`
+  esattamente come la card equivalente in Profilo — nessuna nuova infrastruttura) avvisa se le
+  notifiche non sono ancora attive o non sono supportate, con un pulsante "Attiva" quando
+  possibile: un promemoria creato in Chat compare comunque nel calendario, ma senza notifiche
+  attive l'utente non riceverebbe alcun avviso all'orario previsto — meglio dirlo subito. Nessun
+  test widget dedicato a questo banner (stessa scelta già fatta per la card equivalente in
+  Profilo): lo stato "attivo" dipende da `AppEnv.vapidPublicKey`, una costante di compilazione
+  (`String.fromEnvironment`) non sovrascrivibile nella normale esecuzione di `flutter test`.
+
+- **search (Transazioni + Promemoria)** (richiesta esplicita dell'utente) — la Ricerca
+  Universale ora trova anche le Transazioni confermate (le pending restano escluse, sono
+  suggerimenti non ancora decisi) e i Promemoria, oltre a Workspace/Note/Attività/Documenti già
+  esistenti. `search_workspace_content` estesa con due indici GIN in più, verificata su Postgres
+  locale (RLS isolation confermata, pending correttamente escluse).
+- **chat (Liste/checklist)** (Slice C del piano originale, mai realizzata finora — richiesta
+  esplicita dell'utente) — scrivere in Chat "aggiungi alla lista spesa: latte, pane" crea una
+  `Task` per elemento nella sezione Attività (tool `manage_tasks` in `ai-chat`, stesso pattern di
+  `create_reminder`: nessuno stato pending/confirmed, reversibile con un tocco). Nessuna
+  migrazione: le colonne (`generated_by_ai`, `chat_id`) esistevano già dalla slice Note/Task
+  originale.
+- **transaction (export riepilogo)** (richiesta esplicita dell'utente) — un pulsante "Condividi
+  riepilogo" nel Bilancio globale apre un foglio con saldo/entrate/uscite/categorie in testo,
+  con "Copia negli appunti" e "Invia via email" (`mailto:`, `url_launcher` già una dipendenza).
+  Niente vero PDF: `pdf`/`printing`/`share_plus` sono pacchetti pub.dev nuovi che questo sandbox
+  non può installare/verificare (pub.dev non è nella lista degli host raggiungibili dal proxy).
+- **note (tag visibili)** (richiesta esplicita dell'utente) — `Note.tags` esisteva già nel
+  dominio/nel repository ma nessuna schermata lo esponeva. Ora il form Nota ha un chip-input per
+  aggiungere/rimuovere tag, l'anteprima li mostra come pillole, e una striscia di `FilterChip`
+  sopra l'elenco filtra rapidamente per tag.
+- **profile (tema)** (richiesta esplicita dell'utente: "tema chiaro/scuro") — uno
+  `SegmentedButton` Sistema/Chiaro/Scuro; la preferenza (`AppThemeMode`) è salvata nei metadata di
+  Supabase Auth (stesso meccanismo già usato per `name` alla registrazione), non una nuova
+  tabella — si riflette in tutta l'app tramite `sessionControllerProvider`.
+- **chat (Conferma/Scarta inline)** (richiesta esplicita dell'utente: "azioni rapide sulle
+  transazioni pending direttamente in chat") — `messages.pending_transaction_ids` collega la
+  risposta dell'assistente alle Transazioni pending che ha generato: la Chat mostra due pulsanti
+  (Conferma/Scarta) subito sotto il messaggio, riusando `transactionFormControllerProvider` già
+  esistente, senza dover aprire il Bilancio. Un id già deciso altrove (Bilancio o qui) smette
+  semplicemente di comparire, filtrato per `status == pending` a ogni lettura.
+- **reminder (promemoria ricorrenti)** (richiesta esplicita dell'utente) — `create_reminder`
+  accetta un campo `recurrence` (`daily`/`weekly`/`monthly`, es. "ricordami ogni lunedì di
+  buttare la spazzatura"): `ai-chat` genera automaticamente le occorrenze successive (numero
+  fisso per frequenza, non deciso dal modello), condividendo un `recurrenceGroupId` — mostrato
+  come una piccola icona "ricorrente" nell'elenco Appuntamenti. Ogni occorrenza resta una riga
+  indipendente ed eliminabile singolarmente (nessuna "elimina tutta la serie" in questa slice).
+  Nessuna modifica a `send-due-reminders`/`pg_cron`, già configurati: continuano a vedere righe
+  indipendenti come sempre.
+- **reminder (eliminare l'intera serie)** (richiesta esplicita dell'utente) — lo swipe su un
+  promemoria ricorrente chiede prima "Solo questa occorrenza" o "Intera serie" invece di
+  cancellare subito; un promemoria singolo resta immediato come sempre.
+- **budget (per categoria)** (richiesta esplicita dell'utente) — legato all'utente, non a un
+  Workspace: nuova sezione nel Bilancio con una barra di avanzamento per categoria (spesa del
+  mese/limite), rossa e "Budget superato" oltre il 100%. Nascosta se non è stato impostato alcun
+  budget.
+- **transaction (spese ricorrenti automatiche)** (richiesta esplicita dell'utente) — scritte solo
+  dall'AI in Chat ("il canone Netflix è 15,99€ ogni mese"); a differenza dei Promemoria ricorrenti,
+  genera una Transaction pending alla volta, solo quando dovuta (Edge Function
+  `create-due-recurring-transactions`, cron giornaliero), non tutte insieme in anticipo. Icona
+  "Ricorrenti" nell'AppBar del Bilancio per consultare/cancellare i modelli.
+- **transaction (scontrino allegato)** (richiesta esplicita dell'utente) — un Document persistente
+  collegato alla Transazione (diverso dalla foto temporanea letta dall'AI per estrarne l'importo),
+  gestito dal form di modifica: allega/apri/rimuovi. Icona scontrino nell'elenco quando presente.
+- **transaction (andamento multi-mese + confronto mese precedente)** (richiesta esplicita
+  dell'utente) — nell'hero del saldo, un badge "vs mese scorso" (percentuale di variazione rispetto
+  al mese precedente quello selezionato nella tendina; nascosto se il mese precedente ha saldo 0,
+  nessun confronto sensato). Sotto il grafico a torta, un grafico a barre `fl_chart` con gli ultimi
+  6 mesi (entrate/uscite confermate affiancate), calcolato sullo stesso mese di riferimento della
+  tendina. Logica pura in `transaction_controller.dart` (`percentChange`, `lastMonths`,
+  `monthlyTotals`), nessuna nuova tabella: aggrega le stesse transazioni già caricate.
+- **memory (prima slice minima)** (richiesta esplicita dell'utente) — solo il livello Globale:
+  l'AI salva una nota quando l'utente dice esplicitamente "ricorda che..." (tool `remember_fact`,
+  sempre disponibile come le query di sola lettura), e le memorie salvate vengono iniettate nel
+  system prompt di ogni turno futuro perché l'AI possa davvero usarle, non solo scriverle.
+  `MemoryListScreen` (Profilo → "Memoria") mostra e permette di cancellare, nessuna creazione
+  manuale — coerente con `MemoryRepository`, che non espone alcun metodo di creazione.
+- **memory (livello Workspace)** (richiesta esplicita dell'utente) — a differenza del Globale,
+  creata manualmente ("Chat unica" non sa a quale Workspace collegare un ricordo pronunciato al
+  suo interno). `WorkspaceMemoryListScreen` (`/workspace/:id/memories`, anche in anteprima nella
+  Home del Workspace), FAB con un dialog minimale per aggiungerla, conferma via dialog prima di
+  cancellare su swipe. Livello Conversazione fuori scope: con un'unica conversazione per utente
+  coinciderebbe sempre col Globale.
+- **conferma su swipe-to-delete** (richiesta esplicita dell'utente: "conferma su swipe-to-delete
+  per elementi non banali") — Note, Attività, Documenti e Memoria globale ora chiedono conferma con
+  un `AlertDialog` prima di cancellare (già presente per Memoria di Workspace, Promemoria ricorrenti
+  e spese ricorrenti dalle slice precedenti). Bug reale trovato in `DocumentListScreen`: la
+  schermata osserva `documentFormControllerProvider` per lo spinner di upload sul FAB, ma `delete()`
+  usa lo stesso controller — il giro `AsyncLoading`→`AsyncData` di un'eliminazione ricostruiva la
+  lista mentre il `Dismissible` era ancora a metà dell'animazione di uscita, reinserendo la stessa
+  riga prima che il repository l'avesse rimossa ("A dismissed Dismissible widget is still part of
+  the tree", riprodotto deterministicamente da un test widget). Corretto con una rimozione
+  ottimistica locale (`Set<String>` di id appena scorsi, filtrati dalla lista finché il repository
+  non conferma).
+- **badge su Appuntamenti e sul pulsante Chat** (richiesta esplicita dell'utente: "badge sulla tab
+  Appuntamenti/Chat") — adattato alla navigazione reale del progetto (5 tab: Spazi/Bilancio/Chat
+  centrale/Ricerca/Profilo, Appuntamenti è una sezione fissa, non una tab a sé). Il chip
+  "Appuntamenti" nella striscia "Sezioni" in Chat mostra un badge col numero di promemoria di oggi
+  (`remindersDueToday`, in `section_preview.dart` — anche l'anteprima testuale era ancora ferma al
+  placeholder "Presto disponibile" di prima che i Promemoria esistessero, corretta insieme).
+  Il pulsante Chat centrale mostra un badge con le transazioni suggerite dall'AI ancora da
+  confermare/scartare (`pendingTransactions`, già esistente) — non un concetto di "messaggio non
+  letto", che non esiste dato che la Chat è sempre la Home.
+- **skeleton loading nelle liste** (richiesta esplicita dell'utente) — nuovo `SkeletonList`
+  (`shared/widgets/`, righe pulsanti al posto dello spinner centrato) al posto di `LoadingView` in
+  Note, Attività, Documenti, Bilancio (globale e per Workspace) e Appuntamenti — le schermate a
+  lista, dove uno spinner dice meno della forma stessa del contenuto in arrivo. Animazione
+  indeterminata (si ripete finché il widget è a schermo, come un `CircularProgressIndicator`): nei
+  test va verificata con `pump()` a durata limitata, non `pumpAndSettle()` — stessa lezione già
+  imparata altrove in questo progetto.
+- **empty state illustrati** (richiesta esplicita dell'utente) — `EmptyState` (shared/widgets/) ha
+  ora un'icona più grande su un doppio cerchio sfumato ("illustrazione", stesso trattamento
+  gradiente/glow già usato per hero del saldo e striscia Sezioni) invece della singola icona grigia
+  di prima, con un parametro `color` opzionale per intonare la tinta alla sezione (Bilancio, Note,
+  Attività, Documenti, Appuntamenti — le stesse tinte già usate per badge di categoria e Sezioni).
+  Nessuna dipendenza nuova: solo widget, nessuna immagine/asset.
+- **export (dati completi)** (richiesta esplicita dell'utente) — Profilo → "Esporta i miei dati":
+  un JSON con Note/Attività/Documenti (solo metadata, non i file)/Promemoria/Memoria di ogni
+  Workspace, più Transazioni e Memoria globale. Lettura one-shot (`.first` su ogni stream, non
+  realtime: un export è uno snapshot). `DataExportController` (`AutoDisposeAsyncNotifier<String?>`)
+  avvia `generate()` dal proprio `initState()`, non dal chiamante che apre il foglio: tra
+  l'apertura di `showModalBottomSheet` e il montaggio effettivo del foglio passano più frame senza
+  alcun ascoltatore del provider, e un provider `autoDispose` verrebbe ricreato da zero in quella
+  finestra, perdendo il risultato. Stesso limite dichiarato per l'export del Bilancio: niente
+  PDF/file scaricabile (pacchetti non disponibili), solo copia negli appunti e invio via email.
+
 Strutturate e navigabili, in attesa delle rispettive fasi della roadmap
 (`docs/product/26-execution-blueprint.md`):
 
-- **profile** — identità account e logout ora; abbonamento, tema, memoria, privacy nelle fasi
+- **onboarding leggero al primo accesso** (richiesta esplicita dell'utente) — nuova
+  `OnboardingScreen` (`/onboarding`), 3 schermate scorrevoli (`PageView`) sui pilastri dell'app
+  (Chat, Spazi, Memoria/conferma esplicita) con un pulsante "Salta" sempre visibile e "Inizia"
+  solo sull'ultima. `User.onboardingCompleted` (default `false`, persistito lato identity
+  provider come la preferenza di tema — nessuna nuova tabella) aggiunge un gate al redirect di
+  GoRouter: un utente autenticato che non l'ha ancora completato viene sempre indirizzato lì
+  prima di `/chat`, mai più dopo averla completata o saltata.
+- **profile** — identità account, logout, tema e Memoria ora; abbonamento e privacy nelle fasi
   successive.
 
-Non ancora presenti: memory, settings, billing.
+Non ancora presenti: settings, billing.
 
 ## Limiti noti (dichiarati, non nascosti)
 
@@ -129,6 +371,12 @@ Non ancora presenti: memory, settings, billing.
   rendering della bolla) è verificata; se Claude interpreta correttamente l'immagine non è
   verificabile senza chiave reale. Solo JPEG/PNG/GIF/WebP sono garantiti compatibili — formati
   come HEIC (comune su iPhone) possono far fallire il turno con un errore generico, non un crash.
+- Lo stesso per i due nuovi tool di sola lettura `query_balance_summary`/`query_reminders`: la
+  logica di aggregazione (esclusione del Bilancio condiviso, filtro periodo) è stata verificata
+  con `tsc --strict` (compilatore TypeScript reale, con shim locali per gli import `npm:`/i
+  globali `Deno.*` — un livello di verifica più solido della sola rilettura manuale usata nelle
+  slice precedenti), ma se il modello sceglie lo strumento giusto e il secondo giro con Anthropic
+  produce una risposta pertinente non è verificabile senza una chiamata reale.
 - Le notifiche push (`features/notifications`) hanno una parte web-only (`dart:js_interop` +
   `package:web`, isolata da import condizionale) non eseguibile in `flutter test` (nessun browser
   nel test runner): verificata con `flutter analyze` e un vero `flutter build web` con dart2js
@@ -146,6 +394,22 @@ Non ancora presenti: memory, settings, billing.
   presuppone funzioni in produzione — un gap tra "scritto nel repo" e "applicato al database" ha
   già causato un fallimento reale in produzione (salvataggio di una Transazione dopo la slice 7C,
   prima che la colonna `category` fosse effettivamente pushata).
+- **Bilancio condiviso**: il codice d'invito va condiviso manualmente dall'utente (messaggio,
+  chiamata, ecc.) — nessuna infrastruttura email/deep-link in questa slice. La migrazione
+  `20260721160000_workspace_sharing.sql` (tabelle `workspace_members`/`workspace_invites`, RLS
+  aggiuntive, funzione `redeem_workspace_invite`) va applicata manualmente al progetto Supabase
+  reale come tutte le altre (vedi il punto sopra): senza di essa, creare un Bilancio condiviso o
+  redimere un codice fallirà con un errore lato Supabase (tabella/funzione inesistente).
+- **Promemoria via Chat**: come per il Bilancio condiviso, la migrazione
+  `20260722090000_calendar_events.sql` va applicata manualmente al progetto Supabase reale prima
+  che la funzionalità sia utilizzabile. In più, l'invio effettivo delle notifiche richiede un passo
+  manuale aggiuntivo mai necessario prima in questo progetto: abilitare le estensioni `pg_cron`/
+  `pg_net` (Database → Extensions nel pannello Supabase, non attive di default) ed eseguire il
+  comando `cron.schedule` commentato in fondo alla migrazione, sostituendo `<PROJECT_REF>` e
+  `<SERVICE_ROLE_KEY>` con i valori reali del progetto. Senza questo passo i promemoria vengono
+  comunque creati e mostrati in app, ma la notifica push non parte mai. Nessun `pg_cron`/`pg_net`
+  disponibili su Postgres locale (estensioni specifiche di Supabase, non del Postgres open source):
+  verificata solo la RLS di `calendar_events`, non il comportamento del cron in sé.
 - `google_fonts` (Manrope, redesign estetico) scarica il font a runtime da fonts.gstatic.com: in
   `flutter test` questo viene evitato del tutto (`isRunningInFlutterTest`, in
   `packages/design-system/lib/src/testing/`) perché in questa sandbox quel dominio non è
@@ -157,6 +421,144 @@ Non ancora presenti: memory, settings, billing.
   CanvasKit non recupera i font emoji a colori del sistema operativo nello stesso modo del
   renderer HTML, che invece usa il testo nativo del browser. `flutter build web --web-renderer
   html` risolve; nessun cambiamento di codice necessario.
+- **Bilancio: pulsante "Categorie di spesa" con la somma totale visibile** (richiesta esplicita
+  dell'utente: "vorrei si potesse vedere magari con un tasto la somma di tutte le categorie di
+  spese fatte") — prima l'unico modo per vedere il dettaglio per categoria delle Uscite era
+  toccare la pillola "Uscite" dell'hero (un gesto poco scopribile, non sembra un pulsante); ora un
+  `OutlinedButton` esplicito sotto l'hero apre lo stesso `showModalBottomSheet`
+  (`_showCategoryBreakdown`, riusato senza modifiche alla logica). Lo sheet mostra anche la somma
+  di tutte le categorie in testa ("Totale: ..."), prima calcolata solo per le percentuali e mai
+  mostrata come testo. Le categorie di spesa esistevano già (`TransactionCategory`, Fase 3 slice
+  7C) — nessuna nuova categoria da generare, solo questa mancanza di visibilità da correggere. La
+  Chat sa già rispondere a "quanto ho speso questo mese" e "quanto ho speso in <categoria>" tramite
+  lo strumento `query_balance_summary` dell'Edge Function `ai-chat` (vedi sezione Edge Function più
+  sotto) — nessun cambiamento necessario lì.
+- **Tag su Transazioni e Documenti** (integrazione richiesta esplicitamente, prima di una serie di
+  altre) — stesso pattern già usato per le Note: `create_edit_transaction_sheet.dart` guadagna lo
+  stesso campo chip-input della sheet Nota, e il Bilancio mostra le pillole dei tag sotto ogni
+  transazione confermata. I Documenti non hanno un form di modifica generico (nome e file restano
+  immutabili dopo il caricamento): un nuovo pulsante "Modifica tag" per riga apre un piccolo foglio
+  dedicato (`_EditTagsSheet`), e `document_list_screen.dart` guadagna la stessa striscia di filtro
+  rapido per tag già presente nelle Note. `DocumentRepository.updateTags` è l'unico modo per
+  cambiare un Document dopo la creazione — non un `copyWith` generico, che non avrebbe senso dato
+  che gli altri campi sono immutabili. Mai popolati dall'AI Engine: `extract_transactions` in
+  `ai-chat` resta invariato.
+- **Previsione di fine mese nel Bilancio** (integrazione richiesta esplicitamente) — nuova
+  funzione pura `projectedMonthEndExpenseCents` in `transaction_controller.dart`: estrapolazione
+  lineare della spesa già sostenuta sui giorni restanti del mese (non un modello predittivo), `null`
+  il primo giorno del mese (nessuna proiezione sensata da un solo giorno di dati). Una nuova card
+  compare tra l'hero e il grafico a torta, solo quando il mese selezionato nella tendina è quello
+  corrente — su uno storico non avrebbe senso, ed è il chiamante (`BalanceOverviewScreen`) a
+  garantirlo, non la funzione pura.
+- **Permessi granulari (viewer/editor) sui Workspace condivisi** (integrazione richiesta
+  esplicitamente) — fin dalla prima slice di "Bilancio condiviso" ogni membro aveva sempre gli
+  stessi diritti del proprietario; ora il proprietario sceglie, sia creando il Bilancio condiviso
+  sia generando un nuovo codice d'invito (`shared_balance_screen.dart`, `SegmentedButton`
+  "Modificare"/"Solo leggere"), se chi si unisce potrà scrivere o solo leggere — e può cambiare il
+  ruolo di un membro già presente in qualsiasi momento (`DropdownButton` per riga nel foglio
+  "Gestisci membri"). Nuovo `WorkspaceRole` (`viewer`/`editor`, default `editor` per non cambiare
+  il comportamento di prima) in `packages/domain`; `currentMemberRoleProvider(workspaceId)`
+  (`workspace_sharing_controller.dart`) riusa `workspaceMembersProvider` invece di una query
+  dedicata — sotto RLS un membro (non il proprietario) vede sempre e solo la propria riga in
+  `workspace_members`, quindi la sua presenza/ruolo *è già* la risposta a "che ruolo ho qui".
+  `transaction_report_screen.dart`, `note_list_screen.dart` e `task_list_screen.dart` nascondono
+  FAB, swipe-to-delete e il tocco-per-modificare quando il ruolo è `viewer` — l'applicazione
+  effettiva dei permessi resta comunque la RLS lato Supabase (`docs/database/README.md`, slice
+  27), la UI qui è solo coerenza percepita, non l'unica barriera.
+- **Notifica push su budget quasi superato** (integrazione richiesta esplicitamente) — finora
+  "budget superato" era solo un colore nella `_BudgetTile` del Bilancio, senza avviso attivo. Ora,
+  subito dopo che una spesa viene creata o confermata (`TransactionFormController._maybeAlertBudget`
+  in `transaction_controller.dart`), se la categoria ha un budget impostato e la spesa
+  già confermata questo mese più quella appena creata/confermata supera l'80% o il 100% del limite,
+  una chiamata diretta (stesso pattern di `send-test-push`, non un cron) alla nuova Edge Function
+  `send-budget-alert` invia la notifica. Interamente best-effort: nessun errore qui (provider non
+  ancora popolati, funzione non deployata) blocca mai il successo di create/confirm già ritornato
+  all'utente — stesso principio già usato per l'allegato scontrino. La soglia non viene rinotificata
+  più volte nello stesso mese: `category_budgets.last_alert_threshold`/`last_alert_month`
+  (nuova migrazione), scritti solo dalla Edge Function, mai dal client. I Budget restano valutati
+  solo sui Workspace personali (stesso aggregato di `_BudgetSection`): una spesa in un Bilancio
+  condiviso non innesca mai una notifica. **Limite noto**: lo speso del mese è letto da
+  `transactionsProvider(null)`/`budgetsProvider`/`workspacesProvider` con un `ref.read` non
+  garantito "caldo" — se nessuna schermata li ha ancora sottoscritti in questa sessione (es. la
+  primissima spesa creata subito dopo l'avvio, prima di aver mai aperto il Bilancio), l'avviso
+  può essere saltato silenziosamente quella volta; nessun impatto sulla correttezza del saldo, solo
+  sulla tempestività della notifica.
+- **OCR sugli scontrini allegati manualmente** (integrazione richiesta esplicitamente) — finora
+  "Allega scontrino" (`create_edit_transaction_sheet.dart`, solo in modifica: serve l'id della
+  Transazione già salvata) era un allegato statico, nessuna lettura del contenuto. Riusa la stessa
+  pipeline vision già usata da `ai-chat` per le foto allegate in Chat (`fetchImageBlock`), non un
+  secondo servizio OCR esterno (coerente con "mai un secondo provider AI diretto dal frontend"):
+  subito dopo l'upload+attach, `_prefillFromReceipt` chiama `TransactionRepository.
+  extractReceiptData` (nuovo metodo — Edge Function `ai-chat` in una modalità isolata,
+  `extractReceiptDocumentId`, nessun messaggio di Chat creato, tool `extract_transactions` forzato
+  invece di lasciato "auto") e, se torna un risultato, precompila descrizione/importo/categoria nel
+  form — l'utente resta libero di correggerli prima di toccare "Salva" ("l'AI suggerisce, l'utente
+  decide", stesso principio già applicato al resto dell'AI Engine). Se la lettura fallisce o la
+  foto non è leggibile come scontrino, il form resta com'era: nessun errore bloccante, stesso
+  principio già usato per la notifica budget. `parseReceiptExtractionResponse` (funzione pura in
+  `supabase_transaction_repository.dart`) isola la conversione della risposta JSON in un
+  `ReceiptExtraction`, testabile senza mockare il client Supabase.
+- **Dettatura vocale in Chat** (integrazione richiesta esplicitamente) — nuovo pulsante microfono in
+  `_MessageInput` (`chat_home_screen.dart`, tra il bottone foto e il campo testo), visibile solo se
+  `SpeechToText.initialize()` ha successo: niente bottone che poi fallisce silenzioso al tocco
+  (rischio esplicito: il supporto varia per browser, buono su Chrome/Edge, spesso assente su
+  Safari). Mentre ascolta, il testo trascritto sostituisce in tempo reale il contenuto del campo —
+  l'utente vede e può correggere prima di inviare ("l'AI suggerisce, l'utente decide", stesso
+  principio già applicato al resto della Chat). Un solo package (`speech_to_text`, non due
+  implementazioni separate come inizialmente previsto — vedi `docs/database/README.md`, slice 30,
+  per il motivo): il plugin risolve da sé l'implementazione per piattaforma, canale nativo su
+  mobile/desktop oppure il Web Speech API su web tramite il proprio plugin federato
+  (`speech_to_text_web`, già basato su `package:web`), nessun ramo `kIsWeb` scritto a mano in questo
+  progetto. Un errore di `initialize()`/`listen()` (piattaforma senza plugin registrato o senza
+  supporto) equivale semplicemente a "non disponibile", mai un crash. **Nota sulle piattaforme**:
+  questo repository non ha ancora cartelle `android/`/`ios/` (solo `web/`), quindi il permesso
+  microfono a runtime (`AndroidManifest.xml`/`Info.plist`) non è ancora applicabile — da aggiungere
+  quando quei target verranno generati con `flutter create`.
+- **Sync con Google Calendar** (integrazione richiesta esplicitamente) — nuova card "Google
+  Calendar" in Profilo (`profile_screen.dart`), nascosta finché l'app non è compilata con
+  `--dart-define=GOOGLE_CALENDAR_ENABLED=true` (`AppEnv.googleCalendarEnabled`, stesso principio di
+  gating già usato per `AppEnv.vapidPublicKey`/notifiche — qui però non serve alcun valore al
+  client, solo un interruttore: nessun segreto Google finisce mai nel bundle dell'app). Il
+  collegamento riusa `supabase_flutter`'s `auth.linkIdentity(OAuthProvider.google, scopes:
+  'https://www.googleapis.com/auth/calendar.events')` — mai un flusso OAuth scritto a mano, mai il
+  frontend collegato direttamente a Google (CLAUDE.md, esteso per analogia a qualsiasi provider
+  terzo): Supabase gestisce il redirect e lo scambio codice/token, il client non vede mai il
+  client secret. `SupabaseCalendarSyncRepository` ascolta `auth.onAuthStateChange` fin dalla
+  costruzione perché Supabase espone `session.providerRefreshToken` solo nel primo evento subito
+  dopo un collegamento riuscito, mai persistito — lo invia una sola volta alla nuova Edge Function
+  `save-calendar-connection`, che lo salva sotto RLS in `calendar_connections`.
+
+  Il refresh token non è mai letto dal client mobile: lo stato "connesso/non connesso" mostrato in
+  Profilo passa da `get_my_calendar_connection()` (funzione Postgres `security definer` che
+  restituisce solo i campi non sensibili — vedi la migrazione), non da uno `.stream()` realtime
+  come le altre entità dell'app (un `postgres_changes` realtime invierebbe l'intera riga, token
+  incluso, ad ogni aggiornamento). `CalendarEventRepository.syncToGoogleCalendar` (chiamata da
+  `CalendarEventFormController.create`/`delete`, stesso principio best-effort di
+  `BudgetRepository.checkBudgetAlert`) invoca la nuova Edge Function `sync-calendar-event` per
+  creare/cancellare il gemello Google di un Promemoria; `pull-google-calendar-events` (cron,
+  service role, stesso pattern di `send-due-reminders`) importa in senso opposto gli eventi
+  creati/modificati direttamente su Google. **Limite noto**: `deleteSeries` (cancellare un'intera
+  serie ricorrente) non sincronizza oggi la cancellazione con Google — richiederebbe di risalire a
+  ogni singolo id della serie, fuori scopo per questa integrazione.
+- **Migliorie grafiche: redesign estetico 2.0 esteso a tutte le schermate** (richiesta esplicita
+  dell'utente) — Chat Home, Bilancio (globale e di Workspace) e Onboarding avevano già il
+  gradiente `AppColors.heroGradient`/`AppShadows.glow`/`AppRadii.cardPremiumRadius`; le schermate
+  rimaste "Material piatto" lo riusano ora (nessun nuovo token, solo applicazione dei widget già
+  esistenti): `GradientAppBar` al posto di `AppBar` in Note/Attività/Documenti/Ricerca/
+  Spazi/Bilancio condiviso/Bilancio di Workspace/Appuntamenti; `SkeletonList` al posto di
+  `LoadingView` in Spazi e Bilancio condiviso (unica coppia di liste principali rimasta sul vecchio
+  spinner pieno, tutte le altre già migrate nella slice #112). `transaction_report_screen.dart`
+  (Bilancio di un singolo Workspace) guadagna lo stesso trattamento "hero" già usato dal Bilancio
+  globale (`_BalanceHeroCard` locale al file, saldo su gradiente + pillole Entrate/Uscite
+  traslucide): prima le due schermate di Bilancio erano visivamente incoerenti tra loro. In
+  Profilo, l'header con nome/email/avatar è ora un riquadro con lo stesso gradiente hero e
+  l'avatar ha `AppShadows.glow` — prima un `CircleAvatar` su sfondo piatto. **Scelta di scopo
+  deliberata**: `search_screen.dart` usa ancora `LoadingView()` (non `SkeletonList`) — il pass
+  grafico originale nominava esplicitamente solo Spazi e Bilancio condiviso per quel cambio,
+  Ricerca ne era rimasta fuori anche se tecnicamente nella stessa condizione; corretto solo
+  l'`AppBar`. Nessuna modifica di logica in questa slice: solo widget di presentazione, verificato
+  che l'intera suite di test esistente (208 in `apps/mobile`, 40 in `packages/domain`) continuasse
+  a passare invariata.
 
 ## Setup locale
 

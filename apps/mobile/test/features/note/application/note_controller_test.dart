@@ -52,6 +52,18 @@ void main() {
     expect(fakeRepository.lastCreated, note);
   });
 
+  test('create inoltra i tag al repository', () async {
+    fakeRepository.createResult = Result.ok(note);
+
+    await container.read(noteFormControllerProvider.notifier).create(
+      workspaceId: workspaceId,
+      title: 'Idea',
+      tags: const ['lavoro', 'urgente'],
+    );
+
+    expect(fakeRepository.lastCreatedTags, ['lavoro', 'urgente']);
+  });
+
   test('create con titolo vuoto ritorna un ValidationFailure', () async {
     fakeRepository.createResult =
         const Result.err(ValidationFailure('Il titolo è obbligatorio.'));

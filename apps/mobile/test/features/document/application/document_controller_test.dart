@@ -46,10 +46,10 @@ void main() {
     expect(container.read(documentsProvider(workspaceId)).value, [document]);
   });
 
-  test('upload con successo non ritorna errore', () async {
+  test('upload con successo ritorna il Document creato', () async {
     fakeRepository.uploadResult = Result.ok(document);
 
-    final failure =
+    final result =
         await container.read(documentFormControllerProvider.notifier).upload(
               workspaceId: workspaceId,
               fileName: 'contratto.pdf',
@@ -57,7 +57,8 @@ void main() {
               bytes: Uint8List.fromList([1, 2, 3]),
             );
 
-    expect(failure, isNull);
+    expect(result.isOk, isTrue);
+    expect((result as Ok<Document>).value, document);
     expect(fakeRepository.lastUploaded, document);
   });
 
@@ -65,7 +66,7 @@ void main() {
     fakeRepository.uploadResult =
         const Result.err(ValidationFailure('Il nome del file è obbligatorio.'));
 
-    final failure =
+    final result =
         await container.read(documentFormControllerProvider.notifier).upload(
               workspaceId: workspaceId,
               fileName: '',
@@ -73,7 +74,8 @@ void main() {
               bytes: Uint8List.fromList([1, 2, 3]),
             );
 
-    expect(failure, isA<ValidationFailure>());
+    expect(result.isErr, isTrue);
+    expect((result as Err<Document>).failure, isA<ValidationFailure>());
   });
 
   test('delete delega al repository', () async {

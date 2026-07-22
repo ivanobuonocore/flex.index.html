@@ -12,6 +12,8 @@ class FakeMessageRepository implements MessageRepository {
   String? lastWorkspaceId;
   String? lastContent;
   List<String>? lastAttachmentIds;
+  String? lastRemindersWorkspaceId;
+  String? lastTasksWorkspaceId;
 
   /// Se impostato, `sendMessage` resta in sospeso finché questo Completer
   /// non viene risolto — permette ai test di osservare lo stato
@@ -36,11 +38,15 @@ class FakeMessageRepository implements MessageRepository {
     required String? workspaceId,
     required String content,
     List<String> attachmentIds = const [],
+    String? remindersWorkspaceId,
+    String? tasksWorkspaceId,
   }) async {
     lastChatId = chatId;
     lastWorkspaceId = workspaceId;
     lastContent = content;
     lastAttachmentIds = attachmentIds;
+    lastRemindersWorkspaceId = remindersWorkspaceId;
+    lastTasksWorkspaceId = tasksWorkspaceId;
     if (pendingSend != null) await pendingSend!.future;
     if (throwOnSend != null) throw throwOnSend!;
     return sendResult ?? const Result.ok(unit);

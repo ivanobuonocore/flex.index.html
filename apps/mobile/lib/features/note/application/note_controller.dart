@@ -23,11 +23,15 @@ class NoteFormController extends AutoDisposeAsyncNotifier<void> {
     required String workspaceId,
     required String title,
     String content = '',
+    List<String> tags = const [],
   }) async {
     state = const AsyncLoading();
-    final result = await ref
-        .read(noteRepositoryProvider)
-        .createNote(workspaceId: workspaceId, title: title, content: content);
+    final result = await ref.read(noteRepositoryProvider).createNote(
+          workspaceId: workspaceId,
+          title: title,
+          content: content,
+          tags: tags,
+        );
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);
   }

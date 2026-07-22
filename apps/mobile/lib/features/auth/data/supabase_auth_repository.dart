@@ -107,6 +107,39 @@ class SupabaseAuthRepository implements AuthRepository {
     }
   }
 
+  @override
+  Future<Result<Unit>> updateThemeMode(AppThemeMode mode) async {
+    try {
+      // Metadata dell'utenza (stesso meccanismo già usato per `name` alla
+      // registrazione), non una nuova tabella: la preferenza di tema è
+      // globale all'utente, non legata a un Workspace (CLAUDE.md). Il
+      // risultato si riflette in `watchCurrentUser` tramite l'evento
+      // `userUpdated` che Supabase Auth emette su `onAuthStateChange`.
+      await _client.auth.updateUser(
+        supabase.UserAttributes(data: {'theme_mode': mode.name}),
+      );
+      return const Result.ok(unit);
+    } catch (e) {
+      return Result.err(UnexpectedFailure(
+          'Non è stato possibile salvare la preferenza di tema. Riprova.',
+          cause: e));
+    }
+  }
+
+  @override
+  Future<Result<Unit>> completeOnboarding() async {
+    try {
+      await _client.auth.updateUser(
+        supabase.UserAttributes(data: {'onboarding_completed': true}),
+      );
+      return const Result.ok(unit);
+    } catch (e) {
+      return Result.err(UnexpectedFailure(
+          'Non è stato possibile salvare la preferenza. Riprova.',
+          cause: e));
+    }
+  }
+
   User? _toDomainUser(supabase.User? authUser) {
     if (authUser == null) return null;
     final metadataName = (authUser.userMetadata?['name'] as String?)?.trim();
@@ -123,8 +156,17 @@ class SupabaseAuthRepository implements AuthRepository {
       lastSeenAt: authUser.lastSignInAt != null
           ? DateTime.tryParse(authUser.lastSignInAt!)
           : null,
+      themeMode: _themeModeFromMetadata(authUser.userMetadata?['theme_mode']),
+      onboardingCompleted:
+          authUser.userMetadata?['onboarding_completed'] == true,
     );
   }
+
+  AppThemeMode _themeModeFromMetadata(Object? value) => switch (value) {
+        'light' => AppThemeMode.light,
+        'dark' => AppThemeMode.dark,
+        _ => AppThemeMode.system,
+      };
 
   /// Messaggio comprensibile all'utente; il dettaglio tecnico resta in
   /// [Failure.cause] per il logging (AI Engineering Playbook, "Error Handling").

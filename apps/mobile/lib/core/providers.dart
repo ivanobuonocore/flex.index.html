@@ -3,15 +3,21 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 import '../features/auth/data/supabase_auth_repository.dart';
+import '../features/budget/data/supabase_budget_repository.dart';
 import '../features/chat/data/supabase_chat_repository.dart';
 import '../features/chat/data/supabase_message_repository.dart';
 import '../features/document/data/supabase_document_repository.dart';
+import '../features/memory/data/supabase_memory_repository.dart';
 import '../features/note/data/supabase_note_repository.dart';
 import '../features/notifications/data/supabase_push_subscription_repository.dart';
+import '../features/recurring_transaction/data/supabase_recurring_transaction_repository.dart';
+import '../features/reminder/data/supabase_calendar_event_repository.dart';
+import '../features/reminder/data/supabase_calendar_sync_repository.dart';
 import '../features/search/data/supabase_search_repository.dart';
 import '../features/task/data/supabase_task_repository.dart';
 import '../features/transaction/data/supabase_transaction_repository.dart';
 import '../features/workspace/data/supabase_workspace_repository.dart';
+import '../features/workspace/data/supabase_workspace_sharing_repository.dart';
 import 'supabase/supabase_bootstrap.dart';
 
 /// Confini concreti (Supabase) dietro le interfacce di dominio, unico punto
@@ -27,8 +33,18 @@ final workspaceRepositoryProvider = Provider<WorkspaceRepository>((ref) {
   return SupabaseWorkspaceRepository(ref.watch(supabaseClientProvider));
 });
 
+final workspaceSharingRepositoryProvider =
+    Provider<WorkspaceSharingRepository>((ref) {
+  return SupabaseWorkspaceSharingRepository(ref.watch(supabaseClientProvider));
+});
+
 final noteRepositoryProvider = Provider<NoteRepository>((ref) {
   return SupabaseNoteRepository(ref.watch(supabaseClientProvider));
+});
+
+final calendarEventRepositoryProvider =
+    Provider<CalendarEventRepository>((ref) {
+  return SupabaseCalendarEventRepository(ref.watch(supabaseClientProvider));
 });
 
 final taskRepositoryProvider = Provider<TaskRepository>((ref) {
@@ -58,4 +74,25 @@ final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
 final pushSubscriptionRepositoryProvider =
     Provider<PushSubscriptionRepository>((ref) {
   return SupabasePushSubscriptionRepository(ref.watch(supabaseClientProvider));
+});
+
+final memoryRepositoryProvider = Provider<MemoryRepository>((ref) {
+  return SupabaseMemoryRepository(ref.watch(supabaseClientProvider));
+});
+
+final budgetRepositoryProvider = Provider<BudgetRepository>((ref) {
+  return SupabaseBudgetRepository(ref.watch(supabaseClientProvider));
+});
+
+final recurringTransactionRepositoryProvider =
+    Provider<RecurringTransactionRepository>((ref) {
+  return SupabaseRecurringTransactionRepository(
+      ref.watch(supabaseClientProvider));
+});
+
+final calendarSyncRepositoryProvider = Provider<CalendarSyncRepository>((ref) {
+  final repository =
+      SupabaseCalendarSyncRepository(ref.watch(supabaseClientProvider));
+  ref.onDispose(repository.dispose);
+  return repository;
 });

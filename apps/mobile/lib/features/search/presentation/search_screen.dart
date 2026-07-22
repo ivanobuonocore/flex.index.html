@@ -8,13 +8,16 @@ import 'package:pip_domain/pip_domain.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../application/search_controller.dart';
 
 /// Ricerca Universale (docs/product/06-information-architecture.md,
 /// "Ricerca"): una sola barra, risultati cross-tabella su Workspace, Note,
-/// Attività e Documenti. Chat/Memoria/Agenti arriveranno con le rispettive
-/// feature (Fase 3+) senza richiedere modifiche a questa schermata.
+/// Attività, Documenti, Transazioni confermate e Promemoria (richiesta
+/// esplicita dell'utente, questi ultimi due). Chat/Memoria/Agenti
+/// arriveranno con le rispettive feature (Fase 3+) senza richiedere
+/// modifiche a questa schermata.
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
@@ -51,6 +54,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         context.push('/workspace/${result.workspaceId}/tasks');
       case SearchResultType.document:
         context.push('/workspace/${result.workspaceId}/documents');
+      case SearchResultType.transaction:
+        context.push('/workspace/${result.workspaceId}/transactions');
+      case SearchResultType.reminder:
+        context.push('/workspace/${result.workspaceId}/reminders');
     }
   }
 
@@ -59,12 +66,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final resultsAsync = ref.watch(searchControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: GradientAppBar(
         title: TextField(
           controller: _queryController,
           autofocus: true,
           decoration: const InputDecoration(
-            hintText: 'Cerca in Workspace, Note, Attività, Documenti',
+            hintText:
+                'Cerca in Workspace, Note, Attività, Documenti, Transazioni, Promemoria',
             border: InputBorder.none,
           ),
           onChanged: _onChanged,
@@ -83,8 +91,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             return const EmptyState(
               icon: Icons.search,
               title: 'Cerca tra i tuoi contenuti',
-              message:
-                  'Workspace, note, attività e documenti: tutto in un unico posto.',
+              message: 'Workspace, note, attività, documenti, transazioni e '
+                  'promemoria: tutto in un unico posto.',
             );
           }
           if (results.isEmpty) {
@@ -121,16 +129,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   IconData _iconFor(SearchResultType type) => switch (type) {
-        SearchResultType.workspace => Icons.folder_outlined,
+        SearchResultType.workspace => Icons.space_dashboard_outlined,
         SearchResultType.note => Icons.sticky_note_2_outlined,
         SearchResultType.task => Icons.check_circle_outline,
         SearchResultType.document => Icons.insert_drive_file_outlined,
+        SearchResultType.transaction => Icons.receipt_long_outlined,
+        SearchResultType.reminder => Icons.notifications_outlined,
       };
 
+  // Etichetta "Spazio" (rinominato da "Workspace" — richiesta esplicita
+  // dell'utente), coerente con la tab "Spazi" e il titolo di
+  // WorkspaceListScreen.
   String _typeLabel(SearchResultType type) => switch (type) {
-        SearchResultType.workspace => 'Workspace',
+        SearchResultType.workspace => 'Spazio',
         SearchResultType.note => 'Nota',
         SearchResultType.task => 'Attività',
         SearchResultType.document => 'Documento',
+        SearchResultType.transaction => 'Transazione',
+        SearchResultType.reminder => 'Promemoria',
       };
 }

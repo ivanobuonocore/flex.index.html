@@ -78,6 +78,57 @@ void main() {
       expect(a.hashCode, b.hashCode);
     });
 
+    test('tags ha come default una lista vuota', () {
+      final transaction = Transaction(
+        id: 't1',
+        workspaceId: 'w1',
+        type: TransactionType.expense,
+        description: 'Varie',
+        amountCents: 500,
+        occurredAt: DateTime.utc(2026, 6, 15),
+        status: TransactionStatus.confirmed,
+        createdAt: DateTime.utc(2026, 6, 15),
+      );
+
+      expect(transaction.tags, isEmpty);
+    });
+
+    test('copyWith aggiorna i tag senza toccare gli altri campi', () {
+      final transaction = Transaction(
+        id: 't1',
+        workspaceId: 'w1',
+        type: TransactionType.expense,
+        description: 'Benzina',
+        amountCents: 2000,
+        occurredAt: DateTime.utc(2026, 6, 15),
+        status: TransactionStatus.confirmed,
+        createdAt: DateTime.utc(2026, 6, 15),
+      );
+
+      final tagged = transaction.copyWith(tags: ['auto', 'lavoro']);
+
+      expect(tagged.tags, ['auto', 'lavoro']);
+      expect(tagged.description, transaction.description);
+      expect(tagged.amountCents, transaction.amountCents);
+    });
+
+    test('tag diversi distinguono due transazioni altrimenti identiche', () {
+      Transaction withTags(List<String> tags) => Transaction(
+            id: 't1',
+            workspaceId: 'w1',
+            type: TransactionType.expense,
+            description: 'Benzina',
+            amountCents: 2000,
+            occurredAt: DateTime.utc(2026, 6, 15),
+            status: TransactionStatus.confirmed,
+            createdAt: DateTime.utc(2026, 6, 15),
+            tags: tags,
+          );
+
+      expect(withTags(['auto']) == withTags(['lavoro']), isFalse);
+      expect(withTags(['auto']), withTags(['auto']));
+    });
+
     test('type diverso distingue due transazioni altrimenti identiche', () {
       Transaction withType(TransactionType type) => Transaction(
             id: 't1',

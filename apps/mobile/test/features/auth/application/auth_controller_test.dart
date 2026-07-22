@@ -74,4 +74,45 @@ void main() {
     expect(fakeRepository.signOutCalled, isTrue);
     expect(container.read(sessionControllerProvider).value, isNull);
   });
+
+  test('updateThemeMode delega al repository e non ritorna errore', () async {
+    final failure = await container
+        .read(authControllerProvider.notifier)
+        .updateThemeMode(AppThemeMode.dark);
+
+    expect(failure, isNull);
+    expect(fakeRepository.lastThemeMode, AppThemeMode.dark);
+  });
+
+  test('updateThemeMode propaga il Failure del repository', () async {
+    fakeRepository.updateThemeModeResult =
+        const Result.err(UnexpectedFailure('Salvataggio fallito.'));
+
+    final failure = await container
+        .read(authControllerProvider.notifier)
+        .updateThemeMode(AppThemeMode.light);
+
+    expect(failure, isA<UnexpectedFailure>());
+  });
+
+  test('completeOnboarding delega al repository e non ritorna errore',
+      () async {
+    final failure = await container
+        .read(authControllerProvider.notifier)
+        .completeOnboarding();
+
+    expect(failure, isNull);
+    expect(fakeRepository.completeOnboardingCalled, isTrue);
+  });
+
+  test('completeOnboarding propaga il Failure del repository', () async {
+    fakeRepository.completeOnboardingResult =
+        const Result.err(UnexpectedFailure('Salvataggio fallito.'));
+
+    final failure = await container
+        .read(authControllerProvider.notifier)
+        .completeOnboarding();
+
+    expect(failure, isA<UnexpectedFailure>());
+  });
 }

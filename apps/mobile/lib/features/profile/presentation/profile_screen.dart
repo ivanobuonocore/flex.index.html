@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
 import '../../../core/env/app_env.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/application/session_controller.dart';
+import '../../export/presentation/data_export_sheet.dart';
 import '../../notifications/application/push_notification_controller.dart';
 import '../../notifications/data/push_notification_service.dart';
+import '../../reminder/application/calendar_sync_controller.dart';
 
 /// Profilo (docs/product/06-information-architecture.md, "Profilo"). In Fase
-/// 1: identità dell'account e logout. Abbonamento, tema, memoria, privacy e
-/// dispositivi arrivano con le rispettive feature (Fase 2+).
+/// 1: identità dell'account, logout, preferenza di tema e Memoria.
+/// Abbonamento e privacy arrivano con le rispettive feature (Fase 2+).
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -27,28 +30,65 @@ class ProfileScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.md),
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: theme.colorScheme.primary.withOpacity(0.12),
-                  child: Text(
-                    _initials(user?.name),
-                    style: AppTypography.heading3
-                        .copyWith(color: theme.colorScheme.primary),
-                  ),
+            // Header con lo stesso gradiente hero già usato in Chat/Bilancio
+            // (redesign estetico 2.0), avatar con AppShadows.glow — prima un
+            // semplice CircleAvatar su sfondo piatto, incoerente con il resto
+            // dell'app già migrato.
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: AppColors.heroGradient,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(user?.name ?? '—', style: AppTypography.heading3),
-                      Text(user?.email ?? '', style: AppTypography.caption),
-                    ],
-                  ),
+                borderRadius: AppRadii.cardPremiumRadius,
+                boxShadow: AppShadows.glow(
+                  color: AppColors.heroGradient.first,
+                  isDark: theme.brightness == Brightness.dark,
                 ),
-              ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: AppShadows.glow(
+                        color: AppColors.heroGradient.first,
+                        isDark: theme.brightness == Brightness.dark,
+                      ),
+                    ),
+                    child: CircleAvatar(
+                      radius: 28,
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      child: Text(
+                        _initials(user?.name),
+                        style: AppTypography.heading3
+                            .copyWith(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user?.name ?? '—',
+                          style: AppTypography.heading3
+                              .copyWith(color: Colors.white),
+                        ),
+                        Text(
+                          user?.email ?? '',
+                          style: AppTypography.caption
+                              .copyWith(color: Colors.white.withOpacity(0.85)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: AppSpacing.lg),
             Card(
@@ -58,9 +98,39 @@ class ProfileScreen extends ConsumerWidget {
                 trailing: Text(_planLabel(user?.plan)),
               ),
             ),
+            const SizedBox(height: AppSpacing.lg),
+            _ThemeModeCard(current: user?.themeMode ?? AppThemeMode.system),
+            const SizedBox(height: AppSpacing.lg),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.psychology_outlined),
+                title: const Text('Memoria'),
+                subtitle: const Text(
+                    'Cosa l\'assistente ricorda di te, tra una conversazione '
+                    'e l\'altra.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/profile/memories'),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.download_outlined),
+                title: const Text('Esporta i miei dati'),
+                subtitle: const Text(
+                    'Note, Attività, Documenti, Promemoria, Transazioni e '
+                    'Memoria in un file JSON.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => showDataExportSheet(context, ref),
+              ),
+            ),
             if (AppEnv.vapidPublicKey.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.lg),
               const _NotificationsCard(),
+            ],
+            if (AppEnv.googleCalendarEnabled) ...[
+              const SizedBox(height: AppSpacing.lg),
+              const _GoogleCalendarCard(),
             ],
             const SizedBox(height: AppSpacing.xl),
             OutlinedButton.icon(
@@ -94,6 +164,66 @@ class ProfileScreen extends ConsumerWidget {
       case null:
         return 'Free';
     }
+  }
+}
+
+/// Preferenza di tema (richiesta esplicita dell'utente: "tema chiaro/scuro"),
+/// persistita nei metadata dell'identity provider (vedi
+/// [AuthRepository.updateThemeMode]) — nessuna nuova tabella, è una
+/// preferenza globale all'utente, non a un Workspace.
+class _ThemeModeCard extends ConsumerWidget {
+  const _ThemeModeCard({required this.current});
+
+  final AppThemeMode current;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isBusy = ref.watch(authControllerProvider).isLoading;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.dark_mode_outlined),
+                const SizedBox(width: AppSpacing.sm),
+                Text('Tema', style: AppTypography.heading3),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            SegmentedButton<AppThemeMode>(
+              segments: const [
+                ButtonSegment(
+                  value: AppThemeMode.system,
+                  label: Text('Sistema'),
+                  icon: Icon(Icons.brightness_auto_outlined),
+                ),
+                ButtonSegment(
+                  value: AppThemeMode.light,
+                  label: Text('Chiaro'),
+                  icon: Icon(Icons.light_mode_outlined),
+                ),
+                ButtonSegment(
+                  value: AppThemeMode.dark,
+                  label: Text('Scuro'),
+                  icon: Icon(Icons.dark_mode_outlined),
+                ),
+              ],
+              selected: {current},
+              onSelectionChanged: isBusy
+                  ? null
+                  : (selection) =>
+                      ref.read(authControllerProvider.notifier).updateThemeMode(
+                            selection.first,
+                          ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -202,4 +332,124 @@ class _NotificationsCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Sync con Google Calendar (integrazione richiesta esplicitamente). Nascosta
+/// del tutto se l'app non è stata compilata con
+/// `--dart-define=GOOGLE_CALENDAR_ENABLED=true` (vedi [AppEnv.googleCalendarEnabled])
+/// — richiede che il provider Google sia già abilitato nel dashboard Supabase,
+/// stesso principio già usato per [_NotificationsCard]/VAPID.
+class _GoogleCalendarCard extends ConsumerWidget {
+  const _GoogleCalendarCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final connectionAsync = ref.watch(calendarConnectionProvider);
+    final isBusy = ref.watch(calendarSyncFormControllerProvider).isLoading;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.event_available_outlined),
+                const SizedBox(width: AppSpacing.sm),
+                Text('Google Calendar', style: AppTypography.heading3),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            connectionAsync.when(
+              data: (connection) =>
+                  _statusContent(context, ref, connection, isBusy),
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+              error: (_, __) => Text(
+                'Non è stato possibile verificare lo stato del collegamento.',
+                style: AppTypography.caption,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statusContent(
+    BuildContext context,
+    WidgetRef ref,
+    CalendarConnection? connection,
+    bool isBusy,
+  ) {
+    if (connection == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Collega Google Calendar per far comparire lì i tuoi '
+            'Appuntamenti creati in PIP.',
+            style: AppTypography.caption,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          ElevatedButton.icon(
+            onPressed: isBusy ? null : () => _connect(context, ref),
+            icon: const Icon(Icons.link),
+            label: const Text('Connetti Google Calendar'),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          connection.lastSyncedAt != null
+              ? 'Connesso — ultima sincronizzazione ${_formatDateTime(connection.lastSyncedAt!)}.'
+              : 'Connesso — prima sincronizzazione in corso.',
+          style: AppTypography.caption,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        OutlinedButton.icon(
+          onPressed: isBusy ? null : () => _disconnect(context, ref),
+          icon: const Icon(Icons.link_off),
+          label: const Text('Scollega'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _connect(BuildContext context, WidgetRef ref) async {
+    final failure =
+        await ref.read(calendarSyncFormControllerProvider.notifier).connect();
+    if (!context.mounted) return;
+    if (failure != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(failure.message)));
+    }
+    // Il collegamento vero e proprio si completa in modo asincrono, dopo il
+    // redirect OAuth (vedi SupabaseCalendarSyncRepository) — nessun dato
+    // nuovo da leggere subito qui.
+  }
+
+  Future<void> _disconnect(BuildContext context, WidgetRef ref) async {
+    final failure = await ref
+        .read(calendarSyncFormControllerProvider.notifier)
+        .disconnect();
+    if (!context.mounted) return;
+    if (failure != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(failure.message)));
+    }
+  }
+
+  String _formatDateTime(DateTime dateTime) =>
+      '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')} '
+      '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
 }

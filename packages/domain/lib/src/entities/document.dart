@@ -11,6 +11,7 @@ final class Document {
     required this.uploadedAt,
     this.chatId,
     this.deletedAt,
+    this.tags = const [],
   });
 
   final String id;
@@ -32,6 +33,12 @@ final class Document {
   /// ancora implementato.
   final DateTime? deletedAt;
 
+  /// Tag liberi assegnati manualmente dall'utente (integrazione richiesta
+  /// esplicitamente) — stesso pattern di `Note.tags`, gestiti solo tramite
+  /// [DocumentRepository.updateTags] (un Document non ha un `copyWith`
+  /// generico: gli altri campi sono immutabili dopo il caricamento).
+  final List<String> tags;
+
   @override
   bool operator ==(Object other) =>
       other is Document &&
@@ -44,7 +51,8 @@ final class Document {
       other.hash == hash &&
       other.uploadedAt == uploadedAt &&
       other.chatId == chatId &&
-      other.deletedAt == deletedAt;
+      other.deletedAt == deletedAt &&
+      _listEquals(other.tags, tags);
 
   @override
   int get hashCode => Object.hash(
@@ -58,9 +66,19 @@ final class Document {
         uploadedAt,
         chatId,
         deletedAt,
+        Object.hashAll(tags),
       );
 
   @override
   String toString() =>
       'Document(id: $id, name: $name, workspaceId: $workspaceId)';
+}
+
+bool _listEquals(List<String> a, List<String> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }

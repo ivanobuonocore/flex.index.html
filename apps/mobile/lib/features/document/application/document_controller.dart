@@ -41,7 +41,12 @@ class DocumentFormController extends AutoDisposeAsyncNotifier<void> {
   @override
   Future<void> build() async {}
 
-  Future<Failure?> upload({
+  /// Ritorna il [Result] completo (non solo l'eventuale [Failure]): a
+  /// differenza degli altri form controller di questa classe, chi chiama
+  /// `upload` a volte ha bisogno dell'id del [Document] appena creato (es.
+  /// per collegarlo a una Transazione come scontrino), non solo di sapere se
+  /// l'operazione è riuscita.
+  Future<Result<Document>> upload({
     required String workspaceId,
     required String fileName,
     required String mimeType,
@@ -55,13 +60,28 @@ class DocumentFormController extends AutoDisposeAsyncNotifier<void> {
           bytes: bytes,
         );
     state = const AsyncData(null);
-    return result.fold((_) => null, (failure) => failure);
+    return result;
   }
 
   Future<Failure?> delete(String documentId) async {
     state = const AsyncLoading();
     final result =
         await ref.read(documentRepositoryProvider).deleteDocument(documentId);
+    state = const AsyncData(null);
+    return result.fold((_) => null, (failure) => failure);
+  }
+
+  /// Sostituisce interamente i tag di un Document (integrazione richiesta
+  /// esplicitamente), stesso pattern di [Note.tags].
+  Future<Failure?> updateTags({
+    required String documentId,
+    required List<String> tags,
+  }) async {
+    state = const AsyncLoading();
+    final result = await ref.read(documentRepositoryProvider).updateTags(
+          documentId: documentId,
+          tags: tags,
+        );
     state = const AsyncData(null);
     return result.fold((_) => null, (failure) => failure);
   }

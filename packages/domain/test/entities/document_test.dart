@@ -56,5 +56,37 @@ void main() {
 
       expect(active, isNot(equals(deleted)));
     });
+
+    test('tags ha come default una lista vuota', () {
+      final document = Document(
+        id: 'd1',
+        workspaceId: 'w1',
+        name: 'contratto.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 1024,
+        storagePath: 'w1/d1-contratto.pdf',
+        hash: 'abc123',
+        uploadedAt: DateTime.utc(2026, 1, 1),
+      );
+
+      expect(document.tags, isEmpty);
+    });
+
+    test('tag diversi distinguono due document altrimenti identici', () {
+      Document withTags(List<String> tags) => Document(
+            id: 'd1',
+            workspaceId: 'w1',
+            name: 'contratto.pdf',
+            mimeType: 'application/pdf',
+            sizeBytes: 1024,
+            storagePath: 'w1/d1-contratto.pdf',
+            hash: 'abc123',
+            uploadedAt: DateTime.utc(2026, 1, 1),
+            tags: tags,
+          );
+
+      expect(withTags(['lavoro']) == withTags(['personale']), isFalse);
+      expect(withTags(['lavoro']), withTags(['lavoro']));
+    });
   });
 }

@@ -38,6 +38,28 @@ Arc Browser. L'obiettivo non è copiare nessuno, ma combinare le migliori idee i
 
 > ⚠️ Palette da consolidare con quella del Capitolo 3 (Blu Notte `#1E3A8A` / Azzurro `#38BDF8`).
 
+**Aggiornato** (redesign estetico 2.0 — richiesta esplicita dell'utente: "molto tecnologica",
+ispirata a Planito): nuovo gradiente "hero" (`#2563EB` → `#7C3AED`, stessa famiglia cromatica del
+glow del pulsante Chat), usato per l'AppBar di Chat/Bilancio, le bolle utente in Chat e il saldo
+in evidenza nel Bilancio — comune a entrambi i temi, come il gradiente del pulsante Chat.
+
+**Aggiornato di nuovo, poi corretto** (richiesta esplicita dell'utente: prima il grafico del
+Bilancio "con i colori che stai usando stile Siri" — palette multicolore `siriGlow` — poi "usa una
+sola palette di colori blu che tende al viola"): il grafico a torta usa ora solo `heroGradient`
+(blu/viola), non più la palette a quattro colori del pulsante Chat: entrate in blu, uscite in
+viola, con un'ombra sagomata sul donut stesso (non solo un alone rettangolare intorno) per la
+profondità richiesta. Il pulsante Chat resta l'unico punto dell'app con `siriGlow` (più colori,
+animato).
+
+**Aggiornato ancora** (richiesta esplicita dell'utente: feedback al tocco/cursore sul grafico, e
+un dettaglio raggiungibile dalle pillole Entrate/Uscite) — il grafico a torta del Bilancio
+risponde al tocco/hover di una fetta ingrandendola leggermente e sostituendo il "Netto" al centro
+con l'etichetta e l'importo di quella fetta; le pillole Entrate/Uscite dell'hero aprono, se
+toccate, un elenco delle categorie di quel tipo ordinate per importo. Nel calendario di
+Appuntamenti il giorno "oggi" è ora solo un piccolo pallino (non più un bordo pieno, che lo
+confondeva visivamente con i giorni con impegni): un giorno con almeno un promemoria ha invece uno
+sfondo pieno tinto, più caratteristico.
+
 ## Tipografia
 
 **Aggiornato** (redesign estetico — richiesta esplicita dell'utente: "utilizzando un font
@@ -53,6 +75,10 @@ Radius standard: 16px. Card Premium: 24px. Pulsanti: 14px. Input: 16px.
 ## Ombre
 
 Leggere, diffuse, mai troppo evidenti. L'interfaccia deve sembrare "leggera".
+
+**Aggiornato** (redesign estetico 2.0): oltre all'ombra neutra di base, un alone colorato più
+profondo (`AppShadows.glow`) per le sole superfici "hero" in primo piano (AppBar, saldo nel
+Bilancio) — usarlo ovunque annullerebbe l'effetto di rilievo che dà a un singolo elemento.
 
 ## Icone
 
@@ -79,6 +105,12 @@ barra, con un gradiente ispirato al "glow" di Siri quando si attiva — comunica
 il punto di partenza dell'app (coerente con "la funzione principale deve essere la chat", Fase 3
 slice 4), non una quinta scheda intercambiabile con le altre.
 
+**Aggiornato di nuovo**: "Workspace" è ora "Spazi" (etichetta e icona `space_dashboard`, richiesta
+esplicita dell'utente di un termine diverso — il modello di dominio e le route restano
+"Workspace", solo il testo visibile cambia). La barra ha inoltre un alone blu tenue centrato sul
+pulsante Chat (la barra "emana" dal pulsante) e le 4 voci laterali sono più piccole quando non
+selezionate — rinforza che la Chat è l'attività centrale, le altre sezioni un contorno.
+
 ## Floating Action Button
 
 Un solo pulsante per: Nuova chat, Nuovo Workspace, Nuova nota, Nuovo documento. L'utente sceglie cosa
@@ -92,6 +124,11 @@ Molto grande, espandibile, con: allegati, voce, fotocamera, invio.
 
 Mostra: nome, icona, ultima attività, numero documenti, numero attività, AI dedicata, stato. Con un
 colpo d'occhio l'utente capisce dove riprendere il lavoro.
+
+**Aggiornato** (richiesta esplicita dell'utente: "rendi tutto più professionale"): superficie
+neutra con ombra neutra (non un alone colorato per categoria, ritenuto poco professionale) e una
+sottile barra di accento a sinistra nel colore della categoria — la categoria resta riconoscibile
+senza che ogni card "urli" un colore diverso.
 
 ## Ricerca
 

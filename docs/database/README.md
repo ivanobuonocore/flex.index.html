@@ -402,15 +402,793 @@ runtime in un browser reale (richiesta del permesso, sottoscrizione effettiva, n
 recapitata) — nessun browser disponibile in questo ambiente. Verifica manuale richiesta all'utente
 (vedi `apps/mobile/README.md`, "Limiti noti").
 
+## Fase 3 (slice 8) — Bilancio condiviso
+
+Richiesta esplicita dell'utente: condividere il Bilancio con un'altra persona (account separato),
+con la possibilità che ciascuno mantenga anche un proprio Bilancio personale. Un Bilancio condiviso
+è semplicemente un Workspace "libero" (non una sezione fissa, non lo stesso Workspace personale) a
+cui un secondo utente viene ammesso tramite invito — non introduce Workspace condivisi in generale.
+
+### `public.workspace_members` / `public.workspace_invites`
+
+| Tabella              | Colonne                                                                    |
+|-----------------------|-----------------------------------------------------------------------------|
+| `workspace_members`   | `workspace_id`, `user_id`, `joined_at`, univoco su `(workspace_id, user_id)` |
+| `workspace_invites`   | `workspace_id`, `code` (univoco, 8 esadecimali maiuscoli), `created_by`, `expires_at` (default +7 giorni), `used_at`, `used_by` |
+
+**Scope volutamente ridotto (risposta esplicita dell'utente, "Solo il Bilancio")**: le policy RLS
+aggiuntive di questa migrazione toccano solo `workspaces` (select) e `transactions` (select/insert/
+update/delete). Le policy di `notes`/`tasks`/`documents` non vengono toccate: restano visibili solo
+al proprietario, anche per un Workspace di cui qualcun altro è membro.
+
+**Additivo, non una riscrittura**: le nuove policy (`workspaces_select_member`,
+`transactions_*_member`) sono policy permissive separate — Postgres le combina in OR con quelle
+esistenti (`workspaces_select_own`, `transactions_*_own_workspace`), mai toccate. Esattamente come
+anticipato dal commento nella prima migrazione Fase 1.
+
+### `public.redeem_workspace_invite(code text) returns uuid`
+
+SECURITY DEFINER (non invoker): un invitato non ha — e non deve avere — una policy `select` su
+`workspace_invites` per trovare la riga tramite il codice; questa funzione è l'unico modo per
+farlo, con validazione esplicita dentro la funzione (non un passthrough di privilegi). Verifica:
+codice esistente, non scaduto, non già usato, non creato dallo stesso utente che lo sta redimendo.
+Ritorna solo l'id del Workspace: il client legge poi il Workspace completo tramite la normale
+`watchWorkspaces()`, ora visibile grazie a `workspaces_select_member`.
+
+**Due bug reali trovati e corretti verificando su Postgres locale con due utenti simulati**:
+
+1. **Ricorsione infinita tra le RLS di `workspaces` e `workspace_members`**: `workspaces_select_member`
+   interroga `workspace_members`; la prima versione delle policy di `workspace_members` interrogava a
+   sua volta `workspaces` per verificare la proprietà — Postgres valutava le due RLS a catena
+   all'infinito (`infinite recursion detected in policy for relation workspaces`). Corretto con una
+   funzione `is_workspace_owner(workspace_id)` SECURITY DEFINER: gira con i privilegi di chi l'ha
+   creata (proprietaria anche di `workspaces`), bypassando la RLS su quella tabella e rompendo il
+   ciclo.
+2. **Colonna ambigua in `redeem_workspace_invite`**: la funzione dichiarava `returns table
+   (workspace_id uuid, workspace_name text)` — Postgres espone i nomi delle colonne di ritorno come
+   variabili PL/pgSQL implicite nel corpo della funzione, in conflitto con la colonna omonima usata in
+   `on conflict (workspace_id, user_id)` (`column reference "workspace_id" is ambiguous`). Risolto
+   semplificando la funzione a `returns uuid` (solo l'id, il nome si legge da `watchWorkspaces()`).
+
+**Verificato manualmente su Postgres locale, due utenti simulati (A proprietario, B invitato)**:
+isolamento completo prima dell'invito (0 righe visibili a B su workspace/transazioni/note);
+`redeem_workspace_invite` rifiuta un codice scaduto, un codice già usato, un codice inesistente, e
+il proprietario che prova a unirsi al proprio invito; dopo il redeem B vede il Workspace e le
+transazioni (comprese quelle inserite da A prima della condivisione — non c'è "storico" da
+proteggere in un Workspace appena creato per essere condiviso) e può inserirne di nuove, ma
+l'inserimento di una nota da parte di B viene bloccato dalla RLS esistente (invariata); dopo che A
+rimuove B dai membri, B perde di nuovo ogni accesso.
+
+**Non verificabile qui**: nessuna chiamata reale a `redeem_workspace_invite` tramite Supabase RPC
+(richiede un progetto remoto) — verificato lo stesso comportamento SQL su Postgres locale, non il
+trasporto RPC in sé.
+
+## Fase 3 (slice 9) — Promemoria via Chat
+
+Richiesta esplicita dell'utente: notifiche push vere per i promemoria (non un semplice elenco in
+app) — riusa l'infrastruttura Web Push già costruita e provata nella slice `push_subscriptions`/
+`send-test-push`.
+
+### `public.calendar_events`
+
+Stesso pattern RLS a join di `notes`/`tasks` (`EXISTS` su `workspaces.owner_id = auth.uid()`).
+
+| Colonna                    | Note                                                                |
+|----------------------------|----------------------------------------------------------------------|
+| `workspace_id`             | FK cascade, obbligatorio — sempre la sezione Appuntamenti se creato dalla Chat |
+| `title`                    | non vuoto (constraint)                                                |
+| `starts_at`                | data/ora del promemoria                                              |
+| `duration_minutes`         | default 30                                                            |
+| `reminder_minutes_before`  | facoltativo — anticipo dell'avviso rispetto a `starts_at`             |
+| `source_task_id`/`source_chat_id` | facoltativi — origine se derivato da una Task o da un messaggio di Chat |
+| `notified_at`              | valorizzato da `send-due-reminders` non appena inviata la notifica — evita un secondo invio |
+
+**A differenza di `transactions`, nessuno stato "pending/confirmed"**: un promemoria non è un dato
+finanziario da poter contare per errore, ed è banalmente reversibile (si elimina con uno swipe) —
+inserito direttamente, sia manualmente sia dall'Edge Function `ai-chat`.
+
+**Estrazione lato Edge Function `ai-chat`**: nuovo tool Anthropic `create_reminder` (schema JSON:
+`title`, `starts_at` ISO 8601, `reminder_minutes_before` facoltativo), attivo solo quando la Chat
+riceve un `remindersWorkspaceId` valido (parametro separato da `workspaceId`, sempre la sezione
+Bilancio — un promemoria non appartiene mai al Workspace delle transazioni). Può comparire insieme
+a `extract_transactions` nello stesso turno (un messaggio può descrivere sia una spesa sia un
+promemoria). Validazione difensiva (`sanitizeReminder`) analoga a `sanitizeTransaction`: una data
+non parsabile scarta il suggerimento invece di fallire l'intero turno.
+
+**Verificato manualmente su Postgres locale**: isolamento cross-utente su `calendar_events`
+(select/insert bloccati per un Workspace non proprio).
+
+**Non verificabile in questa sessione**: nessun runtime Deno disponibile (come per l'ultima
+modifica a `ai-chat` in Fase 3 slice 7C) — `ai-chat/index.ts` e la nuova function
+`send-due-reminders` sono state rilette manualmente per correttezza sintattica e di tipo, non
+verificate con il compilatore TypeScript. Nessuna chiamata reale al provider Anthropic.
+
+### Edge Function `send-due-reminders`
+
+**L'unica function di questo progetto che usa la service role**, non il JWT di un utente —
+giustificato esplicitamente: è invocata da un cron job Postgres (`pg_cron`, ogni minuto), non da
+una richiesta di un utente autenticato, quindi non esiste un JWT da inoltrare. Deve poter leggere
+`calendar_events` di **tutti** gli utenti (per trovare i promemoria scaduti) e le rispettive
+`push_subscriptions` per inviare la notifica — le RLS di quelle tabelle restano intatte per ogni
+altro accesso, qui vengono bypassate by design.
+
+Legge i promemoria con `notified_at is null` entro una finestra di lettura di 24 ore (limite
+prudenziale sulla query, non sul momento effettivo dell'invio), poi filtra riga per riga il
+momento di invio reale (`starts_at` meno l'eventuale `reminder_minutes_before`) contro `now()`.
+Marca `notified_at` su ogni promemoria elaborato indipendentemente dal numero di iscrizioni push
+raggiunte con successo (anche zero): un avviso a tempo non deve essere ritentato indefinitamente
+né consegnato in ritardo una volta risolto un problema di iscrizione.
+
+**Attivazione del cron (da eseguire manualmente, SQL commentato in fondo alla migrazione
+`20260722090000_calendar_events.sql`)**: richiede le estensioni `pg_cron`/`pg_net` abilitate
+(Database → Extensions nel pannello Supabase, non attive di default) e la Service Role Key del
+progetto come Bearer token della chiamata HTTP pianificata — `SUPABASE_SERVICE_ROLE_KEY` è invece
+già disponibile automaticamente **dentro** ogni Edge Function, non va configurato come secret.
+
+**Non verificabile in questa sessione**: nessun `pg_cron`/`pg_net` disponibili su Postgres locale
+(estensioni specifiche di Supabase), nessuna chiamata reale alla function. Verificato solo
+staticamente (rilettura manuale, nessun Deno disponibile).
+
+## Fase 3 (slice 10) — Q&A su dati reali in Chat
+
+Richiesta esplicita dell'utente: la Chat deve saper rispondere a "qualsiasi domanda che riguardi
+le informazioni al suo interno" (es. "quanto ho speso questo mese", "ho appuntamenti il mese
+prossimo"), non solo registrare transazioni/promemoria. Nessuna nuova tabella: legge solo
+`transactions`/`calendar_events` già esistenti.
+
+**Due nuovi tool Anthropic in `ai-chat`, sempre attivi** (a differenza di
+`extract_transactions`/`create_reminder`, non dipendono da un Workspace attivo — funzionano in
+qualunque Chat, perché leggono sotto RLS solo i dati del chiamante):
+
+- `query_balance_summary(period_start, period_end)` — somma entrate/uscite confermate nel
+  periodo, con dettaglio per categoria di spesa. **Esclude sempre i Bilanci condivisi**
+  (`SHARED_BALANCE_CATEGORY = 'bilancio_condiviso'`, duplicato da
+  `packages/domain/lib/src/shared_balance_category.dart` — stesso principio già applicato a
+  `TRANSACTION_CATEGORIES`, nessuna condivisione di tipi tra Dart e TypeScript in questo
+  progetto): stessa esclusione già applicata lato client in `BalanceOverviewScreen`, replicata
+  qui perché questa function non ha altro modo di saperlo.
+- `query_reminders(period_start, period_end)` — elenca i promemoria non cancellati nel periodo.
+  Nessun filtro aggiuntivo oltre a RLS: `calendar_events` non ha un concetto di condivisione
+  (owner-only).
+
+**Perché un secondo giro con Anthropic**: quando il modello chiama uno di questi due strumenti,
+non può scrivere la risposta in prosa nello stesso turno in cui chiede il dato — deve prima
+ricevere il risultato reale. `ai-chat` esegue quindi la query sotto RLS (stesso client con il JWT
+del chiamante usato per tutta la function, nessun privilegio aggiuntivo) e fa **una sola** seconda
+chiamata ad Anthropic con il risultato come `tool_result`, senza il parametro `tools` — il modello
+non può quindi chiedere un'altra chiamata, limitando esplicitamente il costo/la latenza aggiuntivi
+a un solo giro extra, e solo nei turni in cui serve davvero. Se lo stesso turno contiene anche un
+`tool_use` di `extract_transactions`/`create_reminder` (un messaggio può mescolare una domanda e
+una nuova spesa), riceve comunque un `tool_result` "di cortesia" — l'API Anthropic richiede una
+risposta per ogni `tool_use` del turno precedente — l'inserimento reale in `transactions`/
+`calendar_events` resta invariato, indipendente da questo secondo giro.
+
+**Verificato in questa sessione**: `tsc --strict --noUnusedLocals --noUnusedParameters` (compilatore
+TypeScript reale, non solo rilettura manuale come nelle slice precedenti — Deno stesso resta
+comunque non disponibile in questo sandbox) su `ai-chat/index.ts` con shim locali per gli import
+`npm:` e i globali `Deno.*`: nessun errore di sintassi o di tipo.
+
+**Non verificabile in questa sessione**: nessuna chiamata reale al provider Anthropic né al
+progetto Supabase reale dell'utente — il comportamento end-to-end (il modello sceglie lo strumento
+giusto, il secondo giro produce una risposta pertinente) va verificato in produzione.
+
+**Aggiornato**: `QUERY_TOOL_INSTRUCTIONS` richiede ora esplicitamente che la risposta dichiari un
+totale in una frase diretta (es. "Hai speso 340,00€ questo mese") prima di un eventuale elenco di
+dettaglio — richiesta esplicita dell'utente: "non soltanto riportarmi le transazioni... ma farmi
+un totale". Nessun cambiamento di schema o di logica di query, solo del testo dell'istruzione.
+
+## Fase 3 (slice 11) — Calendario mensile per Appuntamenti (solo client)
+
+Richiesta esplicita dell'utente: "un calendario fatto a quadratini (giorni) dove su ogni giorno
+viene riportato l'appuntamento". Nessuna migrazione, nessun cambiamento lato Edge Function: legge
+lo stesso stream `calendar_events` già esistente (`watchEvents`), aggregando gli eventi per giorno
+solo lato client per disegnare la griglia mensile in `ReminderListScreen`. Un promemoria creato
+dalla Chat (tool `create_reminder`, invariato) compare quindi automaticamente nel calendario non
+appena la riga viene inserita — nessun collegamento nuovo da costruire.
+
+Nessuna nuova dipendenza pub (es. `table_calendar`): pub.dev non è nella lista degli host
+raggiungibili dal proxy di questo sandbox (solo npm/jsr/pypi/crates/proxy.golang.org), quindi
+un'eventuale nuova dipendenza non sarebbe verificabile qui con `flutter pub get`/`flutter analyze`/
+`flutter test` — la griglia è stata scritta a mano con `GridView.count`, verificabile con gli
+stessi strumenti già usati in questa sessione.
+
+**Aggiornato**: il banner di stato notifiche in Appuntamenti (`_NotificationStatusBanner`,
+richiesta esplicita dell'utente) non introduce alcuno schema nuovo — riusa `push_subscriptions`
+(già esistente, Fase 3 "Promemoria via Chat") tramite gli stessi provider Riverpod già usati in
+Profilo. Allo stesso modo il dettaglio "per categoria" delle pillole Entrate/Uscite nel Bilancio è
+puro client-side: aggrega `transactions.category` già letta da `watchTransactions`, nessuna nuova
+colonna o funzione SQL.
+
+## Fase 3 (slice 12) — Ricerca estesa a Transazioni/Promemoria, Liste via Chat, tema, tag Note
+
+Quattro migliorie richieste esplicitamente dall'utente in un unico giro, verificate insieme:
+
+- **Ricerca Universale** (`20260722150000_search_transactions_and_reminders.sql`): due nuovi
+  indici GIN (`transactions.description`, `calendar_events.title`) e `search_workspace_content`
+  ridefinita con due `union all` aggiuntivi. Solo le transazioni **confermate** compaiono (le
+  pending sono suggerimenti non ancora decisi dall'utente, AI Constitution Principio 1); i
+  promemoria non richiedono lo stesso filtro (non hanno uno stato pending/confirmed). Verificato
+  su Postgres locale con lo stesso schema fittizio (`auth`/`storage`/`supabase_realtime` stub) già
+  usato per le slice precedenti: RLS isolation confermata (un secondo utente non vede i risultati
+  del primo), transazione pending correttamente esclusa dal risultato.
+- **Liste/checklist via Chat** (Slice C del piano originale, mai realizzata finora): nuovo tool
+  `manage_tasks` in `ai-chat/index.ts`, stesso pattern di `create_reminder` — un `Task` per
+  elemento (`generated_by_ai: true`, `chat_id` valorizzato), nessuna migrazione (le colonne
+  esistevano già dalla slice Note/Task originale). Richiede un terzo id di sezione,
+  `tasksWorkspaceId` (Attività), aggiunto end-to-end accanto a `workspaceId`/
+  `remindersWorkspaceId` già esistenti (client → `SupabaseMessageRepository.sendMessage` →
+  `ai-chat` → `buildSystemPrompt`).
+- **Tema chiaro/scuro**: nessuna tabella nuova — la preferenza (`AppThemeMode` in
+  `packages/domain`) è salvata nei metadata di Supabase Auth (`auth.updateUser({data: {theme_mode:
+  ...}})`), stesso meccanismo già usato per `name` alla registrazione. Si riflette in
+  `watchCurrentUser` tramite l'evento `userUpdated` di `onAuthStateChange`, nessuno stato locale
+  duplicato.
+- **Tag sulle Note**: `notes.tags` esisteva già dalla migrazione originale (mai esposto in UI) —
+  nessuna modifica di schema, solo `NoteFormController.create` che ora inoltra `tags` (già
+  accettato da `NoteRepository.createNote`) e una nuova striscia di filtro rapido lato client.
+
+## Fase 3 (slice 13) — Conferma/Scarta inline in Chat
+
+`20260722160000_message_pending_transaction_ids.sql`: `messages.pending_transaction_ids
+text[]`, stessa convenzione di `attachment_ids`/`source_references` (non un vero array di FK,
+nessun vincolo referenziale). `ai-chat/index.ts` cattura gli id restituiti dall'insert in
+`transactions` (`.select("id")`) e li salva sul messaggio dell'assistente appena creato — la Chat
+può così mostrare Conferma/Scarta subito sotto la risposta (richiesta esplicita dell'utente:
+"azioni rapide sulle transazioni pending direttamente in chat"), riusando lo stesso
+`transactionFormControllerProvider` già usato dal Bilancio. La colonna non viene aggiornata quando
+una transazione viene confermata/scartata altrove: il client filtra sempre per
+`status == pending` al momento della lettura (`transactionsProvider(null)`), quindi un id ormai
+deciso smette semplicemente di comparire, senza dover riscrivere il messaggio. Verificato su
+Postgres locale (stesso schema fittizio delle slice precedenti): insert e lettura della colonna
+confermati.
+
+## Fase 3 (slice 14) — Promemoria ricorrenti
+
+`20260722170000_calendar_events_recurrence.sql`: `calendar_events.recurrence_group_id uuid`
+(nullable, indice parziale `where recurrence_group_id is not null`). Nessuna logica RRULE/cron:
+`create_reminder` guadagna un campo `recurrence` (`none`/`daily`/`weekly`/`monthly`, richiesta
+esplicita dell'utente — "ogni lunedì", "ogni mese") e `ai-chat/index.ts` **espande** la
+ricorrenza in più righe indipendenti al momento della creazione (`expandOccurrences`), ciascuna
+col proprio `starts_at` e un `recurrence_group_id` condiviso (`crypto.randomUUID()`) —
+`send-due-reminders` (già configurata, non toccata da questa slice) continua a leggere
+`calendar_events` come eventi indipendenti, esattamente come faceva prima. Numero di occorrenze
+fisso per frequenza (14 giorni/14 settimane/12 mesi), non deciso dal modello: evita inserimenti
+incontrollati.
+
+Bug trovato e corretto durante lo sviluppo (verificato con uno script Node standalone, dato che
+Deno non è disponibile in questo sandbox): `Date.setUTCMonth` da solo trabocca sui mesi più corti
+— il 31 gennaio + 1 mese diventava il 3 marzo invece del 28 febbraio. La correzione passa sempre
+dal giorno 1 del mese di destinazione, poi sceglie `min(giorno originale, giorni nel mese di
+destinazione)`.
+
+`recurrenceGroupId` (`CalendarEvent` in `packages/domain`) è solo informativo in questa slice:
+mostra un'icona "ricorrente" nell'elenco Appuntamenti, ma eliminare un'occorrenza elimina solo
+quella riga — non l'intera serie (tenuto fuori scope per non appesantire questo giro). Verificato
+su Postgres locale: insert di più righe con lo stesso `recurrence_group_id` e lettura confermati.
+
+## Fase 3 (slice 15) — Memoria: prima slice minima
+
+Prima persistenza reale dell'entità `Memory` (Domain Model — mai costruita finora, uno dei
+pilastri di prodotto citati in CLAUDE.md). Scope volutamente ridotto (richiesta esplicita
+dell'utente): solo il livello **Globale** (legato all'utente, non a un Workspace o una Chat).
+
+`20260722180000_memories.sql`: tabella `public.memories` (id, content, level, origin, user_id/
+workspace_id/chat_id — tutte nullable, con un check `memories_owner_matches_level` che rispecchia
+l'`assert` del costruttore Dart `Memory`), `memories_content_not_blank`, RLS con tre policy
+(`select`/`insert`/`delete`) tutte ristrette a `level = 'global' and user_id = auth.uid()` —
+Workspace e Conversazione restano colonne nullable senza policy, arriveranno con le rispettive
+feature senza un'altra migrazione. Verificato su Postgres locale: un utente non vede né può
+cancellare la memoria di un altro, un insert cross-user o a livello workspace/conversation viene
+respinto dalla RLS, i check constraint su contenuto vuoto e owner mancante funzionano.
+
+`ai-chat/index.ts`: nuovo tool `remember_fact`, **sempre disponibile** (come
+`query_balance_summary`/`query_reminders`, non condizionato a un Workspace — la Memoria è legata
+all'utente). Nessun meccanismo pending/confirmed: come i promemoria/le liste, è reversibile con un
+tocco (si cancella dalla schermata Memoria), non un dato finanziario da dover contare con cautela.
+Le memorie esistenti vengono anche **iniettate nel system prompt** di ogni turno
+(`buildSystemPrompt`, sezione "Cose da ricordare su questo utente", fino a 20 più recenti) —
+altrimenti la feature sarebbe di sola scrittura: l'AI deve poterle effettivamente usare nelle
+risposte future, non solo salvarle.
+
+Mobile: `features/memory/` (data/application/presentation) con lo stesso pattern di
+`features/reminder/` — `SupabaseMemoryRepository` (solo `watchGlobalMemories`/`deleteMemory`,
+nessuna creazione manuale: le memorie nascono solo dall'AI), `MemoryListScreen` raggiungibile da
+Profilo → "Memoria" (`/profile/memories`), nessun pulsante "+" per lo stesso motivo.
+
+## Fase 3 (slice 16) — Memoria: livello Workspace
+
+Estende la slice 15 al livello **Workspace** (Domain Model). Il livello **Conversazione** resta
+fuori scope, per un motivo architetturale: "Chat unica" (Slice 7B) ha reso la Chat un'unica
+conversazione globale per utente — con una sola conversazione per utente, "memoria per questa
+conversazione" coinciderebbe sempre col livello Globale, zero valore reale da costruire ora.
+
+`20260723090000_memories_workspace_level.sql`: nessuna nuova colonna (già presenti dalla slice
+15) — solo le tre policy RLS mancanti per `level = 'workspace'`, stesso pattern a join di
+notes/tasks (`exists (select 1 from workspaces w where w.id = memories.workspace_id and
+w.owner_id = auth.uid())`), più un indice su `workspace_id`. Verificato su Postgres locale: un
+utente non vede né può cancellare la memoria-Workspace di un altro, un insert su un Workspace non
+posseduto viene respinto dalla RLS.
+
+A differenza del Globale (scritto solo dall'AI Engine), il livello Workspace è creato
+**manualmente dall'utente** in questa slice: la Chat unica non ha modo di sapere a quale Workspace
+collegare un ricordo pronunciato al suo interno. `MemoryRepository` guadagna
+`watchWorkspaceMemories`/`createWorkspaceMemory` (nessun tocco lato `ai-chat`).
+
+Mobile: nuova `WorkspaceMemoryListScreen` (`/workspace/:id/memories`), FAB con un dialog minimale
+per aggiungere una memoria (niente sheet completo, un solo campo testo). Sezione "Memoria" in
+`WorkspaceDetailScreen` (anteprima + "Vedi tutte"), rimossa dall'elenco "Prossimamente" dove era
+segnaposto dalla Fase 1. Conferma via dialog prima di cancellare su swipe (diversamente dal
+Globale, che resta immediato): anticipa la richiesta "conferma su swipe-to-delete" applicata anche
+qui.
+
+## Fase 3 (slice 17) — Eliminare l'intera serie di promemoria ricorrenti
+
+Solo layer applicativo, nessuna migrazione: `CalendarEventRepository` guadagna
+`deleteRecurrenceGroup(recurrenceGroupId)`, un `update` bulk su tutte le righe con lo stesso
+`recurrence_group_id` (colonna già esistente dalla slice 14) — stessa RLS a join già in vigore per
+`deleteEvent`, verificata riga per riga anche sull'update multiplo.
+
+`ReminderListScreen`: lo swipe-to-delete su un promemoria ricorrente ora apre prima un dialog
+("Solo questa occorrenza" / "Intera serie" / Annulla) invece di cancellare subito, a differenza di
+un promemoria singolo che resta immediato come sempre — la cancellazione di un'intera serie è
+un'azione più difficile da annullare (bisognerebbe ricrearla da capo), merita conferma
+indipendentemente dalla richiesta più generale "conferma su swipe" (slice successiva).
+
+## Fase 3 (slice 18) — Budget per categoria
+
+`20260723100000_category_budgets.sql`: tabella `public.category_budgets` (id, user_id, category,
+monthly_limit_cents, updated_at), `category_budgets_limit_positive` (> 0),
+`category_budgets_user_category_unique` (un budget al più per categoria per utente — `setBudget`
+lato repository fa upsert su questo vincolo). RLS diretta `user_id = auth.uid()` (nessun join a
+`workspaces`): il Budget è legato **all'utente**, non a un Workspace — valutato contro lo stesso
+aggregato multi-Workspace già mostrato dal Bilancio personale (tutti i Workspace personali,
+esclusi i Bilanci condivisi), con cui un budget "per Workspace" non avrebbe un confronto naturale.
+Verificato su Postgres locale: upsert non duplica, un insert cross-user o con limite non positivo
+viene respinto, un utente non vede né può cancellare il budget di un altro.
+
+`BalanceOverviewScreen`: nuova sezione "Budget per categoria" sotto il grafico a torta, una
+`_BudgetTile` per budget con barra di avanzamento (spesa del mese/limite) e colore che passa al
+rosso oltre il 100% ("Budget superato"); dialog per creare/modificare/cancellare. Nascosta del
+tutto se l'utente non ha impostato alcun budget (mostra solo un pulsante "Imposta un budget per
+categoria") — non è un placeholder, è una feature opzionale attivata categoria per categoria.
+
+## Fase 3 (slice 19) — Spese ricorrenti automatiche
+
+`20260723110000_recurring_transaction_templates.sql`: tabella `public.recurring_transaction_templates`
+(id, workspace_id, type, description, amount_cents, category, frequency `weekly`/`monthly`,
+next_occurrence_at date, **anchor_day**, created_at, deleted_at). Stesso pattern RLS a join di
+transactions/notes/tasks. `anchor_day` (1-31) è il giorno "vero" della ricorrenza, fissato alla
+creazione e mai ricalcolato dalla data corrente — un bug trovato e corretto durante lo sviluppo
+(verificato con uno script Node standalone): senza un anchor fisso, un mese corto (Feb 28) fa
+scivolare la scadenza al 28 per sempre invece di tornare al 31 nei mesi più lunghi. Una policy
+UPDATE (non solo DELETE) è necessaria per il soft delete via `deleted_at` — dimenticarla (errore
+trovato durante la verifica su Postgres locale) lascia l'update silenziosamente a 0 righe sotto
+RLS, nessun errore, nessun effetto.
+
+A differenza dei Promemoria ricorrenti (tutte le occorrenze pre-generate subito), qui si genera
+**una Transaction pending alla volta**, solo quando dovuta: un elenco "in attesa di conferma" con
+mesi di spese future già presenti confonderebbe la sezione del Bilancio, oltre a non avere senso
+finanziariamente. Nuova Edge Function `create-due-recurring-transactions` (service role, cron
+giornaliero — stesso pattern/giustificazione di `send-due-reminders`, istruzioni `pg_cron`/`pg_net`
+nel commento finale della migrazione): legge i modelli dovuti, genera le occorrenze arretrate (con
+un tetto di sicurezza per modello, `MAX_OCCURRENCES_PER_RUN = 24`) e avanza `next_occurrence_at`.
+
+`ai-chat/index.ts`: nuovo tool `create_recurring_transaction`, stesso gate di
+`extract_transactions` (richiede un Workspace Bilancio attivo). Se la prima occorrenza è già
+dovuta (oggi o nel passato), la Transaction pending viene inserita **subito**, senza aspettare il
+prossimo giro del cron — coerente con la reattività del resto della Chat; solo le occorrenze
+successive restano al cron.
+
+Mobile: `features/recurring_transaction/` (data/application/presentation) — scritto solo dall'AI,
+nessuna creazione manuale. Icona "Ricorrenti" nell'AppBar di `TransactionReportScreen` apre un
+foglio con elenco + swipe-to-delete (con conferma via dialog, cancella solo il modello: le
+Transazioni già generate restano).
+
+## Fase 3 (slice 20) — Scontrino allegato alla Transazione
+
+`20260723120000_transactions_document_id.sql`: `transactions.document_id uuid references
+documents (id) on delete set null`. Nessuna nuova RLS: la colonna è protetta dalle policy già
+esistenti su `transactions` (select/insert/**update**/delete, verificato che l'update esistesse
+già — a differenza della svista trovata per `recurring_transaction_templates` nella slice
+precedente). A differenza della foto che l'AI legge in Chat per estrarre l'importo (mai
+persistita come Document), questo collega un Document **persistente** e consultabile dopo.
+
+`TransactionRepository.attachDocument({transactionId, documentId})` — `documentId` `null` rimuove
+l'allegato; un solo metodo per entrambi i versi. `DocumentFormController.upload` cambiato da
+`Future<Failure?>` a `Future<Result<Document>>`: l'unico altro chiamante
+(`document_list_screen.dart`) aveva bisogno solo dell'eventuale errore, ma allegare uno scontrino
+serve l'id del Document appena creato — invece di duplicare la chiamata upload, si espone il
+`Result` completo (aggiornato anche l'unico test esistente).
+
+Mobile: riga "Scontrino" in `create_edit_transaction_sheet.dart`, visibile solo in modifica (serve
+l'id della Transazione già salvata). Il form è stato avvolto in un `SingleChildScrollView` (prima
+un semplice `Column`): la riga in più poteva superare l'altezza disponibile su schermi piccoli o a
+tastiera aperta — trovato durante i test widget (`RenderFlex overflow`), non solo in teoria.
+Icona scontrino nell'elenco Transazioni confermate di `TransactionReportScreen` quando presente.
+
+## Fase 3 (slice 21) — Andamento multi-mese e confronto col mese precedente nel Bilancio
+
+Nessuna migrazione: aggrega le stesse `transactions` già caricate da `transactionsProvider(null)`,
+nessuna nuova tabella o colonna necessaria.
+
+`transaction_controller.dart`: `percentChange({current, previous})` — `null` se `previous` è 0
+(nessun confronto sensato, non una divisione per zero mascherata); usa `previous.abs()` come base
+così un saldo precedente negativo non inverte il segno del risultato. `lastMonths(reference,
+months)` — gli ultimi N mesi fino a `reference` incluso, dal più vecchio al più recente.
+`monthlyTotals(transactions, months)` — entrate/uscite confermate per ciascuno dei mesi indicati,
+riusando `confirmedThisMonth`/`totalIncomeCents`/`totalExpenseCents` già esistenti.
+
+Mobile (`balance_overview_screen.dart`): `_BalanceHeroCard` mostra un badge "vs mese scorso" sotto
+il saldo (verde/freccia su se il saldo è migliorato, rosso/freccia giù altrimenti), calcolato sul
+saldo del mese selezionato nella tendina contro il mese immediatamente precedente. Sotto il
+grafico a torta, `_TrendChart` (nuovo, `fl_chart` `BarChart`) mostra gli ultimi 6 mesi con una
+coppia di barre entrate/uscite per mese, stessa palette blu/viola del resto del Bilancio.
+
+Bug trovato nei test widget esistenti (non nella logica nuova): `_BudgetSection` (slice 18) è ora
+più in basso nella `ListView` di quanto arrivi il `cacheExtent` di default finché non si scorre —
+`ListView(children: [...])` non è eager come si potrebbe pensare, usa comunque il protocollo
+sliver lazy. I test che emettevano il budget dopo un solo `pump()` perdevano l'emissione
+(`_BudgetSection` non ancora montato = non ancora sottoscritto a `budgetsProvider`, broadcast
+stream senza replay): corretto aggiungendo uno scroll esplicito prima dell'emit.
+
+## Fase 3 (slice 22) — Export dati completo
+
+Nessuna migrazione: legge solo repository già esistenti, con `.first` invece di `watch` (uno
+snapshot, non un ascolto realtime — un export non deve restare aperto in sottoscrizione).
+
+`features/export/application/data_export_controller.dart`: `DataExportController.generate()`
+legge tutti i Workspace, poi per ciascuno Note/Attività/Documenti (solo metadata: nome, mime type,
+dimensione, data — mai i byte del file, restano in Storage)/Promemoria/Memoria di livello
+Workspace; infine Transazioni di tutti i Workspace (`watchTransactions(null)`, stesso pattern del
+Bilancio globale) e Memoria di livello Globale. Tutto serializzato con `JsonEncoder.withIndent`.
+
+Bug evitato con la stessa causa della slice precedente ma un sintomo diverso: `generate()` veniva
+invocato dal chiamante di `showDataExportSheet`, **prima** di `showModalBottomSheet`. Tra quella
+chiamata e il montaggio effettivo del foglio passano più frame in cui nessuno osserva
+`dataExportControllerProvider` (`autoDispose`) — verificato con un test widget che falliva
+silenziosamente (il foglio restava fermo su "generazione in corso" per sempre, la vera istanza con
+il risultato veniva scartata e ricreata da zero al primo `watch`). Risolto spostando la chiamata a
+`generate()` dentro `initState()` del foglio stesso, dove la `build()` immediatamente successiva
+(stesso ciclo sincrono) stabilisce già l'ascolto che tiene vivo il provider.
+
+Mobile: voce "Esporta i miei dati" in Profilo, apre un foglio con conteggio caratteri, "Copia negli
+appunti" e "Invia via email" — stesso limite già dichiarato per il riepilogo mensile del Bilancio:
+niente PDF/file scaricabile, `pdf`/`share_plus` non disponibili in questo ambiente di build.
+
+## Fase 3 (slice 23) — Note/Attività condivise
+
+Richiesta esplicita dell'utente: estendere il modello di condivisione — finora solo il Bilancio
+(slice 8, `20260721160000_workspace_sharing.sql`) — a Note e Attività, con gli stessi permessi di
+lettura+scrittura. Non introduce un meccanismo nuovo: `workspace_members`/`workspace_invites` sono
+già generiche per Workspace, la slice 8 aveva deliberatamente ridotto lo scope alle sole
+Transazioni ("risposta esplicita dell'utente, 'Solo il Bilancio'"). Questa migrazione
+(`20260723130000_shared_workspace_notes_tasks.sql`) allarga quello scope, restando ADDITIVA — nuove
+policy permissive `notes_*_member`/`tasks_*_member` (select/insert/update/delete), identiche nella
+forma a `transactions_*_member`, combinate in OR con le policy esistenti (mai toccate). I Documenti
+restano esclusi, non menzionati dalla richiesta: nessuna policy `documents_*_member` aggiunta.
+
+Nessun codice mobile nuovo: `WorkspaceDetailScreen`/`NoteListScreen`/`TaskListScreen` sono già
+generiche per qualunque Workspace (nessun controllo espliciti su `ownerId`) — una volta che le RLS
+rendono visibili/scrivibili le righe a un membro, quegli stessi schermi le mostrano automaticamente,
+esattamente come già succede per le Transazioni condivise. Aggiornato solo il testo del foglio
+"Bilancio condiviso creato!" per avvisare che ora si condividono anche Note e Attività.
+
+**Verificato su Postgres locale, due utenti simulati (A proprietario, B invitato)**: prima
+dell'invito B non vede nessuna nota/task del Workspace; dopo `redeem_workspace_invite` B vede la
+nota e la task create da A, può inserirne di proprie e modificare quelle di A; i Documenti restano
+a 0 righe visibili per B per tutta la prova (nessuna policy aggiunta); dopo che A rimuove B dai
+membri, B perde di nuovo ogni accesso a note/task — stesso ciclo di vita già verificato per le
+Transazioni nella slice 8.
+
+## Fase 3 (slice 24) — Onboarding leggero al primo accesso
+
+Richiesta esplicita dell'utente. Nessuna tabella nuova: `User.onboardingCompleted` (default
+`false`) segue lo stesso meccanismo già usato per `themeMode` (slice "Tema chiaro/scuro") — salvato
+nei metadata di Supabase Auth (`auth.updateUser({data: {onboarding_completed: true}})`), letto in
+`SupabaseAuthRepository._toDomainUser`, si riflette in `watchCurrentUser` tramite l'evento
+`userUpdated` di `onAuthStateChange`, nessuno stato locale duplicato.
+
+Nuova `OnboardingScreen` (`/onboarding`, `PageView` di 3 schermate + "Salta"/"Avanti"/"Inizia") e un
+gate in più nel redirect di `appRouterProvider`: un utente autenticato con
+`!user.onboardingCompleted` viene sempre mandato lì prima di `/chat`, indipendentemente da dove
+stesse cercando di andare; completarla o saltarla (entrambi chiamano
+`AuthController.completeOnboarding`) lo libera in modo permanente.
+
+## Fase 3 (slice 25) — Tag su Transazioni e Documenti
+
+Richiesta esplicita dell'utente (prima di una serie di integrazioni suggerite e confermate).
+`20260723140000_transaction_document_tags.sql`: `transactions.tags`/`documents.tags` (`text[] not
+null default '{}'`) — stesso pattern già usato per `notes.tags` fin dalla migrazione originale,
+qui aggiunto con un'`alter table` perché le due tabelle esistevano già senza quella colonna.
+Nessuna RLS nuova (i tag sono solo un campo in più sulle righe esistenti, già coperte dalle policy
+di `transactions`/`documents`). Gestiti solo dal client, mai dall'AI Engine: `extract_transactions`
+in `ai-chat` non li tocca.
+
+`DocumentRepository` guadagna `updateTags({documentId, tags})`: a differenza di Note/Transazioni,
+un Document non ha un `copyWith`/update generico (nome e file restano immutabili dopo il
+caricamento), quindi i tag sono l'unico campo modificabile dopo la creazione — con un piccolo
+foglio dedicato (`_EditTagsSheet` in `document_list_screen.dart`) invece di riusare una sheet di
+creazione/modifica come per Note/Transazioni.
+
+## Fase 3 (slice 26) — Previsione di fine mese nel Bilancio
+
+Richiesta esplicita dell'utente. Nessuna tabella nuova: `projectedMonthEndExpenseCents` è una
+funzione pura lato client (`transaction_controller.dart`) sui dati già letti da `transactions`,
+nessuna nuova query né colonna.
+
+## Fase 3 (slice 27) — Permessi granulari (viewer/editor) sui Workspace condivisi
+
+Integrazione richiesta esplicitamente, dopo che "Bilancio condiviso" e "Note/Attività condivise"
+davano a ogni membro sempre gli stessi diritti del proprietario. `20260723150000_workspace_member_roles.sql`:
+
+- `workspace_members.role` (`text`, check `in ('viewer', 'editor')`, default `'editor'` — non
+  cambia il comportamento dei membri esistenti creati prima di questa migrazione).
+- `workspace_invites.role`: il ruolo che `redeem_workspace_invite` assegnerà al momento del
+  redeem, scelto dal proprietario quando genera l'invito — mai passato liberamente da chi lo
+  redime (che non deve potersi auto-assegnare `editor`).
+- Nuova policy `workspace_members_update_owner`: solo il proprietario può cambiare il `role` di un
+  membro (`using`/`with check` su `is_workspace_owner(workspace_id)`, la stessa funzione SECURITY
+  DEFINER già usata dalla migrazione originale).
+- Le policy di scrittura (`insert`/`update`/`delete`) di `transactions`/`notes`/`tasks` per un
+  membro sono state **sostituite** (drop + create, non additive come le altre migrazioni di
+  questo progetto) per richiedere `role = 'editor'` oltre alla sola appartenenza — le policy di
+  `select` restano invariate, un viewer deve continuare a leggere tutto.
+- `redeem_workspace_invite` ridefinita per inserire `v_invite.role` invece di lasciare il default
+  implicito.
+
+**Verificato manualmente su Postgres locale** (stesso schema fittizio `auth.uid()`/`storage.*` già
+usato per "Bilancio condiviso", cinque utenti simulati — owner, editor, viewer, un nuovo utente che
+redime un invito viewer, un membro "legacy" senza `role` esplicito):
+- un editor legge/scrive transazioni/note/attività esattamente come il proprietario;
+- un viewer legge tutto ma **ogni** scrittura (insert/update/delete su transazioni/note/attività)
+  viene bloccata dalla RLS;
+- il proprietario può cambiare il ruolo di un membro; un membro che prova ad auto-promuoversi a
+  `editor` viene bloccato (0 righe aggiornate);
+- `redeem_workspace_invite` assegna il ruolo portato dall'invito (verificato con un invito
+  `viewer`: il nuovo membro riceve `role = 'viewer'` ed è immediatamente limitato in scrittura);
+- un membro creato prima di questa migrazione (nessun `role` esplicito nell'insert) riceve il
+  default `'editor'` e mantiene l'accesso in scrittura di prima — nessuna regressione silenziosa.
+
+Mobile: `WorkspaceRole` (`viewer`/`editor`) in `packages/domain`; `WorkspaceSharingRepository`
+guadagna `updateMemberRole` e un parametro `role` su `createInvite`. Nuovo
+`currentMemberRoleProvider(workspaceId)` (in `workspace_sharing_controller.dart`) — riusa
+`workspaceMembersProvider`, dato che sotto RLS un membro (non proprietario) vede sempre e solo la
+propria riga: nessuna query dedicata necessaria per sapere "il mio ruolo qui". Le schermate
+`transaction_report_screen.dart`/`note_list_screen.dart`/`task_list_screen.dart` nascondono
+FAB/swipe-to-delete/tocco-per-modificare quando il ruolo è `viewer`; `shared_balance_screen.dart`
+guadagna un selettore di ruolo sia alla creazione dell'invito sia per un membro già presente.
+
+## Fase 3 (slice 28) — Notifica push su budget quasi superato
+
+Integrazione richiesta esplicitamente, dopo "Budget per categoria" (slice 18): finora "budget
+superato" era solo un colore nella `_BudgetTile` del Bilancio, nessun avviso attivo.
+`20260723160000_category_budgets_alert_state.sql` aggiunge `category_budgets.
+last_alert_threshold`/`last_alert_month` (`add column if not exists`, puramente additiva — nessuna
+RLS nuova, le policy esistenti di `category_budgets` coprono anche le due colonne in più).
+
+Nuova Edge Function `send-budget-alert` (stesso pattern di `send-test-push`: JWT del chiamante,
+mai service role), invocata direttamente dal client — non un cron come `send-due-reminders`, perché
+l'evento ("questa spesa fa superare la soglia?") è deterministico nel momento in cui la spesa viene
+creata/confermata, non richiede una scansione periodica su tutti gli utenti. Riceve `budgetId`/
+`category`/`spentCents`/`limitCents`; se la soglia (80 o 100) è superata e non è già stata
+notificata questo mese per quel budget (confronto `last_alert_month` col mese corrente UTC),
+aggiorna comunque `last_alert_threshold`/`last_alert_month` anche senza iscrizioni push attive
+(evita di ritentare a ogni transazione se l'utente non ha mai attivato le notifiche), poi invia la
+notifica alle iscrizioni lette da `push_subscriptions`.
+
+Mobile: `BudgetRepository.checkBudgetAlert` (nuovo metodo) invoca la function ed è interamente
+best-effort — nessun errore propagato al chiamante (funzione non deployata, VAPID non configurate).
+`TransactionFormController._maybeAlertBudget` (nuovo helper privato in `transaction_controller.
+dart`), chiamato da `create()`/`confirm()` solo per le spese (`TransactionType.expense`): calcola lo
+speso confermato del mese corrente per quella categoria sui soli Workspace personali (stesso
+aggregato di `_BudgetSection` nel Bilancio — un Bilancio condiviso non innesca mai un avviso),
+somma l'importo appena creato/confermato per non dipendere dal tempismo del realtime, e — se esiste
+un budget per quella categoria — chiama `checkBudgetAlert`. Tutto l'helper è avvolto in un
+`try/catch`: un errore nella lettura dei provider (mai capitato nei test, ma possibile in
+produzione se nessuno schermo ha ancora sottoscritto `transactionsProvider(null)`/
+`workspacesProvider`/`budgetsProvider` in questa sessione) non deve mai bloccare create/confirm già
+riuscite — stesso limite noto documentato in `apps/mobile/README.md`.
+
+Verificato: `deno check`/`deno lint`/`deno fmt --check` sulla nuova Edge Function; test del
+controller (`transaction_controller_test.dart`) con repository/workspace/budget fake — soglia
+superata su create e su confirm, nessuna chiamata senza budget configurato, su un'entrata, o in un
+Bilancio condiviso. **Non verificato in questa sessione**: nessuna chiamata HTTP reale né notifica
+recapitata a un browser (richiederebbe un progetto Supabase remoto o Docker, come `send-test-push`).
+
+## Fase 3 (slice 29) — OCR sugli scontrini allegati manualmente
+
+Integrazione richiesta esplicitamente. Finora "Allega scontrino" (`create_edit_transaction_sheet.
+dart`, disponibile solo in modifica: serve l'id della Transazione già salvata per collegare il
+Documento) era un allegato statico — upload e collegamento a `Transaction.documentId`, nessuna
+lettura del contenuto. In Chat invece `ai-chat` manda già blocchi immagine reali ad Anthropic
+(`fetchImageBlock`, Fase 3 slice 3) e il modello può già chiamare `extract_transactions` leggendo
+la foto: pipeline vision riusabile, non duplicata con un servizio OCR esterno (coerente con "mai un
+secondo provider AI diretto dal frontend").
+
+Nessuna migrazione: la Edge Function `ai-chat` guadagna una modalità isolata, attivata da un nuovo
+campo opzionale del body (`extractReceiptDocumentId`) che esce prima di richiedere `chatId` — nessuna
+riga `messages`/`chats` coinvolta, un solo giro con Anthropic e `tool_choice` che forza
+`extract_transactions` (non lasciato "auto" come nel resto della Chat, perché qui serve sempre un
+risultato strutturato, mai una risposta in prosa). Modello fisso (`RECEIPT_EXTRACTION_MODEL`,
+coerente con `kDefaultAiModel` lato mobile) dato che questa modalità non è legata a una riga `chats`
+da cui leggere `ai_model`. Se la foto non mostra uno scontrino leggibile, il system prompt istruisce
+il modello a usare comunque lo strumento ma con `amount_cents: 0`, scartato lato server
+(`sanitizeTransaction`, già esistente) invece di propagare dati inventati.
+
+Mobile: nuovo `TransactionRepository.extractReceiptData(documentId)`, best-effort come
+`BudgetRepository.checkBudgetAlert` (slice 28) — nessun `Failure` mai propagato, `null` per
+qualunque esito diverso da "estratto con successo". La conversione della risposta JSON in un
+`ReceiptExtraction` (nuova entità: type/description/amountCents/occurredAt/category) è isolata in
+una funzione pura (`parseReceiptExtractionResponse` in `supabase_transaction_repository.dart`)
+proprio per poterla testare senza mockare il client Supabase — nessun test in questo progetto
+esercita un `Supabase*Repository` direttamente, sempre tramite l'interfaccia di dominio via un
+fake. Subito dopo un upload+attach riuscito (`_pickAndAttachReceipt` in
+`create_edit_transaction_sheet.dart`), `_prefillFromReceipt` chiama il nuovo metodo e, se produce
+un risultato, precompila descrizione/importo/categoria — mai la data né il tipo (sempre "uscita"
+per uno scontrino, e comunque non modificabile in modifica) — lasciando comunque l'utente libero di
+correggere prima di salvare.
+
+Verificato: `deno check`/`deno lint`/`deno fmt --check` sulle parti nuove di `ai-chat` (i 2
+problemi lint pre-esistenti segnalati su `extractToolUseBlocks` e le divergenze di `deno fmt` sul
+resto del file non sono stati introdotti da questa slice — verificato confrontando lint/fmt prima e
+dopo la modifica, nessuna riga toccata da questa slice compare in quei problemi); test della
+funzione pura `parseReceiptExtractionResponse` (risposta valida, risultato assente, importo zero,
+descrizione vuota, data non parsabile, categoria sconosciuta, tipo diverso da income/expense).
+**Non verificato in questa sessione**: il precompilamento effettivo nel form richiede
+selezionare/caricare un file reale (`file_picker`, non mockabile in questi test — stesso limite già
+documentato per l'allegato scontrino originale) e nessuna chiamata Anthropic reale (richiederebbe
+un progetto Supabase remoto o Docker).
+
+## Fase 3 (slice 30) — Dettatura vocale in Chat
+
+Integrazione richiesta esplicitamente. Il piano originale (elaborato prima di verificare il
+pacchetto) prevedeva due implementazioni separate — Web Speech API scritta a mano via
+`package:web`/JS interop per il web, `speech_to_text` per mobile — per poi scoprire, leggendo il
+sorgente del pacchetto, che `speech_to_text` **include già** un'implementazione web federata
+(`speech_to_text_web.dart`) basata esattamente sullo stesso `package:web`/`dart:js_interop`/
+`dart:js_interop_unsafe` con lo stesso feature-detection (`SpeechRecognition`/
+`webkitSpeechRecognition`) che si sarebbe dovuto scrivere da zero. Deviazione dal piano scelta per
+manutenibilità (Engineering Constitution): un solo pacchetto testato dalla community invece di due
+implementazioni parallele con lo stesso comportamento atteso — nessun ramo `kIsWeb` scritto a mano
+in `chat_home_screen.dart`, il plugin risolve da sé quale implementazione usare in base alla
+piattaforma di build.
+
+Nuovo pulsante microfono in `_MessageInput` (tra il bottone foto e il campo testo, stesso pattern
+`tooltip`/`onPressed: isSending ? null : ...` dei bottoni vicini), visibile solo se
+`SpeechToText.initialize()` ha successo (anche un'eccezione, es. nessun plugin registrato, viene
+trattata come "non disponibile", mai un crash) — rischio esplicito già nel piano originale: il
+supporto del Web Speech API varia per browser, buono su Chrome/Edge, spesso assente/parziale su
+Safari. Mentre ascolta, `onResult` sostituisce in tempo reale il testo del campo con la
+trascrizione — l'utente vede e corregge prima di inviare, `_submit()` ferma automaticamente
+l'ascolto se ancora attivo.
+
+**Nota sulle piattaforme**: questo repository non ha ancora le cartelle `android/`/`ios/` (solo
+`web/`, coerente con "Sito web pubblicato" citato altrove in questa sessione) — il permesso
+microfono a runtime richiesto dal plugin su mobile reale (dichiarazioni in
+`AndroidManifest.xml`/`Info.plist`) non è quindi ancora applicabile a questo repository, da
+aggiungere quando quei target verranno generati con `flutter create`.
+
+Verificato: `flutter analyze` pulito; test widget con
+[`SpeechToTextPlatform.instance`](https://pub.dev/packages/speech_to_text_platform_interface)
+sostituito da un fake (`FakeSpeechToTextPlatform` — lo stesso seam di test ufficiale del plugin
+federato, usato anche dalla sua implementazione web reale): pulsante nascosto quando
+`initialize()` fallisce, pulsante visibile altrimenti, avvio/arresto dell'ascolto, trascrizione
+che sostituisce il testo del campo. **Scoperta rilevante durante la scrittura dei test**:
+`SpeechToText()` è una factory che ritorna sempre lo stesso singleton di processo — una volta che
+`initialize()` ha successo una volta, il suo flag interno resta permanentemente "vero" e le
+chiamate successive non interpellano più `SpeechToTextPlatform.instance` — per questo l'unico test
+che porta `initialize()` a un successo è l'ultimo del file (l'ordine dei test non è arbitrario, è
+documentato nel commento in testa al file). **Non verificato in questa sessione**: il supporto
+reale del Web Speech API in un browser vero (richiederebbe un ambiente browser reale, non
+disponibile in questa sandbox) e il permesso microfono su un dispositivo mobile reale (nessuna
+cartella `android`/`ios` in questo repository, vedi sopra).
+
+## Fase 3 (slice 31) — Sync con Google Calendar
+
+Integrazione richiesta esplicitamente. **Deviazione dal piano originale**: il piano prevedeva un
+flusso "cattura del token" generico; l'implementazione usa `supabase_flutter`'s `auth.
+linkIdentity(OAuthProvider.google, scopes: 'https://www.googleapis.com/auth/calendar.events')` —
+Supabase gestisce l'intero redirect OAuth e lo scambio codice/token, il client non vede mai il
+client secret di Google (CLAUDE.md, "mai il frontend collegato direttamente a un provider", qui
+esteso per analogia a un provider OAuth terzo, non solo un LLM).
+
+`20260723170000_google_calendar_sync.sql`:
+
+- `calendar_connections` (nuova tabella): un account Google per utente (`user_id` primary key,
+  come `push_subscriptions`), RLS `user_id = auth.uid()` su select/insert/update/delete.
+- `get_my_calendar_connection()` (funzione `security definer`, filtrata su `where user_id =
+  auth.uid()` — stesso principio di sicurezza già usato per `is_workspace_owner`/
+  `redeem_workspace_invite`): restituisce solo `google_calendar_id`/`last_synced_at`/`created_at`,
+  mai `google_refresh_token`. **Decisione di sicurezza presa durante l'implementazione**: il
+  client mobile non osserva `calendar_connections` in streaming come le altre entità dell'app — un
+  canale realtime Supabase (`postgres_changes`) invierebbe l'intera riga, token incluso, a ogni
+  aggiornamento. Lo stato "connesso" è quindi una singola chiamata (`fetchConnectionStatus`,
+  `FutureProvider` non `StreamProvider`), non un dato realtime.
+- `calendar_events.google_event_id` (additiva): collega ogni Promemoria al suo gemello su Google,
+  scritto solo da `sync-calendar-event`, mai dal client — evita un loop di sync nelle due direzioni.
+
+Tre nuove Edge Function (`infrastructure/supabase/README.md` per il dettaglio):
+`save-calendar-connection` (JWT del chiamante, salva il refresh token catturato dalla sessione
+subito dopo `linkIdentity`), `sync-calendar-event` (JWT del chiamante, stesso pattern di
+`send-test-push`/`send-budget-alert`: crea/cancella su Google, best-effort, mai un errore che
+blocca la create/delete locale già riuscita), `pull-google-calendar-events` (service role, stesso
+pattern di `send-due-reminders`, cron ogni 10 minuti: importa gli eventi Google nuovi/modificati
+nella sezione Appuntamenti locale).
+
+Mobile: nuovo `CalendarSyncRepository` (`beginConnect`/`disconnect`/`fetchConnectionStatus`) e
+`CalendarConnection` in `packages/domain`; `SupabaseCalendarSyncRepository` ascolta `auth.
+onAuthStateChange` fin dalla costruzione perché Supabase espone `session.providerRefreshToken`
+solo nel primo evento subito dopo un collegamento riuscito, mai persistito lato client — se il
+repository non fosse già "vivo" in quel momento il token andrebbe perso, ma nel flusso reale
+dell'app l'utente è necessariamente sulla schermata Profilo (da cui ha toccato "Connetti") quando
+torna dal redirect. `CalendarEventRepository.syncToGoogleCalendar` (nuovo metodo, chiamato da
+`CalendarEventFormController.create`/`delete`) è best-effort come `BudgetRepository.
+checkBudgetAlert` (slice 28). Nuova card "Google Calendar" in Profilo, nascosta finché l'app non è
+compilata con `--dart-define=GOOGLE_CALENDAR_ENABLED=true` (stesso principio di gating già usato
+per VAPID, qui però senza alcun valore da passare al client — solo un interruttore). **Limite
+noto**: `deleteSeries` (cancellare un'intera serie ricorrente) non sincronizza la cancellazione con
+Google — richiederebbe di risalire a ogni singolo id della serie prima della cancellazione, fuori
+scopo per questa integrazione.
+
+**Verificato manualmente su Postgres locale** (stesso schema fittizio `auth.uid()` già usato per
+le altre migrazioni, due utenti simulati — Alice/Bob): Alice inserisce/legge/aggiorna/cancella la
+propria riga; Bob non vede la riga di Alice né tramite `select` diretto né tramite
+`get_my_calendar_connection()`; ogni tentativo di Bob di inserire/aggiornare/cancellare la riga di
+Alice viene bloccato dalla RLS (0 righe interessate, nessuna eccezione necessaria oltre al reject
+dell'insert). Verificato anche `deno check`/`deno lint`/`deno fmt --check` sulle tre nuove Edge
+Function; test del trigger di sync (`calendar_event_controller_test.dart`: `create`/`delete`
+chiamano `syncToGoogleCalendar` con i parametri giusti, un `create` fallito non la chiama); entità
+`CalendarConnection`/campo `CalendarEvent.googleEventId` testati in `packages/domain`; test
+widget che la card "Google Calendar" resta nascosta senza `GOOGLE_CALENDAR_ENABLED` (il valore
+opposto non è testabile: è una costante di compilazione, non sovrascrivibile a runtime da
+`flutter test` — stesso limite già accettato per `_NotificationsCard`/VAPID, mai forzato a `true`
+in nessun test di questo progetto).
+
+**Non verificato in questa sessione**: nessun progetto Google Cloud/Supabase reale disponibile,
+quindi nessun flusso OAuth reale, nessuna chiamata reale all'API Google Calendar, e nessuna verifica
+di pg_cron/pg_net per `pull-google-calendar-events` (richiederebbero un progetto Supabase remoto
+con il provider Google abilitato — passi manuali documentati in
+`infrastructure/supabase/README.md`).
+
+## Fase 3 (slice 32) — Migliorie grafiche: redesign estetico 2.0 su tutte le schermate
+
+Richiesta esplicita dell'utente, nessuna migrazione né Edge Function: solo widget di
+presentazione lato mobile. Chat Home, Bilancio (globale e di Workspace) e Onboarding avevano già
+il gradiente `AppColors.heroGradient`/`AppShadows.glow`/`AppRadii.cardPremiumRadius`, introdotti
+nel redesign originale (slice 78-91 di Fase 3); le schermate rimaste "Material piatto" (`AppBar`
+semplice, o `LoadingView` invece di `SkeletonList`) lo riusano ora, senza introdurre nuovi token:
+`GradientAppBar` (già esistente) sostituisce `AppBar` in `note_list_screen.dart`,
+`task_list_screen.dart`, `document_list_screen.dart`, `search_screen.dart`,
+`workspace_list_screen.dart`, `shared_balance_screen.dart`, `transaction_report_screen.dart`
+(preservando la sua `actions: [...]` esistente) e `reminder_list_screen.dart`. `SkeletonList`
+(già esistente) sostituisce `LoadingView` in `workspace_list_screen.dart` e
+`shared_balance_screen.dart` — l'unica coppia di liste principali rimasta sul vecchio spinner
+pieno dopo la slice #112; lo spinner interno di `_ManageSharedBalanceSheetState` (elenco membri
+in un bottom sheet, non lo stato di caricamento della schermata) resta volutamente invariato.
+
+`transaction_report_screen.dart` guadagna anche una `_BalanceHeroCard` locale al file (stessa
+struttura di quella già in `balance_overview_screen.dart`: gradiente, saldo in bianco, due
+pillole traslucide Entrate/Uscite) al posto della `Card` piatta precedente — prima il Bilancio di
+un singolo Workspace e il Bilancio globale erano visivamente incoerenti tra loro nonostante
+mostrino lo stesso tipo di dato. In `profile_screen.dart`, l'header con avatar/nome/email diventa
+un riquadro con lo stesso gradiente hero e l'avatar ha `AppShadows.glow` (prima un `CircleAvatar`
+su sfondo piatto).
+
+**Scelta di scopo deliberata**: `search_screen.dart` mantiene `LoadingView()` (non `SkeletonList`)
+— il pass grafico nominava esplicitamente solo Spazi e Bilancio condiviso per quel cambio, pur
+essendo Ricerca tecnicamente nella stessa condizione; onorato lo scopo letterale invece di
+estenderlo motu proprio. Nessun test esistente cercava `find.byType(AppBar)` in nessuno degli 8
+file toccati (verificato prima di procedere): `flutter analyze` pulito, `dart format` stabile,
+intera suite di test (208 in `apps/mobile`, 40 in `packages/domain`) verde senza modifiche.
+
 ## Fasi successive
 
-Memory, Agent, Calendar Event, Timeline Event sono già modellate in `packages/domain` ma non
-hanno ancora una migrazione: arriveranno con le rispettive feature (`docs/product/26-execution-blueprint.md`).
+Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:
+arriveranno con le rispettive feature (`docs/product/26-execution-blueprint.md`). Memory ha ora
+una migrazione per Globale e Workspace (slice 15/16) — il livello Conversazione resta fuori scope
+finché la Chat non tornerà a supportare più conversazioni parallele (vedi slice 16 sopra).
 
 Note tecniche aperte dal Domain Model, da risolvere prima di quelle migrazioni:
 
 - `workspace_agents` come tabella di giunzione per la relazione many-to-many Agent↔Workspace.
-- Vincolo di coerenza tra `Memory.level` e l'owner valorizzato (già applicato lato dominio in
-  `packages/domain/lib/src/entities/memory.dart` con un `assert`; da replicare come `check`
-  constraint quando la tabella verrà creata).
 - Pattern polimorfico `entity_type` + `entity_id` per `Timeline Event`.

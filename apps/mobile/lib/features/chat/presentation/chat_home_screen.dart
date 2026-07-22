@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,12 +7,16 @@ import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../../core/providers.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../../auth/application/session_controller.dart';
 import '../../document/application/document_controller.dart';
+import '../../reminder/application/calendar_event_controller.dart';
+import '../../transaction/application/transaction_controller.dart';
 import '../../workspace/application/workspace_category_meta.dart';
 import '../../workspace/application/workspace_controller.dart';
 import '../../workspace/presentation/widgets/section_preview.dart';
@@ -26,25 +32,58 @@ import '../application/message_controller.dart';
 /// visibile — non scorre via con i messaggi — così le informazioni che la
 /// Chat ha già raccolto (saldo, attività aperte, documenti) sono sempre a un
 /// tocco di distanza.
-class ChatHomeScreen extends ConsumerWidget {
+class ChatHomeScreen extends ConsumerStatefulWidget {
   const ChatHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatHomeScreen> createState() => _ChatHomeScreenState();
+}
+
+/// Un trigger Postgres (`messages_touch_chat_last_message`) aggiorna
+/// `chats.last_message_at` ad ogni messaggio inserito — sia quello
+/// dell'utente sia quello dell'assistente. `singleChatProvider` dipende da
+/// `chatsProvider(null)` (uno stream realtime sulla tabella `chats`), quindi
+/// quell'aggiornamento lo fa "ricaricare" ad ogni invio e ad ogni risposta.
+/// Per le regole di default di Riverpod un ricaricamento del genere (diverso
+/// da un refresh manuale) passa comunque dal ramo `loading:` di
+/// `AsyncValue.when()`: senza questa cache, ad ogni messaggio l'intero corpo
+/// della schermata veniva sostituito con `LoadingView()`, distruggendo e
+/// ricreando da zero `_ChatHomeBody`/`_MessagesArea` — con essi lo
+/// `ScrollController` e la cache dei messaggi già mostrati. Era questa,
+/// non lo stream dei messaggi, la vera causa dello scatto "sale e poi
+/// scende" e del lampo su una parte più vecchia della conversazione (la
+/// lista ricreata riparte dalla cima, offset zero, prima del salto
+/// automatico in fondo).
+class _ChatHomeScreenState extends ConsumerState<ChatHomeScreen> {
+  String? _lastKnownChatId;
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(sessionControllerProvider).value;
     // Idempotente: crea solo le sezioni fisse mancanti (Fase 3, slice 7A).
     ref.watch(workspaceBootstrapProvider);
     final chatAsync = ref.watch(singleChatProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text(_greeting(user?.name))),
+      appBar: GradientAppBar(title: Text(_greeting(user?.name))),
       body: chatAsync.when(
-        loading: () => const LoadingView(),
-        error: (error, stackTrace) => ErrorView(
-          message: 'Non è stato possibile aprire la Chat.',
-          onRetry: () => ref.invalidate(singleChatProvider),
-        ),
-        data: (chat) => _ChatHomeBody(chatId: chat.id),
+        loading: () {
+          final cachedId = _lastKnownChatId;
+          if (cachedId != null) return _ChatHomeBody(chatId: cachedId);
+          return const LoadingView();
+        },
+        error: (error, stackTrace) {
+          final cachedId = _lastKnownChatId;
+          if (cachedId != null) return _ChatHomeBody(chatId: cachedId);
+          return ErrorView(
+            message: 'Non è stato possibile aprire la Chat.',
+            onRetry: () => ref.invalidate(singleChatProvider),
+          );
+        },
+        data: (chat) {
+          _lastKnownChatId = chat.id;
+          return _ChatHomeBody(chatId: chat.id);
+        },
       ),
     );
   }
@@ -62,56 +101,119 @@ class ChatHomeScreen extends ConsumerWidget {
   String _capitalize(String name) => name[0].toUpperCase() + name.substring(1);
 }
 
-class _ChatHomeBody extends ConsumerWidget {
+class _ChatHomeBody extends ConsumerStatefulWidget {
   const _ChatHomeBody({required this.chatId});
 
   final String chatId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ChatHomeBody> createState() => _ChatHomeBodyState();
+}
+
+class _ChatHomeBodyState extends ConsumerState<_ChatHomeBody> {
+  // Richiesta esplicita dell'utente: "la sezione che riporta le workspace
+  // vorrei fosse nascondibile" — non tocca i dati, solo quanto spazio la
+  // striscia occupa sopra la conversazione.
+  bool _sectionsCollapsed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final chatId = widget.chatId;
     final workspaces = ref.watch(workspacesProvider).value ?? const [];
     final sections = <Workspace>[
       for (final category in SystemWorkspaceCategory.all)
         ...workspaces.where((w) => w.category == category),
     ];
     // Le transazioni scritte in Chat vanno sempre nella sezione Bilancio, le
-    // foto sempre in Documenti — indipendentemente da dove si trovano nella
-    // lista (Fase 3, slice 7A ha già reso questi id stabili e unici per
-    // categoria). `null` finché il bootstrap non ha ancora creato le sezioni.
+    // foto sempre in Documenti, i promemoria sempre in Appuntamenti —
+    // indipendentemente da dove si trovano nella lista (Fase 3, slice 7A ha
+    // già reso questi id stabili e unici per categoria). `null` finché il
+    // bootstrap non ha ancora creato le sezioni.
     final bilancioId =
         _idForCategory(workspaces, SystemWorkspaceCategory.bilancio);
     final documentiId =
         _idForCategory(workspaces, SystemWorkspaceCategory.documenti);
+    final appuntamentiId =
+        _idForCategory(workspaces, SystemWorkspaceCategory.appuntamenti);
+    final attivitaId =
+        _idForCategory(workspaces, SystemWorkspaceCategory.attivita);
 
     return Column(
       children: [
         if (sections.isNotEmpty)
           Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
+              // Leggero gradiente verticale invece di un colore piatto
+              // (redesign estetico 2.0): stessa superficie di prima, solo con
+              // più profondità.
+              gradient: LinearGradient(
+                colors: [
+                  Theme.of(context).colorScheme.surface,
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
               boxShadow: AppShadows.card(
                 isDark: Theme.of(context).brightness == Brightness.dark,
               ),
             ),
-            padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-            // Più sottile e leggera della card completa usata nella tab
-            // Workspace (richiesta esplicita dell'utente: "più sottile ed
-            // esteticamente più bella ed intuitiva") — solo icona, nome e
-            // anteprima, senza il menu Rinomina/Elimina: qui è una scorciatoia
-            // di lettura, non il posto da cui gestire un Workspace.
-            child: SizedBox(
-              height: 56,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: sections.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(width: AppSpacing.sm),
-                itemBuilder: (context, index) {
-                  final section = sections[index];
-                  return _SectionChip(workspace: section);
-                },
-              ),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  onTap: () =>
+                      setState(() => _sectionsCollapsed = !_sectionsCollapsed),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Sezioni',
+                          style: AppTypography.caption
+                              .copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        Icon(
+                          _sectionsCollapsed
+                              ? Icons.expand_more
+                              : Icons.expand_less,
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Più sottile e leggera della card completa usata nella tab
+                // Workspace (richiesta esplicita dell'utente: "più sottile ed
+                // esteticamente più bella ed intuitiva") — solo icona, nome e
+                // anteprima, senza il menu Rinomina/Elimina: qui è una
+                // scorciatoia di lettura, non il posto da cui gestire un
+                // Workspace.
+                AnimatedCrossFade(
+                  duration: const Duration(milliseconds: 200),
+                  crossFadeState: _sectionsCollapsed
+                      ? CrossFadeState.showFirst
+                      : CrossFadeState.showSecond,
+                  firstChild: const SizedBox(width: double.infinity),
+                  secondChild: SizedBox(
+                    height: 56,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: sections.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(width: AppSpacing.sm),
+                      itemBuilder: (context, index) {
+                        final section = sections[index];
+                        return _SectionChip(workspace: section);
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+              ],
             ),
           ),
         Expanded(
@@ -122,13 +224,34 @@ class _ChatHomeBody extends ConsumerWidget {
             color: Theme.of(context).brightness == Brightness.light
                 ? const Color(0xFFECE5DD)
                 : const Color(0xFF0B141A),
-            child: _MessagesArea(chatId: chatId),
+            // Macchie di colore sfumate sullo sfondo (redesign estetico 2.0 —
+            // richiesta esplicita dell'utente: "molto tecnologica"): danno
+            // profondità a uno sfondo altrimenti piatto, senza interferire
+            // con la leggibilità delle bolle sopra (IgnorePointer: sono solo
+            // decorative, non devono intercettare lo scroll/i tap).
+            child: Stack(
+              children: [
+                Positioned(
+                  top: -60,
+                  right: -50,
+                  child: _GlowBlob(color: AppColors.heroGradient.first),
+                ),
+                Positioned(
+                  bottom: -80,
+                  left: -60,
+                  child: _GlowBlob(color: AppColors.heroGradient.last),
+                ),
+                _MessagesArea(chatId: chatId),
+              ],
+            ),
           ),
         ),
         _MessageInput(
           chatId: chatId,
           transactionsWorkspaceId: bilancioId,
           documentsWorkspaceId: documentiId,
+          remindersWorkspaceId: appuntamentiId,
+          tasksWorkspaceId: attivitaId,
         ),
       ],
     );
@@ -144,35 +267,86 @@ class _ChatHomeBody extends ConsumerWidget {
 
 /// Sezione fissa nella striscia in testa alla Chat: solo icona colorata,
 /// nome e anteprima viva — nessun menu (quello resta nella tab Workspace).
-class _SectionChip extends StatelessWidget {
+class _SectionChip extends ConsumerWidget {
   const _SectionChip({required this.workspace});
 
   final Workspace workspace;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final meta = WorkspaceCategoryMeta.of(workspace.category);
     final tint = meta?.color ?? Theme.of(context).colorScheme.primary;
     final icon = meta?.icon ?? Icons.folder_outlined;
 
+    // Badge coi promemoria di oggi (richiesta esplicita dell'utente: "badge
+    // sulla tab Appuntamenti") — solo per la sezione Appuntamenti, non
+    // osserva `calendarEventsProvider` per le altre (nessuna sottoscrizione
+    // in più senza motivo).
+    final remindersToday =
+        workspace.category == SystemWorkspaceCategory.appuntamenti
+            ? ref.watch(calendarEventsProvider(workspace.id)).maybeWhen(
+                  data: (events) => remindersDueToday(events).length,
+                  orElse: () => 0,
+                )
+            : 0;
+
     return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: Colors.transparent,
       borderRadius: AppRadii.buttonRadius,
       child: InkWell(
         borderRadius: AppRadii.buttonRadius,
-        onTap: () => GoRouter.of(context).push('/workspace/${workspace.id}'),
-        child: Padding(
+        // La sezione Appuntamenti apre direttamente il calendario
+        // (richiesta esplicita dell'utente: "vorrei vedere il calendario"),
+        // non l'anteprima generica del Workspace — da lì era raggiungibile
+        // solo con un tocco in più su "vedi tutti".
+        onTap: () => GoRouter.of(context).push(
+          workspace.category == SystemWorkspaceCategory.appuntamenti
+              ? '/workspace/${workspace.id}/reminders'
+              : '/workspace/${workspace.id}',
+        ),
+        child: Container(
+          // Sfondo sfumato tenue nel colore della categoria + bordo sottile
+          // (redesign estetico 2.0): dà rilievo alla singola sezione senza
+          // la pesantezza di un alone diffuso (riservato agli elementi
+          // "hero", vedi AppShadows.glow).
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [tint.withOpacity(0.16), tint.withOpacity(0.04)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: AppRadii.buttonRadius,
+            border: Border.all(color: tint.withOpacity(0.25)),
+          ),
           padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                    color: tint.withOpacity(0.15), shape: BoxShape.circle),
-                child: Icon(icon, size: 16, color: tint),
+              Badge(
+                isLabelVisible: remindersToday > 0,
+                label: Text('$remindersToday'),
+                backgroundColor: AppColors.error,
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [tint, tint.withOpacity(0.65)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: tint.withOpacity(0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, size: 16, color: Colors.white),
+                ),
               ),
               const SizedBox(width: AppSpacing.xs),
               ConstrainedBox(
@@ -203,6 +377,30 @@ class _SectionChip extends StatelessWidget {
   }
 }
 
+/// Macchia di colore sfumata e decorativa (vedi commento sopra, nello sfondo
+/// della Chat) — `IgnorePointer` perché non deve mai intercettare tap/scroll.
+class _GlowBlob extends StatelessWidget {
+  const _GlowBlob({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: 220,
+        height: 220,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [color.withOpacity(0.16), color.withOpacity(0.0)],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Messaggi con scorrimento automatico verso il basso — senza, ogni nuovo
 /// messaggio (proprio o dell'assistente) restava fuori vista finché l'utente
 /// non scorreva a mano: bug segnalato dall'utente ("quando risponde non si
@@ -224,9 +422,35 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
   final _scrollController = ScrollController();
   bool _scrolledInitially = false;
 
+  // Non deriva più direttamente da `messageFormControllerProvider.isLoading`:
+  // misurando lo scroll frame per frame (vedi scroll_diagnostic_test.dart) si
+  // vede che la risposta HTTP di sendMessage (che fa scattare isLoading a
+  // false) arriva tipicamente PRIMA della notifica Realtime dell'insert del
+  // messaggio dell'assistente (due canali indipendenti, con latenze
+  // indipendenti). Nascondere la bolla "sta scrivendo" a isLoading=false
+  // toglieva contenuto dalla lista mentre lo scroll era ancorato in fondo:
+  // Flutter corregge la posizione istantaneamente, senza animazione — lo
+  // scatto "sale e poi scende" segnalato dall'utente. Resta visibile finché
+  // non arriva davvero l'ultimo messaggio dell'assistente, con un timeout di
+  // sicurezza in caso di errore (nessun messaggio in arrivo).
+  bool _waitingForReply = false;
+  Timer? _waitingForReplyTimeout;
+
+  // Il flusso realtime di `messagesProvider` può ripartire da zero (es. una
+  // riconnessione del canale Supabase Realtime) e ripassare per uno stato di
+  // caricamento: osservato in produzione subito dopo un invio, con la lista
+  // che spariva per un istante mostrando una schermata vuota — o perfino una
+  // porzione molto più vecchia della conversazione, prima di riallinearsi —
+  // un secondo scatto indipendente da quelli già corretti sopra. Tenendo in
+  // cache l'ultimo elenco valido e continuando a mostrarlo durante un
+  // ricaricamento (invece di sostituirlo con uno spinner a schermo intero),
+  // quel ricaricamento diventa invisibile: la lista non sparisce mai.
+  List<Message>? _lastKnownMessages;
+
   @override
   void dispose() {
     _scrollController.dispose();
+    _waitingForReplyTimeout?.cancel();
     super.dispose();
   }
 
@@ -248,65 +472,101 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(messagesProvider(widget.chatId), (_, __) {
+    ref.listen(messagesProvider(widget.chatId), (_, next) {
       final optimisticNotifier =
           ref.read(optimisticMessageProvider(widget.chatId).notifier);
       if (optimisticNotifier.state != null) optimisticNotifier.state = null;
+      final messages = next.value;
+      if (_waitingForReply &&
+          messages != null &&
+          messages.isNotEmpty &&
+          messages.last.role == MessageRole.ai) {
+        _waitingForReplyTimeout?.cancel();
+        setState(() => _waitingForReply = false);
+      }
       _scrollToBottom();
     });
-    // Solo quando l'invio INIZIA (per rivelare la bolla "sta scrivendo…"):
-    // quando l'invio finisce, il nuovo messaggio dell'assistente arriva quasi
-    // in contemporanea via Realtime e il listener sopra già scorre in fondo —
-    // due animazioni di scroll indipendenti avviate nello stesso istante
-    // erano la causa dello "scatto" segnalato dall'utente.
     ref.listen(
       messageFormControllerProvider.select((state) => state.isLoading),
       (previous, isLoading) {
-        if (isLoading) _scrollToBottom();
+        if (isLoading) {
+          // Annulla un eventuale timeout di sicurezza rimasto da un
+          // isLoading->false precedente e NON collegato a questo invio (es.
+          // quello innocuo generato dalla stessa inizializzazione del
+          // provider all'apertura della chat, coperto anche da un test
+          // dedicato): senza questa cancellazione, quel timer può scattare
+          // a metà di un invio successivo e nascondere la bolla troppo
+          // presto — bug osservato riproducendo la sequenza in un browser
+          // reale con log di diagnostica.
+          _waitingForReplyTimeout?.cancel();
+          setState(() => _waitingForReply = true);
+          _scrollToBottom();
+          return;
+        }
+        // Non nasconde subito la bolla: aspetta il messaggio reale (vedi
+        // sopra) o, se non arriva mai (es. errore), il timeout di sicurezza.
+        _waitingForReplyTimeout?.cancel();
+        _waitingForReplyTimeout = Timer(const Duration(seconds: 5), () {
+          if (mounted && _waitingForReply) {
+            setState(() => _waitingForReply = false);
+          }
+        });
       },
     );
     final messagesAsync = ref.watch(messagesProvider(widget.chatId));
-    final isSending = ref.watch(messageFormControllerProvider).isLoading;
     final optimisticMessage =
         ref.watch(optimisticMessageProvider(widget.chatId));
 
     return messagesAsync.when(
-      loading: () => const LoadingView(),
-      error: (error, stackTrace) => ErrorView(
-        message: 'Non è stato possibile caricare i messaggi.',
-        onRetry: () => ref.invalidate(messagesProvider(widget.chatId)),
-      ),
-      data: (messages) {
-        final displayMessages = [
-          ...messages,
-          if (optimisticMessage != null) optimisticMessage,
-        ];
-        if (displayMessages.isEmpty && !isSending) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(AppSpacing.xl),
-              child: Text(
-                'Scrivi il primo messaggio per iniziare: puoi raccontare '
-                'una spesa, un appuntamento, o quello che vuoi organizzare.',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          );
-        }
-        if (!_scrolledInitially && messages.isNotEmpty) {
-          _scrolledInitially = true;
-          _scrollToBottom(animate: false);
-        }
-        final itemCount = displayMessages.length + (isSending ? 1 : 0);
-        return ListView.builder(
-          controller: _scrollController,
-          padding: const EdgeInsets.all(AppSpacing.md),
-          itemCount: itemCount,
-          itemBuilder: (context, index) {
-            if (index == displayMessages.length) return const _TypingBubble();
-            return _MessageBubble(message: displayMessages[index]);
-          },
+      loading: () {
+        final cached = _lastKnownMessages;
+        if (cached != null) return _buildList(cached, optimisticMessage);
+        return const LoadingView();
+      },
+      error: (error, stackTrace) {
+        final cached = _lastKnownMessages;
+        if (cached != null) return _buildList(cached, optimisticMessage);
+        return ErrorView(
+          message: 'Non è stato possibile caricare i messaggi.',
+          onRetry: () => ref.invalidate(messagesProvider(widget.chatId)),
         );
+      },
+      data: (messages) {
+        _lastKnownMessages = messages;
+        return _buildList(messages, optimisticMessage);
+      },
+    );
+  }
+
+  Widget _buildList(List<Message> messages, Message? optimisticMessage) {
+    final displayMessages = [
+      ...messages,
+      if (optimisticMessage != null) optimisticMessage,
+    ];
+    if (displayMessages.isEmpty && !_waitingForReply) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(AppSpacing.xl),
+          child: Text(
+            'Scrivi il primo messaggio per iniziare: puoi raccontare '
+            'una spesa, un appuntamento, o quello che vuoi organizzare.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+    if (!_scrolledInitially && messages.isNotEmpty) {
+      _scrolledInitially = true;
+      _scrollToBottom(animate: false);
+    }
+    final itemCount = displayMessages.length + (_waitingForReply ? 1 : 0);
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        if (index == displayMessages.length) return const _TypingBubble();
+        return _MessageBubble(message: displayMessages[index]);
       },
     );
   }
@@ -360,20 +620,21 @@ class _TypingBubble extends StatelessWidget {
   }
 }
 
-class _MessageBubble extends StatelessWidget {
+class _MessageBubble extends ConsumerWidget {
   const _MessageBubble({required this.message});
 
   final Message message;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isUser = message.role == MessageRole.user;
-    final bubbleColor = isUser
-        ? theme.colorScheme.primary
-        : theme.colorScheme.surfaceContainerHighest;
-    final textColor =
-        isUser ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface;
+    // Bianco fisso per il testo dell'utente (non `onPrimary`, che in dark
+    // mode è pensato per un primary chiaro, non per il gradiente scuro
+    // heroGradient usato qui sotto — vedi decoration della bolla): il
+    // gradiente è lo stesso in entrambi i temi (come siriGlow), quindi anche
+    // il contrasto del testo resta costante.
+    final textColor = isUser ? Colors.white : theme.colorScheme.onSurface;
 
     // Angolo "a coda", stile WhatsApp: un raggio molto più piccolo sull'angolo
     // rivolto verso il mittente, gli altri tre restano arrotondati normalmente.
@@ -392,7 +653,18 @@ class _MessageBubble extends StatelessWidget {
       padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
-        color: bubbleColor,
+        // Gradiente "premium" solo per le bolle dell'utente (redesign
+        // estetico 2.0): quelle dell'assistente restano una superficie
+        // piatta, per non perdere il contrasto visivo tra i due mittenti che
+        // già distingue la conversazione a colpo d'occhio.
+        color: isUser ? null : theme.colorScheme.surfaceContainerHighest,
+        gradient: isUser
+            ? const LinearGradient(
+                colors: AppColors.heroGradient,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : null,
         borderRadius: bubbleRadius,
         boxShadow: AppShadows.card(isDark: theme.brightness == Brightness.dark),
       ),
@@ -421,16 +693,35 @@ class _MessageBubble extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-      child: Row(
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!isUser) ...[
-            const _AssistantAvatar(),
-            const SizedBox(width: AppSpacing.xs),
-          ],
-          Flexible(child: bubble),
+          Row(
+            mainAxisAlignment:
+                isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!isUser) ...[
+                const _AssistantAvatar(),
+                const SizedBox(width: AppSpacing.xs),
+              ],
+              Flexible(child: bubble),
+            ],
+          ),
+          // Conferma/Scarta subito sotto la risposta dell'assistente
+          // (richiesta esplicita dell'utente: "azioni rapide sulle
+          // transazioni pending direttamente in chat") — solo per i
+          // messaggi che hanno davvero generato transazioni ancora in
+          // attesa di conferma (un id può non esserlo più: già
+          // confermato/scartato da qui o dal Bilancio).
+          if (!isUser && message.pendingTransactionIds.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(
+                  left: 28 + AppSpacing.xs, top: AppSpacing.xs),
+              child: _PendingTransactionActions(
+                transactionIds: message.pendingTransactionIds,
+              ),
+            ),
         ],
       ),
     );
@@ -452,14 +743,133 @@ class _AssistantAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return CircleAvatar(
-      radius: 14,
-      backgroundColor: theme.colorScheme.secondaryContainer,
-      child: Icon(Icons.auto_awesome,
-          size: 16, color: theme.colorScheme.onSecondaryContainer),
+    // Gradiente al posto del secondaryContainer piatto (redesign estetico
+    // 2.0): stessa famiglia cromatica delle bolle dell'utente e dell'AppBar,
+    // così l'assistente è riconoscibile a colpo d'occhio ovunque compaia.
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(
+          colors: AppColors.heroGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.heroGradient.first.withOpacity(0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: const Icon(Icons.auto_awesome, size: 15, color: Colors.white),
     );
   }
+}
+
+/// Conferma/Scarta inline per le Transazioni pending generate da un messaggio
+/// (richiesta esplicita dell'utente): riusa lo stesso
+/// `transactionFormControllerProvider` del Bilancio, nessuna nuova azione da
+/// costruire. Filtra sempre per `status == pending` al momento della
+/// lettura: un id già confermato/scartato (da qui o dal Bilancio) smette
+/// semplicemente di comparire, senza dover aggiornare il messaggio.
+class _PendingTransactionActions extends ConsumerWidget {
+  const _PendingTransactionActions({required this.transactionIds});
+
+  final List<String> transactionIds;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final transactions = ref.watch(transactionsProvider(null)).value ?? [];
+    final idSet = transactionIds.toSet();
+    final pending = transactions
+        .where((t) =>
+            idSet.contains(t.id) && t.status == TransactionStatus.pending)
+        .toList(growable: false);
+
+    if (pending.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final transaction in pending) ...[
+          _PendingTransactionActionTile(transaction: transaction),
+          const SizedBox(height: AppSpacing.xs),
+        ],
+      ],
+    );
+  }
+}
+
+class _PendingTransactionActionTile extends ConsumerWidget {
+  const _PendingTransactionActionTile({required this.transaction});
+
+  final Transaction transaction;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final isIncome = transaction.type == TransactionType.income;
+    final isBusy = ref.watch(transactionFormControllerProvider).isLoading;
+
+    return Container(
+      constraints:
+          BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: AppRadii.buttonRadius,
+        boxShadow: AppShadows.card(isDark: theme.brightness == Brightness.dark),
+      ),
+      child: Row(
+        children: [
+          Text(isIncome ? '💰' : '💸', style: const TextStyle(fontSize: 16)),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  transaction.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption
+                      .copyWith(fontWeight: FontWeight.w600),
+                ),
+                Text(_formatAmount(transaction.amountCents),
+                    style: AppTypography.caption),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.check_circle_outline, size: 20),
+            tooltip: 'Conferma',
+            onPressed: isBusy
+                ? null
+                : () => ref
+                    .read(transactionFormControllerProvider.notifier)
+                    .confirm(transaction.id),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 20),
+            tooltip: 'Scarta',
+            onPressed: isBusy
+                ? null
+                : () => ref
+                    .read(transactionFormControllerProvider.notifier)
+                    .delete(transaction.id),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatAmount(int amountCents) =>
+      '${(amountCents / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
 }
 
 /// Foto allegata a un messaggio: la UI conosce solo l'id del [Document]
@@ -507,6 +917,8 @@ class _MessageInput extends ConsumerStatefulWidget {
     required this.chatId,
     required this.transactionsWorkspaceId,
     required this.documentsWorkspaceId,
+    required this.remindersWorkspaceId,
+    required this.tasksWorkspaceId,
   });
 
   final String chatId;
@@ -520,23 +932,119 @@ class _MessageInput extends ConsumerStatefulWidget {
   /// da [transactionsWorkspaceId] — sono due sezioni fisse distinte).
   final String? documentsWorkspaceId;
 
+  /// Sezione Appuntamenti dell'utente: passata come contesto all'Edge
+  /// Function `ai-chat` per abilitare `create_reminder` (Fase 3, "Promemoria
+  /// via Chat") — un promemoria riconosciuto in Chat va sempre lì, mai nella
+  /// sezione Bilancio.
+  final String? remindersWorkspaceId;
+
+  /// Sezione Attività dell'utente: passata come contesto all'Edge Function
+  /// `ai-chat` per abilitare `manage_tasks` (richiesta esplicita dell'utente:
+  /// "liste/checklist via Chat") — un elemento di lista riconosciuto in Chat
+  /// va sempre lì come Task, mai nella sezione Bilancio/Appuntamenti.
+  final String? tasksWorkspaceId;
+
   @override
   ConsumerState<_MessageInput> createState() => _MessageInputState();
 }
 
 class _MessageInputState extends ConsumerState<_MessageInput> {
   final _controller = TextEditingController();
+  final _focusNode = FocusNode();
   String? _errorMessage;
   PlatformFile? _pendingPhoto;
   bool _isUploadingPhoto = false;
   bool _showEmojiPicker = false;
 
+  // Dettatura vocale (integrazione richiesta esplicitamente). `SpeechToText`
+  // risolve da sé l'implementazione per piattaforma (canale nativo su
+  // mobile/desktop, Web Speech API su web tramite il plugin federato
+  // `speech_to_text_web`) — nessun ramo `kIsWeb` scritto a mano qui.
+  final _speech = SpeechToText();
+  bool _speechAvailable = false;
+  bool _isListening = false;
+
   bool get _canAttachPhoto => widget.documentsWorkspaceId != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _initSpeech();
+  }
+
+  /// Il pulsante di dettatura compare solo se `initialize()` ha successo:
+  /// niente bottone che poi fallisce silenziosamente al tocco (richiesta
+  /// esplicita, rischio segnalato: il supporto varia per browser — buono su
+  /// Chrome/Edge, spesso assente su Safari). Su mobile `initialize()` è
+  /// anche il punto in cui viene richiesto il permesso microfono a runtime.
+  /// Un errore qui (piattaforma senza plugin registrato, API non
+  /// disponibile) equivale semplicemente a "non disponibile", non a un
+  /// crash: stesso trattamento del caso "API assente".
+  Future<void> _initSpeech() async {
+    var available = false;
+    try {
+      available = await _speech.initialize(
+        onStatus: (status) {
+          if ((status == 'done' || status == 'notListening') && mounted) {
+            setState(() => _isListening = false);
+          }
+        },
+        onError: (_) {
+          if (mounted) setState(() => _isListening = false);
+        },
+      );
+    } catch (_) {
+      available = false;
+    }
+    if (mounted) setState(() => _speechAvailable = available);
+  }
+
+  /// Avvia/ferma la dettatura. Il testo trascritto sostituisce in tempo
+  /// reale il contenuto del campo — l'utente vede e può correggere prima di
+  /// inviare ("l'AI suggerisce, l'utente decide", stesso principio già
+  /// applicato al resto della Chat, qui per la trascrizione).
+  Future<void> _toggleListening() async {
+    if (_isListening) {
+      await _speech.stop();
+      if (mounted) setState(() => _isListening = false);
+      return;
+    }
+    setState(() => _isListening = true);
+    try {
+      await _speech.listen(
+        onResult: (result) {
+          _controller.value = TextEditingValue(
+            text: result.recognizedWords,
+            selection:
+                TextSelection.collapsed(offset: result.recognizedWords.length),
+          );
+        },
+      );
+    } catch (_) {
+      if (mounted) setState(() => _isListening = false);
+    }
+  }
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
+    if (_isListening) _speech.stop();
     super.dispose();
+  }
+
+  /// Applica un suggerimento rapido (richiesta esplicita dell'utente: "chip
+  /// di suggerimento in Chat") scrivendo il testo nel campo — non invia
+  /// subito: "Ricorda che..." e "Aggiungi alla lista" sono prefissi da
+  /// completare, non frasi pronte, e lo stesso comportamento per tutti i chip
+  /// (anche quelli già completi, es. il saldo) resta più prevedibile di due
+  /// meccaniche diverse a seconda del testo.
+  void _applySuggestion(String text) {
+    _controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _focusNode.requestFocus();
   }
 
   Future<void> _pickPhoto() async {
@@ -559,6 +1067,10 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     final content = _controller.text;
     if (content.trim().isEmpty) return;
 
+    if (_isListening) {
+      await _speech.stop();
+      if (mounted) setState(() => _isListening = false);
+    }
     setState(() => _errorMessage = null);
 
     var attachmentIds = const <String>[];
@@ -603,6 +1115,8 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
           workspaceId: widget.transactionsWorkspaceId,
           content: content,
           attachmentIds: attachmentIds,
+          remindersWorkspaceId: widget.remindersWorkspaceId,
+          tasksWorkspaceId: widget.tasksWorkspaceId,
         );
 
     if (!mounted) return;
@@ -652,9 +1166,20 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     final isSending =
         ref.watch(messageFormControllerProvider).isLoading || _isUploadingPhoto;
 
+    final theme = Theme.of(context);
     return SafeArea(
       top: false,
-      child: Padding(
+      // Barra "flottante" con angoli superiori arrotondati e ombra (redesign
+      // estetico 2.0): separa visivamente l'input dallo sfondo della Chat
+      // invece di un semplice padding trasparente.
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppRadii.cardPremium)),
+          boxShadow:
+              AppShadows.card(isDark: theme.brightness == Brightness.dark),
+        ),
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -675,6 +1200,22 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error)),
               const SizedBox(height: AppSpacing.sm),
             ],
+            // Nascosti appena l'utente inizia a scrivere (richiesta esplicita
+            // dell'utente: chip di suggerimento) — `ValueListenableBuilder`
+            // su `_controller` invece di un listener manuale + `setState`.
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _controller,
+              builder: (context, value, child) {
+                if (value.text.isNotEmpty || isSending) {
+                  return const SizedBox.shrink();
+                }
+                return child!;
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: _QuickSuggestionsRow(onSelected: _applySuggestion),
+              ),
+            ),
             Row(
               children: [
                 IconButton(
@@ -697,13 +1238,31 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                       (isSending || !_canAttachPhoto) ? null : _pickPhoto,
                   icon: const Icon(Icons.add_photo_alternate_outlined),
                 ),
+                if (_speechAvailable)
+                  IconButton(
+                    tooltip:
+                        _isListening ? 'Ferma dettatura' : 'Dettatura vocale',
+                    onPressed: isSending ? null : _toggleListening,
+                    icon: Icon(
+                      _isListening ? Icons.mic : Icons.mic_none_outlined,
+                      color: _isListening ? theme.colorScheme.error : null,
+                    ),
+                  ),
                 Expanded(
                   child: TextField(
                     controller: _controller,
+                    focusNode: _focusNode,
                     minLines: 1,
                     maxLines: 4,
-                    decoration:
-                        const InputDecoration(hintText: 'Scrivi un messaggio…'),
+                    decoration: InputDecoration(
+                      hintText: 'Scrivi un messaggio…',
+                      // Sfondo del campo distinto da quello della barra
+                      // (entrambi altrimenti "surface"): senza questo, il
+                      // redesign 2.0 della barra flottante annullerebbe il
+                      // contrasto che rendeva il campo riconoscibile.
+                      filled: true,
+                      fillColor: theme.colorScheme.surfaceContainerHighest,
+                    ),
                     onSubmitted: (_) => _submit(),
                   ),
                 ),
@@ -717,6 +1276,69 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
             if (_showEmojiPicker) ...[
               const SizedBox(height: AppSpacing.sm),
               _EmojiPicker(onSelected: _insertEmoji),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickSuggestion {
+  const _QuickSuggestion(
+      {required this.label, required this.text, required this.icon});
+
+  final String label;
+  final String text;
+  final IconData icon;
+}
+
+/// Chip di suggerimento rapido sopra il campo di testo (richiesta esplicita
+/// dell'utente: "chip di suggerimento in Chat") — copre le tre azioni più
+/// comuni già supportate dall'assistente (saldo del mese: query di sola
+/// lettura sui dati reali; Memoria: `remember_fact`; liste: `manage_tasks`),
+/// senza dover ricordare come formularle.
+const _quickSuggestions = [
+  _QuickSuggestion(
+    label: 'Chiedi il saldo',
+    text: 'Quanto ho speso questo mese?',
+    icon: Icons.account_balance_wallet_outlined,
+  ),
+  _QuickSuggestion(
+    label: 'Ricorda che...',
+    text: 'Ricorda che ',
+    icon: Icons.psychology_outlined,
+  ),
+  _QuickSuggestion(
+    label: 'Aggiungi alla lista',
+    text: 'Aggiungi alla lista: ',
+    icon: Icons.checklist_outlined,
+  ),
+];
+
+class _QuickSuggestionsRow extends StatelessWidget {
+  const _QuickSuggestionsRow({required this.onSelected});
+
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    // `SingleChildScrollView` + `Row`, non `ListView.separated`: alcuni test
+    // esistenti usano `find.byType(ListView)` assumendo che ce ne sia una
+    // sola (la lista messaggi) — un secondo `ListView` qui li romperebbe.
+    return SizedBox(
+      height: 36,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final suggestion in _quickSuggestions) ...[
+              ActionChip(
+                avatar: Icon(suggestion.icon, size: 16),
+                label: Text(suggestion.label),
+                onPressed: () => onSelected(suggestion.text),
+              ),
+              const SizedBox(width: AppSpacing.xs),
             ],
           ],
         ),

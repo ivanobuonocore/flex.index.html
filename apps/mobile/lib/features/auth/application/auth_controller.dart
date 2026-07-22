@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
 
 import '../../../core/providers.dart';
@@ -40,5 +41,21 @@ class AuthController extends AsyncNotifier<void> {
     state = const AsyncLoading();
     await ref.read(authRepositoryProvider).signOut();
     state = const AsyncData(null);
+  }
+
+  Future<Failure?> updateThemeMode(AppThemeMode mode) async {
+    state = const AsyncLoading();
+    final result = await ref.read(authRepositoryProvider).updateThemeMode(mode);
+    state = const AsyncData(null);
+    return result.fold((_) => null, (failure) => failure);
+  }
+
+  /// Segna l'onboarding leggero come completato (richiesta esplicita
+  /// dell'utente), così non compare più agli accessi successivi.
+  Future<Failure?> completeOnboarding() async {
+    state = const AsyncLoading();
+    final result = await ref.read(authRepositoryProvider).completeOnboarding();
+    state = const AsyncData(null);
+    return result.fold((_) => null, (failure) => failure);
   }
 }

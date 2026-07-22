@@ -11,6 +11,7 @@ final class Message {
     this.attachmentIds = const [],
     this.tokensUsed,
     this.sourceReferences = const [],
+    this.pendingTransactionIds = const [],
   });
 
   final String id;
@@ -24,6 +25,13 @@ final class Message {
   /// Riferimenti a fonti (es. Document.id) usate dall'AI per generare la risposta.
   final List<String> sourceReferences;
 
+  /// Id delle Transazioni pending create da questo messaggio (richiesta esplicita
+  /// dell'utente: "azioni rapide sulle transazioni pending direttamente in chat") —
+  /// permette alla Chat di mostrare Conferma/Scarta subito sotto la risposta
+  /// dell'assistente, senza dover risalire al Bilancio. Sempre vuoto per un
+  /// messaggio che non ha generato transazioni (compresi quelli di ruolo utente).
+  final List<String> pendingTransactionIds;
+
   @override
   bool operator ==(Object other) =>
       other is Message &&
@@ -34,7 +42,8 @@ final class Message {
       other.timestamp == timestamp &&
       _listEquals(other.attachmentIds, attachmentIds) &&
       other.tokensUsed == tokensUsed &&
-      _listEquals(other.sourceReferences, sourceReferences);
+      _listEquals(other.sourceReferences, sourceReferences) &&
+      _listEquals(other.pendingTransactionIds, pendingTransactionIds);
 
   @override
   int get hashCode => Object.hash(
@@ -46,6 +55,7 @@ final class Message {
         Object.hashAll(attachmentIds),
         tokensUsed,
         Object.hashAll(sourceReferences),
+        Object.hashAll(pendingTransactionIds),
       );
 
   @override

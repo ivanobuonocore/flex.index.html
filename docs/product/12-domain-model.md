@@ -16,6 +16,12 @@ Relazioni: possiede Workspace, crea Chat, possiede Memorie, crea Task, utilizza 
 Campi: id, nome, descrizione, icona, categoria, stato, colore (facoltativo), data creazione.
 Relazioni: contiene Chat, Documenti, Task, Note, Calendario, Knowledge Base, Timeline, Memoria di Workspace.
 
+**Nota terminologica**: nell'interfaccia mostrata all'utente questa entità è etichettata "Spazi"
+(tab in basso, titolo schermata — richiesta esplicita dell'utente di un termine diverso da
+"Workspace"). Il nome del dominio, le classi (`Workspace`, `WorkspaceCard`, ecc.) e le route
+(`/workspace/:id`) restano invariati: è una rinomina solo del testo visibile, non un cambio di
+modello.
+
 ### Chat
 Campi: id, titolo, modello AI, data creazione, ultimo messaggio, stato.
 Relazioni: appartiene a un Workspace (opzionale), contiene Messaggi, può generare Task e Memorie.
@@ -40,6 +46,13 @@ Relazioni: appartiene a un Workspace, creata manualmente o dall'AI.
 ### Memory
 Campi: id, contenuto, livello (Globale/Workspace/Conversazione), origine (utente/AI), data aggiornamento.
 Relazioni: può appartenere a un User, a un Workspace, collegata a una Chat.
+Prima implementazione reale in Fase 3 (richiesta esplicita dell'utente: "l'AI salva una nota
+quando dico esplicitamente ricorda che..."). Globale e Workspace sono persistiti e accessibili
+(`memories` — migrazione, RLS, repository): il Globale è scritto solo dall'AI (tool
+`remember_fact`, schermata Profilo → Memoria), il Workspace manualmente dall'utente (schermata
+`/workspace/:id/memories` — "Chat unica" non sa a quale Workspace collegare un ricordo pronunciato
+al suo interno). Conversazione resta modellata nello schema (colonna nullable, nessuna policy RLS)
+ma fuori scope finché la Chat non tornerà a supportare più conversazioni parallele.
 
 ### Transaction
 Aggiunta oltre allo scaffold originale (Fase 3, slice "Bilancio" — richiesta reale dell'utente,
@@ -53,13 +66,26 @@ transazioni estratte dall'AI nascono "in attesa di conferma" e diventano definit
 saldo del Workspace, solo su conferma esplicita dell'utente (AI Constitution, Principio 1); l'AI
 classifica anche la categoria, ma un errore di classificazione non impedisce la registrazione.
 
+### WorkspaceMember / WorkspaceInvite
+Aggiunte oltre allo scaffold originale (Fase 3, slice "Bilancio condiviso" — richiesta reale
+dell'utente: condividere il Bilancio con un'altra persona, mantenendo ciascuno il proprio Bilancio
+personale separato). Un Bilancio condiviso è un Workspace libero (categoria
+`sharedBalanceCategory`, non una sezione fissa) a cui un secondo utente viene ammesso tramite
+[WorkspaceInvite] (codice a uso singolo, con scadenza) → [WorkspaceMember] (appartenenza). Scope
+volutamente ridotto: la condivisione riguarda solo le Transazioni di quel Workspace, non
+Note/Attività/Documenti, che restano visibili solo al proprietario.
+
 ### Agent
 Campi: id, nome, descrizione, prompt di sistema, strumenti disponibili, modello AI preferito.
 Relazioni: associato a uno o più Workspace, utilizza Memoria, accede alla Knowledge Base autorizzata.
 
 ### Calendar Event
-Campi: id, titolo, data, ora, durata, promemoria.
-Relazioni: appartiene a un Workspace, può derivare da una Task o conversazione.
+Prima implementazione reale in Fase 3, "Promemoria via Chat" (CLAUDE.md — richiesta esplicita
+dell'utente: notifiche push vere, non un semplice elenco in app). Campi: id, titolo, data/ora di
+inizio, durata, minuti di preavviso (facoltativo), data di creazione, **notifiedAt** (valorizzato
+dalla Edge Function `send-due-reminders` non appena la notifica è stata inviata, evita un secondo
+invio allo stesso promemoria). Relazioni: appartiene a un Workspace (sempre la sezione
+Appuntamenti, se creato dalla Chat), può derivare da una Task o da una conversazione.
 
 ### Timeline Event
 Campi: id, tipo, descrizione, timestamp, autore.

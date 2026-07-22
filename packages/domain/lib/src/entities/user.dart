@@ -13,6 +13,8 @@ final class User {
     required this.createdAt,
     this.avatarUrl,
     this.lastSeenAt,
+    this.themeMode = AppThemeMode.system,
+    this.onboardingCompleted = false,
   });
 
   final String id;
@@ -23,11 +25,24 @@ final class User {
   final DateTime createdAt;
   final DateTime? lastSeenAt;
 
+  /// Preferenza di tema (richiesta esplicita dell'utente: "tema chiaro/
+  /// scuro"). Persistita lato identity provider (metadata dell'utenza), non
+  /// una nuova tabella: è una preferenza globale, non legata a un Workspace.
+  final AppThemeMode themeMode;
+
+  /// Onboarding leggero al primo accesso (richiesta esplicita dell'utente).
+  /// `false` per un account appena creato: la stessa idea di "preferenza
+  /// globale nei metadata dell'identity provider" di [themeMode], non una
+  /// nuova tabella.
+  final bool onboardingCompleted;
+
   User copyWith({
     String? name,
     String? avatarUrl,
     UserPlan? plan,
     DateTime? lastSeenAt,
+    AppThemeMode? themeMode,
+    bool? onboardingCompleted,
   }) {
     return User(
       id: id,
@@ -37,6 +52,8 @@ final class User {
       plan: plan ?? this.plan,
       createdAt: createdAt,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+      themeMode: themeMode ?? this.themeMode,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
     );
   }
 
@@ -49,11 +66,13 @@ final class User {
       other.avatarUrl == avatarUrl &&
       other.plan == plan &&
       other.createdAt == createdAt &&
-      other.lastSeenAt == lastSeenAt;
+      other.lastSeenAt == lastSeenAt &&
+      other.themeMode == themeMode &&
+      other.onboardingCompleted == onboardingCompleted;
 
   @override
-  int get hashCode =>
-      Object.hash(id, email, name, avatarUrl, plan, createdAt, lastSeenAt);
+  int get hashCode => Object.hash(id, email, name, avatarUrl, plan, createdAt,
+      lastSeenAt, themeMode, onboardingCompleted);
 
   @override
   String toString() => 'User(id: $id, email: $email, plan: $plan)';

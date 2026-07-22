@@ -32,6 +32,8 @@ class SupabaseMessageRepository implements MessageRepository {
     required String? workspaceId,
     required String content,
     List<String> attachmentIds = const [],
+    String? remindersWorkspaceId,
+    String? tasksWorkspaceId,
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty) {
@@ -56,7 +58,12 @@ class SupabaseMessageRepository implements MessageRepository {
     try {
       final response = await _client.functions.invoke(
         _aiChatFunction,
-        body: {'chatId': chatId, 'workspaceId': workspaceId},
+        body: {
+          'chatId': chatId,
+          'workspaceId': workspaceId,
+          'remindersWorkspaceId': remindersWorkspaceId,
+          'tasksWorkspaceId': tasksWorkspaceId,
+        },
       );
       if (response.status != 200) {
         return const Result.err(
@@ -84,6 +91,8 @@ class SupabaseMessageRepository implements MessageRepository {
       tokensUsed: row['tokens_used'] as int?,
       sourceReferences:
           (row['source_references'] as List<dynamic>).cast<String>(),
+      pendingTransactionIds:
+          (row['pending_transaction_ids'] as List<dynamic>).cast<String>(),
     );
   }
 

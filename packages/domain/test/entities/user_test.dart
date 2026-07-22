@@ -22,6 +22,32 @@ void main() {
       expect(upgraded.name, user.name);
     });
 
+    test('themeMode di default è system', () {
+      final user = User(
+        id: 'u1',
+        email: 'a@pip.app',
+        name: 'Ada',
+        plan: UserPlan.free,
+        createdAt: createdAt,
+      );
+
+      expect(user.themeMode, AppThemeMode.system);
+    });
+
+    test('copyWith aggiorna themeMode', () {
+      final user = User(
+        id: 'u1',
+        email: 'a@pip.app',
+        name: 'Ada',
+        plan: UserPlan.free,
+        createdAt: createdAt,
+      );
+
+      final updated = user.copyWith(themeMode: AppThemeMode.dark);
+
+      expect(updated.themeMode, AppThemeMode.dark);
+    });
+
     test('due utenti con stessi campi sono uguali per valore', () {
       final a = User(
           id: 'u1',

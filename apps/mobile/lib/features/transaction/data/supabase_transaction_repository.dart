@@ -35,6 +35,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
     String currency = 'EUR',
     required DateTime occurredAt,
     TransactionCategory category = TransactionCategory.altro,
+    List<String> tags = const [],
   }) async {
     if (description.trim().isEmpty) {
       return const Result.err(ValidationFailure(
@@ -58,6 +59,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
             'status': TransactionStatus.confirmed.name,
             'created_by_ai': false,
             'category': category.name,
+            'tags': tags,
           })
           .select()
           .single();
@@ -88,6 +90,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
             'amount_cents': transaction.amountCents,
             'occurred_at': transaction.occurredAt.toIso8601String(),
             'category': transaction.category.name,
+            'tags': transaction.tags,
           })
           .eq('id', transaction.id)
           .select()
@@ -135,6 +138,49 @@ class SupabaseTransactionRepository implements TransactionRepository {
     }
   }
 
+  @override
+  Future<Result<Transaction>> attachDocument({
+    required String transactionId,
+    required String? documentId,
+  }) async {
+    try {
+      final row = await _client
+          .from(_table)
+          .update({'document_id': documentId})
+          .eq('id', transactionId)
+          .select()
+          .single();
+      return Result.ok(_toDomain(row));
+    } catch (e) {
+      return Result.err(
+        UnexpectedFailure('Non è stato possibile allegare lo scontrino.',
+            cause: e),
+      );
+    }
+  }
+
+  @override
+  Future<Result<ReceiptExtraction?>> extractReceiptData(
+      String documentId) async {
+    // Best-effort (vedi doc del metodo in TransactionRepository): qualunque
+    // esito diverso da "estratto con successo" torna `null`, mai un
+    // `Failure` che bloccherebbe il resto del form.
+    try {
+      final response = await _client.functions.invoke(
+        'ai-chat',
+        body: {'extractReceiptDocumentId': documentId},
+      );
+      if (response.status != 200) {
+        return const Result.ok(null);
+      }
+      return Result.ok(
+        parseReceiptExtractionResponse(response.data as Map<String, dynamic>?),
+      );
+    } catch (e) {
+      return const Result.ok(null);
+    }
+  }
+
   Transaction _toDomain(Map<String, dynamic> row) {
     return Transaction(
       id: row['id'] as String,
@@ -152,6 +198,53 @@ class SupabaseTransactionRepository implements TransactionRepository {
           ? DateTime.parse(row['deleted_at'] as String)
           : null,
       category: TransactionCategory.values.byName(row['category'] as String),
+      documentId: row['document_id'] as String?,
+      tags: (row['tags'] as List<dynamic>).cast<String>(),
     );
   }
+}
+
+/// Converte la risposta grezza di `ai-chat` (modalità `extractReceiptDocumentId`,
+/// vedi `infrastructure/supabase/functions/ai-chat/index.ts`) in un
+/// [ReceiptExtraction], o `null` se la risposta non ha un `result` utilizzabile.
+/// Funzione pura, separata da [SupabaseTransactionRepository.extractReceiptData]
+/// solo per poterla testare senza mockare il client Supabase (stesso principio
+/// già applicato altrove in questo progetto a funzioni di parsing/calcolo).
+ReceiptExtraction? parseReceiptExtractionResponse(
+    Map<String, dynamic>? responseData) {
+  final result = responseData?['result'] as Map<String, dynamic>?;
+  if (result == null) return null;
+
+  final typeName = result['type'] as String?;
+  final description = result['description'] as String?;
+  final amountCents = result['amountCents'] as int?;
+  final occurredAt = DateTime.tryParse(result['occurredAt'] as String? ?? '');
+  if (typeName == null ||
+      description == null ||
+      description.isEmpty ||
+      amountCents == null ||
+      amountCents <= 0 ||
+      occurredAt == null) {
+    return null;
+  }
+
+  final type = typeName == TransactionType.income.name
+      ? TransactionType.income
+      : TransactionType.expense;
+  final categoryName = result['category'] as String?;
+  TransactionCategory category = TransactionCategory.altro;
+  for (final c in TransactionCategory.values) {
+    if (c.name == categoryName) {
+      category = c;
+      break;
+    }
+  }
+
+  return ReceiptExtraction(
+    type: type,
+    description: description,
+    amountCents: amountCents,
+    occurredAt: occurredAt,
+    category: category,
+  );
 }

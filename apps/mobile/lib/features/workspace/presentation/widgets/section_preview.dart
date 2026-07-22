@@ -4,6 +4,7 @@ import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
 import '../../../document/application/document_controller.dart';
+import '../../../reminder/application/calendar_event_controller.dart';
 import '../../../task/application/task_controller.dart';
 import '../../../transaction/application/transaction_controller.dart';
 
@@ -27,7 +28,8 @@ class SectionPreview extends StatelessWidget {
         _AttivitaPreview(workspaceId: workspaceId),
       SystemWorkspaceCategory.documenti =>
         _DocumentiPreview(workspaceId: workspaceId),
-      // Appuntamenti: nessuna entità/repository ancora costruita (prossima slice).
+      SystemWorkspaceCategory.appuntamenti =>
+        _AppuntamentiPreview(workspaceId: workspaceId),
       _ => const _PreviewText('Presto disponibile'),
     };
   }
@@ -99,6 +101,41 @@ class _DocumentiPreview extends ConsumerWidget {
             ? 'Nessun documento'
             : '${documents.length} documenti',
       ),
+    );
+  }
+}
+
+/// Promemoria con `startsAt` nel giorno odierno (non ancora passati o meno:
+/// restano nell'agenda di oggi finché non li si cancella) — richiesta
+/// esplicita dell'utente: "badge sulla tab Appuntamenti", un conteggio di
+/// "cosa mi aspetta oggi", non l'intero storico.
+List<CalendarEvent> remindersDueToday(List<CalendarEvent> events) {
+  final now = DateTime.now();
+  return events.where((e) {
+    final local = e.startsAt.toLocal();
+    return local.year == now.year &&
+        local.month == now.month &&
+        local.day == now.day;
+  }).toList(growable: false);
+}
+
+class _AppuntamentiPreview extends ConsumerWidget {
+  const _AppuntamentiPreview({required this.workspaceId});
+
+  final String workspaceId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eventsAsync = ref.watch(calendarEventsProvider(workspaceId));
+    return eventsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (events) {
+        final today = remindersDueToday(events).length;
+        return _PreviewText(
+          today == 0 ? 'Nessun promemoria oggi' : '$today oggi',
+        );
+      },
     );
   }
 }
