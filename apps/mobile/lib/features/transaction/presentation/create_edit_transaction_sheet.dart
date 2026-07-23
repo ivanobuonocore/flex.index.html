@@ -7,6 +7,7 @@ import 'package:pip_shared/pip_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/providers.dart';
+import '../../../shared/widgets/colorful_icon_badge.dart';
 import '../../document/application/document_controller.dart';
 import '../application/transaction_category_meta.dart';
 import '../application/transaction_controller.dart';
@@ -332,7 +333,11 @@ class _CreateEditTransactionSheetState
                 children: TransactionCategory.values.map((category) {
                   final meta = TransactionCategoryMeta.of(category);
                   return ChoiceChip(
-                    avatar: Icon(meta.icon, size: 18, color: meta.color),
+                    avatar: ColorfulIconBadge(
+                      icon: meta.icon,
+                      color: meta.color,
+                      size: 24,
+                    ),
                     label: Text(meta.label),
                     selected: category == _category,
                     onSelected: (_) => setState(() => _category = category),
