@@ -50,6 +50,13 @@ abstract final class AppColors {
     Color(0xFF39E1FF), // ciano
   ];
 
+  // Separatore "hairline", quasi invisibile (redesign estetico — stile
+  // Apple: un filo sottilissimo al posto di un Divider grigio netto),
+  // comune a light e dark mode: l'opacità è già nel colore, il chiamante lo
+  // usa direttamente senza applicarne un'altra.
+  static const Color hairlineLight = Color(0x14111827);
+  static const Color hairlineDark = Color(0x1FFFFFFF);
+
   // Gradiente "premium" per superfici ampie in primo piano (redesign estetico
   // 2.0 — richiesta esplicita dell'utente: "molto tecnologica", "profondità"),
   // usato per l'header della Chat e l'hero del saldo nel Bilancio. Stessa

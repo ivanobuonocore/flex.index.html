@@ -10,17 +10,22 @@ import 'testing/is_running_in_flutter_test.dart';
 ///
 /// Gerarchia tipografica (docs/product/05-design-system.md, "Tipografia").
 abstract final class AppTypography {
-  static final TextStyle display =
-      _manrope(fontSize: 34, fontWeight: FontWeight.w700, height: 1.15);
+  // Letter-spacing leggermente negativo sui titoli (redesign estetico —
+  // stile Apple/Linear: caratteri più "serrati" alle dimensioni grandi,
+  // percepiti come più eleganti e meno "da template" del tracking di
+  // default). Non applicato a `body`/`caption`: a quelle dimensioni
+  // stringere la spaziatura peggiora la leggibilità invece di raffinarla.
+  static final TextStyle display = _manrope(
+      fontSize: 34, fontWeight: FontWeight.w700, height: 1.15, tracking: -0.6);
 
-  static final TextStyle heading1 =
-      _manrope(fontSize: 28, fontWeight: FontWeight.w700, height: 1.2);
+  static final TextStyle heading1 = _manrope(
+      fontSize: 28, fontWeight: FontWeight.w700, height: 1.2, tracking: -0.4);
 
-  static final TextStyle heading2 =
-      _manrope(fontSize: 22, fontWeight: FontWeight.w600, height: 1.25);
+  static final TextStyle heading2 = _manrope(
+      fontSize: 22, fontWeight: FontWeight.w600, height: 1.25, tracking: -0.3);
 
-  static final TextStyle heading3 =
-      _manrope(fontSize: 18, fontWeight: FontWeight.w600, height: 1.3);
+  static final TextStyle heading3 = _manrope(
+      fontSize: 18, fontWeight: FontWeight.w600, height: 1.3, tracking: -0.2);
 
   static final TextStyle body =
       _manrope(fontSize: 16, fontWeight: FontWeight.w400, height: 1.4);
@@ -38,12 +43,19 @@ abstract final class AppTypography {
     required double fontSize,
     required FontWeight fontWeight,
     required double height,
+    double tracking = 0,
   }) {
     if (isRunningInFlutterTest) {
       return TextStyle(
-          fontSize: fontSize, fontWeight: fontWeight, height: height);
+          fontSize: fontSize,
+          fontWeight: fontWeight,
+          height: height,
+          letterSpacing: tracking);
     }
     return GoogleFonts.manrope(
-        fontSize: fontSize, fontWeight: fontWeight, height: height);
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        height: height,
+        letterSpacing: tracking);
   }
 }

@@ -886,6 +886,43 @@ Non ancora presenti: settings, billing.
   necessaria qui. Nei test, `SharedPreferences.setMockInitialValues(...)` (hook ufficiale del
   package) sostituisce l'istanza reale, senza bisogno di un repository fittizio dedicato.
 
+- **Pass di qualità percepita ("premium"), slice 1+2 — token e tema** (richiesta esplicita
+  dell'utente: "aumentare la qualità percepita dell'interfaccia... ispirata ad Apple, Arc Browser,
+  Linear e Notion", mantenendo la palette blu/viola attuale). Interviene solo su
+  `packages/design-system` — nessuna schermata toccata direttamente, l'effetto si propaga
+  ovunque tramite `Theme.of(context)` (AGENTS.md, "Design System").
+  - `AppShadows.subtle`: un secondo livello di ombra, più corto e più tenue di `AppShadows.card`
+    — gerarchia a più livelli invece di un'unica ombra piatta.
+  - `AppColors.hairlineLight`/`hairlineDark`: separatore quasi invisibile (stile Apple), usato dal
+    nuovo `dividerTheme` e dal bordo dei `Chip`.
+  - `AppTypography`: letter-spacing leggermente negativo sugli heading (`display`→-0.6 fino a
+    `heading3`→-0.2), non su `body`/`caption` (a quelle dimensioni stringere peggiorerebbe la
+    leggibilità invece di raffinarla).
+  - `AppMotion.emphasized`: nuova curva (accelerazione dolce, decelerazione marcata in coda), in
+    aggiunta a `AppMotion.curve` esistente — per pressioni/transizioni delle prossime slice.
+  - `AppRadii.pill`/`pillRadius`: arrotondamento esplicito "a pillola" per chip/badge.
+  - `AppTheme`: `cardTheme` guadagna un'elevazione minima (1.5) con `shadowColor` neutro e
+    `surfaceTintColor: transparent` (disattiva il lavaggio blu automatico di Material 3 sulle
+    superfici elevate) — prima ogni `Card` standard (liste di Note/Attività/Documenti/Promemoria)
+    era piatta (`elevation: 0`), indistinguibile dallo sfondo salvo gli angoli arrotondati.
+    `outlinedButtonTheme`/`textButtonTheme` condividono ora la stessa forma rettangolare
+    arrotondata dell'`ElevatedButton` (prima presa la forma "a pillola" di default, un'incoerenza
+    percepibile). `dialogTheme`/`bottomSheetTheme` guadagnano raggio/ombra coerenti col resto del
+    Design System; i bottom sheet mostrano sempre la maniglia di trascinamento (`showDragHandle:
+    true`, prima impostata esplicitamente solo in 6 sheet su 17). `chipTheme` esplicito (pillola,
+    bordo hairline). `snackBarTheme` con `SnackBarBehavior.floating` invece della barra a piena
+    larghezza di default. `appBarTheme` senza ombra/tinta al passaggio dello scroll (coerente con
+    `GradientAppBar`, che gestisce la propria profondità per conto proprio).
+  - **Limite noto della verifica visiva in sandbox**: `flutter test` disabilita le ombre reali
+    (`debugDisableShadows`, impostato da `AutomatedTestWidgetsFlutterBinding` per rendere i test
+    deterministici tra piattaforme) e le sostituisce con un contorno pieno senza sfocatura — sia
+    per le ombre Material basate su elevazione (`cardTheme`/`dialogTheme`/`bottomSheetTheme`) sia
+    per i `BoxShadow` custom (`AppShadows.card`/`.glow`/`.subtle`, quindi anche le migliorie
+    grafiche precedenti di questa sessione). Gli screenshot offscreen usati per la verifica
+    visiva in questa sessione confermano quindi forma/colore/posizionamento corretti, non la
+    resa sfumata reale — quella si vede solo su un dispositivo/browser vero (`LiveTestWidgets
+    FlutterBinding`, con `disableShadows => false`).
+
 ## Setup locale
 
 ```
