@@ -8,6 +8,7 @@ import 'package:pip_domain/pip_domain.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/widgets/coach_mark.dart';
+import '../../../shared/widgets/colorful_icon_badge.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
@@ -332,8 +333,11 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                           final isSelected = category == _filterCategory;
                           return FilterChip(
                             label: Text(meta.label),
-                            avatar: Text(meta.emoji,
-                                style: const TextStyle(fontSize: 16)),
+                            avatar: ColorfulIconBadge(
+                              icon: meta.icon,
+                              color: meta.color,
+                              size: 22,
+                            ),
                             selected: isSelected,
                             onSelected: (_) => setState(
                               () => _filterCategory =
@@ -781,7 +785,11 @@ class _CategoryBreakdownTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
           child: Row(
             children: [
-              Text(meta.emoji, style: const TextStyle(fontSize: 20)),
+              ColorfulIconBadge(
+                icon: meta.icon,
+                color: meta.color,
+                size: 30,
+              ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(meta.label, style: AppTypography.body),
@@ -841,7 +849,11 @@ void _showCategoryTrend(
           children: [
             Row(
               children: [
-                Text(meta.emoji, style: const TextStyle(fontSize: 20)),
+                ColorfulIconBadge(
+                  icon: meta.icon,
+                  color: meta.color,
+                  size: 30,
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 Text('${meta.label} — ultimi 6 mesi',
                     style: AppTypography.heading3),
@@ -1763,7 +1775,7 @@ class _CategoryBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(meta.emoji, style: const TextStyle(fontSize: 13)),
+          Icon(meta.icon, size: 13, color: meta.color),
           const SizedBox(width: 2),
           Text(
             meta.label,
@@ -2068,7 +2080,11 @@ class _BudgetTile extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Text(meta.emoji, style: const TextStyle(fontSize: 20)),
+                  ColorfulIconBadge(
+                    icon: meta.icon,
+                    color: meta.color,
+                    size: 30,
+                  ),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(meta.label, style: AppTypography.body),
