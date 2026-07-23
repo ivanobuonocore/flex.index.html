@@ -755,6 +755,26 @@ Non ancora presenti: settings, billing.
   del dialog "Imposta un budget" ha dovuto restringere `find.byType(TextField)` con
   `find.descendant(of: find.byType(AlertDialog), ...)` per non confondersi con il nuovo campo di
   ricerca sotto.
+- **Identità PWA personalizzata** (richiesta esplicita dell'utente, migliorie grafiche) —
+  `manifest.json`/`index.html` aggiornati con nome/descrizione/colore tema del brand ("PIP —
+  Personal Intelligence Platform", `#2563EB`, la stessa tinta di `AppColors.heroGradient`); icone
+  (`icons/Icon-192.png`, `icons/Icon-512.png`, `icons/Icon-maskable-192.png`,
+  `icons/Icon-maskable-512.png`, `favicon.png`) rigenerate con un gradiente blu→viola e una bolla
+  di chat stilizzata, coerenti con l'identità visiva già usata in Chat/Bilancio, al posto delle
+  icone segnaposto di Flutter.
+- **Micro-animazioni di conferma** (richiesta esplicita dell'utente) — nuovo widget condiviso
+  `shared/widgets/success_pulse.dart` (`SuccessPulse`): un "pop" (scala 1.0 → 1.35 → 1.0 su
+  380ms) che si attiva solo sul fronte di salita `play` falso→vero, non ad ogni rebuild. Usato dal
+  Checkbox di un'Attività completata (`task_list_screen.dart`) e dal pulsante "Conferma" di una
+  Transazione pending in Chat (`chat_home_screen.dart`, con stato locale `_justConfirmed` per un
+  feedback immediato indipendente dal tempismo del realtime).
+- **Heatmap delle spese nel Bilancio** (richiesta esplicita dell'utente) — nuova funzione pura
+  `dailyExpenseTotals` (`transaction_controller.dart`): uscite confermate per giorno del mese
+  selezionato. Nuovo widget `_ExpenseHeatmap` in `balance_overview_screen.dart`, un calendario a
+  quadratini colorati con intensità proporzionale alla spesa del giorno (stesso linguaggio visivo
+  di `MonthCalendarGrid`, `Color.alphaBlend` su `AppColors.error`), tra "Andamento ultimi 6 mesi" e
+  i Budget per categoria. Puramente visiva, nessun tocco/interazione: il dettaglio giorno per
+  giorno resta nell'elenco delle Transazioni confermate già presente sotto.
 
 ## Setup locale
 

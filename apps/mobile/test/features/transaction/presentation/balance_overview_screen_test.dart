@@ -229,6 +229,84 @@ void main() {
     expect(find.textContaining('Proiezione di fine mese'), findsNothing);
   });
 
+  testWidgets(
+      'la heatmap mostra "Intensità di spesa" quando ci sono uscite confermate questo mese',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final expense = Transaction(
+      id: 't-heatmap',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Spesa di oggi',
+      amountCents: 1500,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([expense]);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Intensità di spesa'), 300,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Intensità di spesa'), findsOneWidget);
+    expect(find.textContaining('Nessuna spesa confermata'), findsNothing);
+    expect(find.text('${now.day}'), findsWidgets);
+  });
+
+  testWidgets(
+      'la heatmap mostra lo stato vuoto senza uscite confermate questo mese',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([personalIncome]);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Intensità di spesa'), 300,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+
+    expect(
+        find.text('Nessuna spesa confermata in questo mese.'), findsOneWidget);
+  });
+
   testWidgets('toccare la pillola Entrate apre il dettaglio per categoria',
       (tester) async {
     final fakeTransaction = FakeTransactionRepository();
@@ -491,8 +569,12 @@ void main() {
     fakeBudget.emit(const []);
     await tester.pumpAndSettle();
 
+    // Si scorre fino alla transazione stessa (non solo al campo di ricerca
+    // sopra di essa): con la heatmap delle spese aggiunta tra il grafico e
+    // il budget, il campo di ricerca da solo può già essere visibile mentre
+    // l'elenco sotto non lo è ancora.
     await tester.scrollUntilVisible(
-      find.text('Cerca per descrizione o tag…'),
+      find.text('Spesa supermercato'),
       300,
       scrollable: find.byType(Scrollable).first,
     );

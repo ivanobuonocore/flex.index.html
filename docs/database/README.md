@@ -1280,6 +1280,18 @@ tolto.
 Verificato: `flutter analyze`/`dart format --set-exit-if-changed`/`flutter test` (intera suite)
 verdi.
 
+## Fase 3 (slice 35) — Identità PWA, micro-animazioni, heatmap spese
+
+Nessuna migrazione: pass di migliorie grafiche richiesto esplicitamente dall'utente, tre voci
+scelte tra sei proposte. Identità PWA (manifest/icone/theme color) e micro-animazioni di conferma
+(`SuccessPulse`) sono presentazione pura, nessun impatto sullo schema. Heatmap delle spese nel
+Bilancio: nuova funzione pura `dailyExpenseTotals` in `transaction_controller.dart` (uscite
+confermate per giorno del mese), stessa composizione di `confirmedThisMonth`/`totalExpenseCents`
+già esistenti — nessuna nuova query, nessuna nuova colonna.
+
+Verificato: `flutter analyze`/`dart format --set-exit-if-changed`/`flutter test` (intera suite)
+verdi.
+
 ## Fasi successive
 
 Agent, Timeline Event sono già modellate in `packages/domain` ma non hanno ancora una migrazione:

@@ -249,6 +249,11 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
               const SizedBox(height: AppSpacing.lg),
               _TrendChart(trend: trend),
               const SizedBox(height: AppSpacing.lg),
+              _ExpenseHeatmap(
+                month: selectedMonth,
+                dailyTotals: dailyExpenseTotals(transactions, selectedMonth),
+              ),
+              const SizedBox(height: AppSpacing.lg),
               _BudgetSection(expenseByCategory: expenseByCategory),
               if (pending.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
@@ -1215,6 +1220,143 @@ class _TrendChart extends StatelessWidget {
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const _heatmapWeekdays = ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
+
+/// Heatmap delle spese del mese (integrazione richiesta esplicitamente):
+/// un calendario a quadratini colorati in base all'intensità di spesa di
+/// quel giorno — stesso linguaggio visivo di `MonthCalendarGrid`
+/// (`Color.alphaBlend` su `AppColors.error`), qui con un'intensità continua
+/// invece di un semplice on/off. Puramente visiva, nessun tocco/interazione:
+/// con altre due migliorie da consegnare in questo stesso giro, lo scope è
+/// stato volutamente limitato a un colpo d'occhio d'insieme — il dettaglio
+/// giorno per giorno resta comunque disponibile nell'elenco delle
+/// Transazioni confermate più sotto.
+class _ExpenseHeatmap extends StatelessWidget {
+  const _ExpenseHeatmap({required this.month, required this.dailyTotals});
+
+  final DateTime month;
+  final Map<int, int> dailyTotals;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final maxCents =
+        dailyTotals.values.fold<int>(0, (max, v) => v > max ? v : max);
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+    // weekday: 1 (lunedì) .. 7 (domenica) — stessa convenzione di
+    // MonthCalendarGrid, la settimana parte sempre di lunedì.
+    final leadingBlanks = DateTime(month.year, month.month, 1).weekday - 1;
+    const accent = AppColors.error;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: AppRadii.standardRadius,
+        boxShadow: AppShadows.glow(color: accent, isDark: isDark),
+      ),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Intensità di spesa', style: AppTypography.heading3),
+              const SizedBox(height: AppSpacing.md),
+              if (maxCents == 0)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: Text('Nessuna spesa confermata in questo mese.'),
+                )
+              else ...[
+                Row(
+                  children: [
+                    for (final label in _heatmapWeekdays)
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            label,
+                            style: AppTypography.caption.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withOpacity(0.5),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                GridView.count(
+                  crossAxisCount: 7,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    for (var i = 0; i < leadingBlanks; i++)
+                      const SizedBox.shrink(),
+                    for (var day = 1; day <= daysInMonth; day++)
+                      _HeatmapDayCell(
+                        day: day,
+                        intensity: (dailyTotals[day] ?? 0) / maxCents,
+                        color: accent,
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeatmapDayCell extends StatelessWidget {
+  const _HeatmapDayCell({
+    required this.day,
+    required this.intensity,
+    required this.color,
+  });
+
+  final int day;
+  final double intensity;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasSpend = intensity > 0;
+    // Intensità minima visibile (0.12) anche per una spesa piccola rispetto
+    // al giorno più caro del mese: altrimenti sembrerebbe un giorno "vuoto"
+    // pur avendo almeno una transazione.
+    final fillColor = hasSpend
+        ? Color.alphaBlend(
+            color.withOpacity(0.12 + intensity * 0.68),
+            theme.colorScheme.surface,
+          )
+        : Colors.transparent;
+    final numberColor = hasSpend && intensity > 0.4
+        ? Colors.white
+        : theme.colorScheme.onSurface;
+
+    return Padding(
+      padding: const EdgeInsets.all(2),
+      child: Container(
+        decoration: BoxDecoration(
+          color: fillColor,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Center(
+          child: Text(
+            '$day',
+            style: AppTypography.caption.copyWith(color: numberColor),
           ),
         ),
       ),

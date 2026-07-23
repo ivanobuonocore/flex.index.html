@@ -318,3 +318,20 @@ int? projectedMonthEndExpenseCents({
   if (dayOfMonth <= 1) return null;
   return (spentSoFarCents / dayOfMonth * daysInMonth).round();
 }
+
+/// Uscite confermate per ciascun giorno di [month] (richiesta esplicita
+/// dell'utente: "heatmap delle spese nel Bilancio") — chiave = giorno del
+/// mese (1-31), assente se quel giorno non ha alcuna uscita confermata. Pure,
+/// testabile senza Riverpod, stessa composizione di [confirmedThisMonth]/
+/// [totalExpenseCents] già usata altrove in questo file.
+Map<int, int> dailyExpenseTotals(
+    List<Transaction> transactions, DateTime month) {
+  final confirmed = confirmedThisMonth(transactions, now: month)
+      .where((t) => t.type == TransactionType.expense);
+  final totals = <int, int>{};
+  for (final t in confirmed) {
+    final day = t.occurredAt.day;
+    totals[day] = (totals[day] ?? 0) + t.amountCents;
+  }
+  return totals;
+}

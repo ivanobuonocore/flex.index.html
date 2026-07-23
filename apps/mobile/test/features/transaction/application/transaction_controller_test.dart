@@ -452,6 +452,74 @@ void main() {
     });
   });
 
+  group('dailyExpenseTotals', () {
+    Transaction buildTransaction({
+      required String id,
+      TransactionType type = TransactionType.expense,
+      int amountCents = 2300,
+      required DateTime occurredAt,
+      TransactionStatus status = TransactionStatus.confirmed,
+    }) {
+      return Transaction(
+        id: id,
+        workspaceId: workspaceId,
+        type: type,
+        description: 'Test',
+        amountCents: amountCents,
+        occurredAt: occurredAt,
+        status: status,
+        createdAt: occurredAt,
+      );
+    }
+
+    test('somma le uscite confermate per giorno del mese indicato', () {
+      final expense1 = buildTransaction(
+          id: 'e1', amountCents: 2300, occurredAt: DateTime.utc(2026, 6, 15));
+      final expense2 = buildTransaction(
+          id: 'e2', amountCents: 700, occurredAt: DateTime.utc(2026, 6, 15));
+      final expenseOtherDay = buildTransaction(
+          id: 'e3', amountCents: 1500, occurredAt: DateTime.utc(2026, 6, 3));
+
+      final totals = dailyExpenseTotals(
+        [expense1, expense2, expenseOtherDay],
+        DateTime.utc(2026, 6, 1),
+      );
+
+      expect(totals, {15: 2300 + 700, 3: 1500});
+    });
+
+    test('esclude entrate, transazioni pending e mesi diversi', () {
+      final confirmedExpense = buildTransaction(
+          id: 'e1', amountCents: 2300, occurredAt: DateTime.utc(2026, 6, 15));
+      final income = buildTransaction(
+        id: 'i1',
+        type: TransactionType.income,
+        amountCents: 100000,
+        occurredAt: DateTime.utc(2026, 6, 15),
+      );
+      final pending = buildTransaction(
+        id: 'p1',
+        occurredAt: DateTime.utc(2026, 6, 15),
+        status: TransactionStatus.pending,
+      );
+      final otherMonth =
+          buildTransaction(id: 'o1', occurredAt: DateTime.utc(2026, 5, 15));
+
+      final totals = dailyExpenseTotals(
+        [confirmedExpense, income, pending, otherMonth],
+        DateTime.utc(2026, 6, 1),
+      );
+
+      expect(totals, {15: 2300});
+    });
+
+    test('nessuna uscita confermata produce una mappa vuota', () {
+      final totals = dailyExpenseTotals([], DateTime.utc(2026, 6, 1));
+
+      expect(totals, isEmpty);
+    });
+  });
+
   group('notifica push su budget quasi superato', () {
     // Riferite a "adesso" (non a una data fissa come `expense` sopra):
     // `_maybeAlertBudget` valuta sempre il mese corrente reale, come la
