@@ -7,6 +7,7 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/skeleton_list.dart';
+import '../../../shared/widgets/success_pulse.dart';
 import '../../workspace/application/workspace_sharing_controller.dart';
 import '../application/task_controller.dart';
 import 'create_edit_task_sheet.dart';
@@ -72,19 +73,22 @@ class TaskListScreen extends ConsumerWidget {
 
               final card = Card(
                 child: ListTile(
-                  leading: Checkbox(
-                    value: isDone,
-                    activeColor: AppColors.categoryAttivita,
-                    onChanged: isViewer
-                        ? null
-                        : (_) => ref
-                            .read(taskFormControllerProvider.notifier)
-                            .updateTask(
-                              task.copyWith(
-                                  status: isDone
-                                      ? TaskStatus.todo
-                                      : TaskStatus.done),
-                            ),
+                  leading: SuccessPulse(
+                    play: isDone,
+                    child: Checkbox(
+                      value: isDone,
+                      activeColor: AppColors.categoryAttivita,
+                      onChanged: isViewer
+                          ? null
+                          : (_) => ref
+                              .read(taskFormControllerProvider.notifier)
+                              .updateTask(
+                                task.copyWith(
+                                    status: isDone
+                                        ? TaskStatus.todo
+                                        : TaskStatus.done),
+                              ),
+                    ),
                   ),
                   title: Text(
                     task.title,

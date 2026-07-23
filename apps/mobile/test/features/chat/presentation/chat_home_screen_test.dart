@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_mobile/core/providers.dart';
 import 'package:pip_mobile/features/chat/application/message_controller.dart';
@@ -1246,6 +1247,15 @@ void main() {
       pendingTransaction.copyWith(status: TransactionStatus.confirmed),
     );
     await tester.tap(find.byIcon(Icons.check_circle_outline));
+    // Micro-animazione di conferma (richiesta esplicita dell'utente): subito
+    // dopo il tocco, prima ancora che il realtime rimuova la riga, l'icona
+    // diventa verde (feedback ottimistico) — un solo pump, non pumpAndSettle,
+    // per osservare lo stato immediatamente dopo il tap.
+    await tester.pump();
+    final confirmedIcon =
+        tester.widget<Icon>(find.byIcon(Icons.check_circle_outline));
+    expect(confirmedIcon.color, AppColors.success);
+
     await tester.pumpAndSettle();
 
     expect(fakeTransaction.lastConfirmedId, 't1');

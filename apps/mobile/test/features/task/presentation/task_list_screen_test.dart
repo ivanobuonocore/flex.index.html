@@ -84,4 +84,49 @@ void main() {
     expect(fakeRepository.lastDeletedId, isNull);
     expect(find.text('Pagare bolletta'), findsOneWidget);
   });
+
+  testWidgets(
+      'completare un\'attività innesca la micro-animazione di conferma (richiesta '
+      'esplicita dell\'utente)', (tester) async {
+    final fakeRepository = FakeTaskRepository();
+    addTearDown(fakeRepository.dispose);
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([task]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    expect(fakeRepository.lastUpdated?.status, TaskStatus.done);
+
+    // Il repository fittizio non riemette da solo: simula il round-trip
+    // realtime, stessa convenzione già usata altrove in questi test.
+    fakeRepository.emit([task.copyWith(status: TaskStatus.done)]);
+    await tester.pump();
+    // Il finder va ristretto al `ScaleTransition` che avvolge il Checkbox: lo
+    // Scaffold ha anche un FloatingActionButton, la cui comparsa/scomparsa è
+    // anch'essa animata con un proprio `ScaleTransition` interno a Flutter.
+    final scaleFinder = find.ancestor(
+      of: find.byType(Checkbox),
+      matching: find.byType(ScaleTransition),
+    );
+
+    // Durante il pop la scala supera 1.0 in almeno uno dei fotogrammi
+    // intermedi (non si verifica un singolo istante preciso: il timing esatto
+    // di un `AnimationController` nel test binding non è garantito al
+    // millisecondo) — poi si assesta di nuovo esattamente a 1.0 a fine
+    // animazione.
+    var sawScaleAboveOne = false;
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      if (tester.widget<ScaleTransition>(scaleFinder).scale.value > 1.0) {
+        sawScaleAboveOne = true;
+      }
+    }
+    expect(sawScaleAboveOne, isTrue);
+
+    await tester.pumpAndSettle();
+    final scaleAfter = tester.widget<ScaleTransition>(scaleFinder);
+    expect(scaleAfter.scale.value, 1.0);
+  });
 }

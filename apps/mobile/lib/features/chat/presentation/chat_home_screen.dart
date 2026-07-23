@@ -14,6 +14,7 @@ import '../../../shared/widgets/document_thumbnail.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
+import '../../../shared/widgets/success_pulse.dart';
 import '../../auth/application/session_controller.dart';
 import '../../reminder/application/calendar_event_controller.dart';
 import '../../task/application/task_controller.dart';
@@ -1020,15 +1021,29 @@ class _PendingTransactionActions extends ConsumerWidget {
   }
 }
 
-class _PendingTransactionActionTile extends ConsumerWidget {
+class _PendingTransactionActionTile extends ConsumerStatefulWidget {
   const _PendingTransactionActionTile({required this.transaction});
 
   final Transaction transaction;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_PendingTransactionActionTile> createState() =>
+      _PendingTransactionActionTileState();
+}
+
+class _PendingTransactionActionTileState
+    extends ConsumerState<_PendingTransactionActionTile> {
+  // Micro-animazione di conferma (richiesta esplicita dell'utente): il tocco
+  // su "Conferma" innesca subito il pop dell'icona, senza aspettare che il
+  // realtime rimuova la riga (la transazione confermata sparisce da qui solo
+  // quando `_PendingTransactionActions` sopra la filtra di nuovo — un tempo
+  // non garantito, il feedback visivo non deve dipendere da quello).
+  bool _justConfirmed = false;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isIncome = transaction.type == TransactionType.income;
+    final isIncome = widget.transaction.type == TransactionType.income;
     final isBusy = ref.watch(transactionFormControllerProvider).isLoading;
 
     return Container(
@@ -1051,25 +1066,35 @@ class _PendingTransactionActionTile extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  transaction.description,
+                  widget.transaction.description,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.caption
                       .copyWith(fontWeight: FontWeight.w600),
                 ),
-                Text(_formatAmount(transaction.amountCents),
+                Text(_formatAmount(widget.transaction.amountCents),
                     style: AppTypography.caption),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.check_circle_outline, size: 20),
-            tooltip: 'Conferma',
-            onPressed: isBusy
-                ? null
-                : () => ref
-                    .read(transactionFormControllerProvider.notifier)
-                    .confirm(transaction.id),
+          SuccessPulse(
+            play: _justConfirmed,
+            child: IconButton(
+              icon: Icon(
+                Icons.check_circle_outline,
+                size: 20,
+                color: _justConfirmed ? AppColors.success : null,
+              ),
+              tooltip: 'Conferma',
+              onPressed: isBusy
+                  ? null
+                  : () {
+                      setState(() => _justConfirmed = true);
+                      ref
+                          .read(transactionFormControllerProvider.notifier)
+                          .confirm(widget.transaction.id);
+                    },
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.close, size: 20),
@@ -1078,7 +1103,7 @@ class _PendingTransactionActionTile extends ConsumerWidget {
                 ? null
                 : () => ref
                     .read(transactionFormControllerProvider.notifier)
-                    .delete(transaction.id),
+                    .delete(widget.transaction.id),
           ),
         ],
       ),
