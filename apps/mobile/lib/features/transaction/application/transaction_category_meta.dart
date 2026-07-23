@@ -10,62 +10,76 @@ class TransactionCategoryMeta {
   const TransactionCategoryMeta({
     required this.label,
     required this.icon,
+    required this.emoji,
     required this.color,
   });
 
   final String label;
   final IconData icon;
+  /// Emoji nativa e colorata, mostrata nelle superfici del Bilancio per
+  /// riconoscere subito le categorie senza affidarsi solo al testo.
+  final String emoji;
   final Color color;
 
   static const _byCategory = <TransactionCategory, TransactionCategoryMeta>{
     TransactionCategory.alimentari: TransactionCategoryMeta(
       label: 'Alimentari',
       icon: Icons.local_grocery_store_outlined,
+      emoji: '🥦',
       color: Color(0xFF16A34A),
     ),
     TransactionCategory.trasporti: TransactionCategoryMeta(
       label: 'Trasporti',
       icon: Icons.directions_bus_outlined,
+      emoji: '🚌',
       color: Color(0xFF2563EB),
     ),
     TransactionCategory.casa: TransactionCategoryMeta(
       label: 'Casa',
       icon: Icons.home_outlined,
+      emoji: '🏠',
       color: Color(0xFF0D9488),
     ),
     TransactionCategory.bollette: TransactionCategoryMeta(
       label: 'Bollette',
       icon: Icons.receipt_long_outlined,
+      emoji: '🧾',
       color: Color(0xFFF59E0B),
     ),
     TransactionCategory.salute: TransactionCategoryMeta(
       label: 'Salute',
       icon: Icons.local_hospital_outlined,
+      emoji: '🩺',
       color: Color(0xFFEF4444),
     ),
     TransactionCategory.svago: TransactionCategoryMeta(
       label: 'Svago',
       icon: Icons.local_activity_outlined,
+      emoji: '🎉',
       color: Color(0xFFB24CFF),
     ),
     TransactionCategory.shopping: TransactionCategoryMeta(
       label: 'Shopping',
       icon: Icons.shopping_bag_outlined,
+      emoji: '🛍️',
       color: Color(0xFFFF5DA2),
     ),
     TransactionCategory.istruzione: TransactionCategoryMeta(
       label: 'Istruzione',
       icon: Icons.school_outlined,
+      emoji: '📚',
       color: Color(0xFF4F7BFF),
     ),
     TransactionCategory.stipendio: TransactionCategoryMeta(
       label: 'Stipendio',
       icon: Icons.payments_outlined,
+      emoji: '💶',
       color: Color(0xFF16A34A),
     ),
     TransactionCategory.altro: TransactionCategoryMeta(
       label: 'Altro',
       icon: Icons.category_outlined,
+      emoji: '✨',
       color: Color(0xFF6B7280),
     ),
   };
