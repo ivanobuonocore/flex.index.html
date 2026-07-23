@@ -332,7 +332,8 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                           final isSelected = category == _filterCategory;
                           return FilterChip(
                             label: Text(meta.label),
-                            avatar: Icon(meta.icon, size: 16),
+                            avatar: Text(meta.emoji,
+                                style: const TextStyle(fontSize: 16)),
                             selected: isSelected,
                             onSelected: (_) => setState(
                               () => _filterCategory =
@@ -780,7 +781,7 @@ class _CategoryBreakdownTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
           child: Row(
             children: [
-              Icon(meta.icon, color: meta.color, size: 20),
+              Text(meta.emoji, style: const TextStyle(fontSize: 20)),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(meta.label, style: AppTypography.body),
@@ -840,7 +841,7 @@ void _showCategoryTrend(
           children: [
             Row(
               children: [
-                Icon(meta.icon, color: meta.color, size: 20),
+                Text(meta.emoji, style: const TextStyle(fontSize: 20)),
                 const SizedBox(width: AppSpacing.sm),
                 Text('${meta.label} — ultimi 6 mesi',
                     style: AppTypography.heading3),
@@ -1762,7 +1763,7 @@ class _CategoryBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(meta.icon, size: 13, color: meta.color),
+          Text(meta.emoji, style: const TextStyle(fontSize: 13)),
           const SizedBox(width: 2),
           Text(
             meta.label,
@@ -2067,7 +2068,7 @@ class _BudgetTile extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(meta.icon, color: meta.color, size: 20),
+                  Text(meta.emoji, style: const TextStyle(fontSize: 20)),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(meta.label, style: AppTypography.body),
