@@ -4,6 +4,7 @@ import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/colorful_icon_badge.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/skeleton_list.dart';
@@ -247,7 +248,7 @@ class _CategoryBadge extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(meta.icon, size: 14, color: meta.color),
+        ColorfulIconBadge(icon: meta.icon, color: meta.color, size: 24),
         const SizedBox(width: 2),
         Text(meta.label),
       ],
