@@ -11,12 +11,16 @@ class WorkspaceCategoryMeta {
     required this.label,
     required this.description,
     required this.icon,
+    required this.emoji,
     required this.color,
   });
 
   final String label;
   final String description;
   final IconData icon;
+  /// Emoji nativa, volutamente colorata: rende le sezioni riconoscibili e
+  /// conserva il tono più personale dell'app accanto alle icone di sistema.
+  final String emoji;
   final Color color;
 
   static const _byCategory = <String, WorkspaceCategoryMeta>{
@@ -24,24 +28,28 @@ class WorkspaceCategoryMeta {
       label: 'Bilancio',
       description: 'Entrate e uscite scritte in Chat',
       icon: Icons.pie_chart_outline,
+      emoji: '💰',
       color: AppColors.categoryBilancio,
     ),
     SystemWorkspaceCategory.appuntamenti: WorkspaceCategoryMeta(
       label: 'Appuntamenti',
       description: 'Eventi e promemoria dalla Chat',
       icon: Icons.event_outlined,
+      emoji: '📅',
       color: AppColors.categoryAppuntamenti,
     ),
     SystemWorkspaceCategory.attivita: WorkspaceCategoryMeta(
       label: 'Attività',
       description: 'Liste e cose da fare dalla Chat',
       icon: Icons.checklist_outlined,
+      emoji: '✅',
       color: AppColors.categoryAttivita,
     ),
     SystemWorkspaceCategory.documenti: WorkspaceCategoryMeta(
       label: 'Documenti',
       description: 'Foto e file condivisi in Chat',
       icon: Icons.description_outlined,
+      emoji: '📄',
       color: AppColors.categoryDocumenti,
     ),
   };
