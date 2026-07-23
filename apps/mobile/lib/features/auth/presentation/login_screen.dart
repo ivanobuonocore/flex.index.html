@@ -30,9 +30,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _errorMessage = null);
 
-    final failure = await ref
-        .read(authControllerProvider.notifier)
-        .signIn(
+    final failure = await ref.read(authControllerProvider.notifier).signIn(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
