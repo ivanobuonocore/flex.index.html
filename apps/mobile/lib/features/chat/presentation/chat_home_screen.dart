@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
+
+import '../../../shared/widgets/colorful_icon_badge.dart';
 import 'package:pip_shared/pip_shared.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -348,6 +350,7 @@ class _TodayHighlights extends ConsumerWidget {
       if (nextEventToday != null)
         _TodayRow(
           icon: Icons.event_outlined,
+          color: AppColors.categoryAppuntamenti,
           text: 'Prossimo: ${nextEventToday.title} alle '
               '${_formatEventTime(nextEventToday.startsAt)}',
           onTap: () => context.push('/workspace/$appuntamentiId/reminders'),
@@ -355,6 +358,7 @@ class _TodayHighlights extends ConsumerWidget {
       if (openTasksCount > 0)
         _TodayRow(
           icon: Icons.checklist_outlined,
+          color: AppColors.categoryAttivita,
           text: openTasksCount == 1
               ? '1 attività da fare'
               : '$openTasksCount attività da fare',
@@ -363,6 +367,7 @@ class _TodayHighlights extends ConsumerWidget {
       if (projectedCents != null)
         _TodayRow(
           icon: Icons.trending_up,
+          color: AppColors.categoryBilancio,
           text: 'Proiezione fine mese: ${_formatEventAmount(projectedCents)}',
           onTap: () => context.push('/balance'),
         ),
@@ -411,9 +416,15 @@ class _TodayHighlights extends ConsumerWidget {
 }
 
 class _TodayRow extends StatelessWidget {
-  const _TodayRow({required this.icon, required this.text, this.onTap});
+  const _TodayRow({
+    required this.icon,
+    required this.color,
+    required this.text,
+    this.onTap,
+  });
 
   final IconData icon;
+  final Color color;
   final String text;
   final VoidCallback? onTap;
 
@@ -426,7 +437,7 @@ class _TodayRow extends StatelessWidget {
         borderRadius: AppRadii.buttonRadius,
         child: Row(
           children: [
-            Icon(icon, size: 16, color: Colors.white.withOpacity(0.9)),
+            ColorfulIconBadge(icon: icon, color: color, size: 28),
             const SizedBox(width: AppSpacing.xs),
             Expanded(
               child: Text(
