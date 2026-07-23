@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
+import '../../../shared/widgets/colorful_icon_badge.dart';
 import '../../transaction/application/transaction_category_meta.dart';
 import '../application/recurring_transaction_controller.dart';
 
@@ -112,7 +113,7 @@ class _RecurringTransactionTile extends ConsumerWidget {
           .delete(template.id),
       child: Card(
         child: ListTile(
-          leading: Icon(meta.icon, color: meta.color),
+          leading: ColorfulIconBadge(icon: meta.icon, color: meta.color),
           title: Text(template.description,
               maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(
