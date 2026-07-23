@@ -509,8 +509,7 @@ class _BalanceHeroCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _HeroStatPill(
-                  icon: Icons.south_west_rounded,
-                  color: AppColors.success,
+                  emoji: '💰',
                   label: 'Entrate',
                   amountCents: incomeCents,
                   onTap: incomeCents == 0
@@ -528,8 +527,7 @@ class _BalanceHeroCard extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: _HeroStatPill(
-                  icon: Icons.north_east_rounded,
-                  color: AppColors.error,
+                  emoji: '💸',
                   label: 'Uscite',
                   amountCents: expenseCents,
                   onTap: expenseCents == 0
@@ -628,22 +626,20 @@ class _PercentChangeBadge extends StatelessWidget {
 }
 
 /// Pillola statistica dentro l'hero del saldo (Entrate/Uscite) — sfondo
-/// bianco traslucido, con una piccola icona rotonda e colorata: il contrasto
-/// rende Entrate e Uscite riconoscibili a colpo d'occhio. Tocco opzionale
+/// bianco traslucido, con emoji native e colorate: sono più immediate e
+/// mantengono il tono caldo dell'app. Tocco opzionale
 /// (richiesta esplicita
 /// dell'utente: dettaglio per categoria) — `null` quando non c'è nulla da
 /// mostrare (importo a zero).
 class _HeroStatPill extends StatelessWidget {
   const _HeroStatPill({
-    required this.icon,
-    required this.color,
+    required this.emoji,
     required this.label,
     required this.amountCents,
     this.onTap,
   });
 
-  final IconData icon;
-  final Color color;
+  final String emoji;
   final String label;
   final int amountCents;
   final VoidCallback? onTap;
@@ -666,7 +662,7 @@ class _HeroStatPill extends StatelessWidget {
           ),
           child: Row(
             children: [
-              ColorfulIconBadge(icon: icon, color: color, size: 30),
+              Text(emoji, style: const TextStyle(fontSize: 22)),
               const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Column(
