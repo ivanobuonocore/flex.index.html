@@ -18,6 +18,15 @@ import '../../features/document/application/document_controller.dart';
 /// piccoli dell'immagine finale (stesso rapporto 0.8/0.4 già usato prima di
 /// questa estrazione: 160/80 su un'altezza di 200), scalati su [height] così
 /// restano proporzionati anche alla dimensione più piccola della lista.
+///
+/// Un tocco sull'immagine caricata apre un visualizzatore a schermo intero con
+/// zoom (richiesta esplicita dell'utente: "lightbox per le foto allegate") —
+/// solo nel caso `data` (un'anteprima ancora in caricamento o non
+/// disponibile non ha nulla di significativo da ingrandire). Nella lista
+/// Documenti la miniatura è il `leading` di una `ListTile` con un proprio
+/// `onTap` (apre/scarica il file): il tocco specifico sull'immagine intercetta
+/// solo quella piccola area, il resto della riga continua ad aprire il file
+/// come prima.
 class DocumentThumbnail extends ConsumerWidget {
   const DocumentThumbnail({
     super.key,
@@ -49,16 +58,57 @@ class DocumentThumbnail extends ConsumerWidget {
           width: errorSize,
           child: const Center(child: Icon(Icons.broken_image_outlined)),
         ),
-        data: (url) => Image.network(
-          url,
-          height: height,
-          width: width,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => SizedBox(
-            height: errorSize,
-            width: errorSize,
-            child: const Center(child: Icon(Icons.broken_image_outlined)),
+        data: (url) => GestureDetector(
+          onTap: () => _openLightbox(context, url),
+          child: Image.network(
+            url,
+            height: height,
+            width: width,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => SizedBox(
+              height: errorSize,
+              width: errorSize,
+              child: const Center(child: Icon(Icons.broken_image_outlined)),
+            ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _openLightbox(BuildContext context, String url) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => _ImageLightbox(url: url),
+      ),
+    );
+  }
+}
+
+/// Visualizzatore a schermo intero con pan/zoom per una foto allegata —
+/// sfondo nero pieno (non il tema dell'app: qui l'immagine è protagonista,
+/// non l'interfaccia intorno), aperto da [DocumentThumbnail] al tocco.
+class _ImageLightbox extends StatelessWidget {
+  const _ImageLightbox({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      extendBodyBehindAppBar: true,
+      body: Center(
+        child: InteractiveViewer(
+          minScale: 1,
+          maxScale: 4,
+          child: Image.network(url),
         ),
       ),
     );

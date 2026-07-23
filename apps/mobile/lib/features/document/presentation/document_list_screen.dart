@@ -5,6 +5,7 @@ import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
 
+import '../../../shared/utils/undoable_delete.dart';
 import '../../../shared/widgets/document_thumbnail.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
@@ -194,9 +195,25 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                             ),
                             onDismissed: (_) {
                               setState(() => _dismissedIds.add(document.id));
-                              ref
-                                  .read(documentFormControllerProvider.notifier)
-                                  .delete(document.id);
+                              // "Annulla" su eliminazioni (integrazione
+                              // richiesta esplicitamente): la cancellazione
+                              // reale è posticipata di qualche secondo, non
+                              // immediata — l'id resta comunque filtrato
+                              // dalla lista per tutta l'attesa.
+                              scheduleUndoableDelete(
+                                context,
+                                message: 'Documento eliminato.',
+                                onConfirmed: () => ref
+                                    .read(
+                                        documentFormControllerProvider.notifier)
+                                    .delete(document.id),
+                                onUndo: () {
+                                  if (mounted) {
+                                    setState(() =>
+                                        _dismissedIds.remove(document.id));
+                                  }
+                                },
+                              );
                             },
                             child: Card(
                               child: ListTile(

@@ -72,7 +72,41 @@ void main() {
     await tester.tap(find.text('Elimina'));
     await tester.pumpAndSettle();
 
+    // "Annulla su eliminazioni" (integrazione richiesta esplicitamente): la
+    // cancellazione reale è posticipata (SnackBar con azione "Annulla"), non
+    // immediata — `pumpAndSettle()` sopra ha già lasciato completare la
+    // chiusura del dialog e l'animazione di uscita del Dismissible (che
+    // avvia il timer); un pump esplicito più lungo del ritardo di default
+    // lo lascia scadere.
+    await tester.pump(const Duration(seconds: 5));
+
     expect(fakeRepository.lastDeletedId, 'd1');
+  });
+
+  testWidgets(
+      'toccare "Annulla" nello SnackBar dopo la conferma ripristina il documento senza cancellarlo',
+      (tester) async {
+    final fakeRepository = FakeDocumentRepository();
+    addTearDown(fakeRepository.dispose);
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([document]);
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(Dismissible), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Elimina'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('scontrino.jpg'), findsNothing);
+    expect(fakeRepository.lastDeletedId, isNull);
+
+    await tester.tap(find.text('Annulla'));
+    await tester.pumpAndSettle();
+
+    await tester.pump(const Duration(seconds: 5));
+    expect(fakeRepository.lastDeletedId, isNull);
+    expect(find.text('scontrino.jpg'), findsOneWidget);
   });
 
   testWidgets('un documento con tag mostra le pillole e permette di filtrare',

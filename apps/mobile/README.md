@@ -828,6 +828,34 @@ Non ancora presenti: settings, billing.
   Verificato visivamente con screenshot offscreen (`matchesGoldenFile` in test temporanei, poi
   rimossi), stesso metodo già usato per il grafico a torta.
 
+- **Splash coerente all'avvio** (richiesta esplicita dell'utente, migliorie miste
+  estetiche/funzionali) — `web/index.html`: un overlay a schermo intero con lo stesso gradiente
+  `AppColors.heroGradient` e l'icona dell'app pulsante, al posto del lampo bianco prima che Flutter
+  finisca di caricarsi. Rimosso in JavaScript puro all'evento standard `flutter-first-frame`
+  (emesso dal motore Flutter Web una volta dipinto il primo fotogramma reale), mai lasciato a
+  copertura permanente. Anche lo sfondo di `html`/`body` è impostato sullo stesso gradiente, come
+  rete di sicurezza se lo splash sparisse prima che Flutter sia pronto su una rete lenta.
+- **Lightbox sulle foto allegate** (integrazione richiesta esplicitamente) — `DocumentThumbnail`
+  (widget condiviso, usato sia in Chat sia nella lista Documenti): un tocco sull'immagine già
+  caricata apre un visualizzatore a schermo intero (`InteractiveViewer`, pan/zoom fino a 4×) invece
+  di restare piccola. Solo sul caso "immagine caricata con successo" — un tocco su un
+  caricamento/errore non apre nulla. Verificato con `tester.takeException()` per consumare
+  l'inevitabile `NetworkImageLoadException` di `Image.network` in `flutter test` (nessuna vera
+  rete nel test binding, nessun `mockNetworkImagesFor` in questo progetto).
+- **"Annulla" su eliminazioni** (integrazione richiesta esplicitamente) — nuova utility condivisa
+  `shared/utils/undoable_delete.dart` (`scheduleUndoableDelete`): mostra uno SnackBar con l'azione
+  "Annulla" e posticipa di 4 secondi la cancellazione reale, invece di eseguirla subito. Applicata
+  a tutte e quattro le liste con swipe-to-delete (Attività, Note, Promemoria, Documenti), ciascuna
+  con il proprio insieme locale di id "scartati" per nascondere l'elemento durante l'attesa e farlo
+  ricomparire se l'utente annulla — `TaskListScreen` è passata da `ConsumerWidget` a
+  `ConsumerStatefulWidget` per poter tenere quello stato, le altre tre schermate erano già
+  Stateful. **Eccezione voluta**: l'eliminazione dell'intera serie di un promemoria ricorrente
+  resta immediata, senza "Annulla" — quella scelta (singola occorrenza o serie intera) è già una
+  conferma esplicita a sé, per non riscrivere quel flusso già testato. Nei test, `pumpAndSettle()`
+  da solo non basta ad aspettare il timer di 4 secondi (una `Timer` pura non "schedula un
+  fotogramma" come farebbe un'animazione, quindi `pumpAndSettle()` la considera già assestata):
+  serve un `tester.pump(Duration(seconds: 5))` esplicito dopo la conferma.
+
 ## Setup locale
 
 ```

@@ -111,6 +111,40 @@ void main() {
     await tester.tap(find.text('Elimina'));
     await tester.pumpAndSettle();
 
+    // "Annulla su eliminazioni" (integrazione richiesta esplicitamente): la
+    // cancellazione reale è posticipata (SnackBar con azione "Annulla"), non
+    // immediata — `pumpAndSettle()` sopra ha già lasciato completare la
+    // chiusura del dialog e l'animazione di uscita del Dismissible (che
+    // avvia il timer); un pump esplicito più lungo del ritardo di default
+    // lo lascia scadere.
+    await tester.pump(const Duration(seconds: 5));
+
     expect(fakeRepository.lastDeletedId, 'n1');
+  });
+
+  testWidgets(
+      'toccare "Annulla" nello SnackBar dopo la conferma ripristina la nota senza cancellarla',
+      (tester) async {
+    final fakeRepository = FakeNoteRepository();
+    addTearDown(fakeRepository.dispose);
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([workNote]);
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(Dismissible), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Elimina'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Riunione'), findsNothing);
+    expect(fakeRepository.lastDeletedId, isNull);
+
+    await tester.tap(find.text('Annulla'));
+    await tester.pumpAndSettle();
+
+    await tester.pump(const Duration(seconds: 5));
+    expect(fakeRepository.lastDeletedId, isNull);
+    expect(find.text('Riunione'), findsOneWidget);
   });
 }

@@ -4,6 +4,7 @@ import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
 import '../../../core/env/app_env.dart';
+import '../../../shared/utils/undoable_delete.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
@@ -42,6 +43,11 @@ class _ReminderListScreenState extends ConsumerState<ReminderListScreen> {
   // orientarsi, non l'unico.
   DateTime? _selectedDay;
 
+  // Rimozione ottimistica locale per "Annulla su eliminazioni" (integrazione
+  // richiesta esplicitamente): filtra subito il promemoria scartato,
+  // indipendentemente da quando (o se) il repository lo cancella davvero.
+  final _dismissedIds = <String>{};
+
   @override
   Widget build(BuildContext context) {
     final eventsAsync = ref.watch(calendarEventsProvider(widget.workspaceId));
@@ -70,7 +76,10 @@ class _ReminderListScreenState extends ConsumerState<ReminderListScreen> {
                 onRetry: () =>
                     ref.invalidate(calendarEventsProvider(widget.workspaceId)),
               ),
-              data: (events) {
+              data: (allEvents) {
+                final events = allEvents
+                    .where((e) => !_dismissedIds.contains(e.id))
+                    .toList(growable: false);
                 if (events.isEmpty) {
                   return EmptyState(
                     icon: Icons.notifications_outlined,
@@ -166,15 +175,32 @@ class _ReminderListScreenState extends ConsumerState<ReminderListScreen> {
                                     color: Colors.white),
                               ),
                               onDismissed: (_) {
+                                setState(() => _dismissedIds.add(event.id));
                                 // Ricorrente: la cancellazione (singola o
                                 // dell'intera serie) è già avvenuta dentro
                                 // _confirmDismiss, dove si conosce la scelta
-                                // dell'utente.
+                                // dell'utente — nessun "Annulla" qui, quella
+                                // scelta è già di per sé una conferma
+                                // esplicita distinta (integrazione "Annulla
+                                // su eliminazioni" applicata solo al caso
+                                // semplice, non ricorrente, per non
+                                // riscrivere quel flusso già testato).
                                 if (event.recurrenceGroupId == null) {
-                                  ref
-                                      .read(calendarEventFormControllerProvider
-                                          .notifier)
-                                      .delete(event.id);
+                                  scheduleUndoableDelete(
+                                    context,
+                                    message: 'Promemoria eliminato.',
+                                    onConfirmed: () => ref
+                                        .read(
+                                            calendarEventFormControllerProvider
+                                                .notifier)
+                                        .delete(event.id),
+                                    onUndo: () {
+                                      if (mounted) {
+                                        setState(() =>
+                                            _dismissedIds.remove(event.id));
+                                      }
+                                    },
+                                  );
                                 }
                               },
                               child: Card(

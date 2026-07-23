@@ -64,6 +64,16 @@ void main() {
     await tester.tap(find.text('Elimina'));
     await tester.pumpAndSettle();
 
+    // "Annulla su eliminazioni" (integrazione richiesta esplicitamente): la
+    // cancellazione reale è posticipata (SnackBar con azione "Annulla"), non
+    // immediata — `pumpAndSettle()` sopra ha già lasciato completare la
+    // chiusura del dialog e l'animazione di uscita del Dismissible (che
+    // avvia il timer dentro `onDismissed`); un pump esplicito più lungo del
+    // ritardo di default lo lascia scadere (una `Timer` pura non "schedula
+    // un fotogramma" come farebbe un'animazione, quindi pumpAndSettle da
+    // solo non lo aspetterebbe).
+    await tester.pump(const Duration(seconds: 5));
+
     expect(fakeRepository.lastDeletedId, 't1');
   });
 
@@ -81,6 +91,37 @@ void main() {
     await tester.tap(find.text('Annulla'));
     await tester.pumpAndSettle();
 
+    expect(fakeRepository.lastDeletedId, isNull);
+    expect(find.text('Pagare bolletta'), findsOneWidget);
+  });
+
+  testWidgets(
+      'toccare "Annulla" nello SnackBar dopo la conferma ripristina l\'attività senza cancellarla',
+      (tester) async {
+    final fakeRepository = FakeTaskRepository();
+    addTearDown(fakeRepository.dispose);
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([task]);
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(Dismissible), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Elimina'));
+    await tester.pumpAndSettle();
+
+    // L'attività sparisce subito dalla lista (rimozione ottimistica locale),
+    // ma il repository non viene ancora chiamato: lo SnackBar con "Annulla"
+    // è ancora in attesa.
+    expect(find.text('Pagare bolletta'), findsNothing);
+    expect(fakeRepository.lastDeletedId, isNull);
+
+    await tester.tap(find.text('Annulla'));
+    await tester.pumpAndSettle();
+
+    // Passato oltre il ritardo originale: nessuna cancellazione reale, e
+    // l'attività è ricomparsa nella lista.
+    await tester.pump(const Duration(seconds: 5));
     expect(fakeRepository.lastDeletedId, isNull);
     expect(find.text('Pagare bolletta'), findsOneWidget);
   });
