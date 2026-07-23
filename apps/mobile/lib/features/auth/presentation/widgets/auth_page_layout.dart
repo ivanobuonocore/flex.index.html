@@ -7,10 +7,7 @@ import 'package:pip_design_system/pip_design_system.dart';
 /// visiva fra login e registrazione. Il contenuto del form resta di competenza
 /// delle singole schermate.
 class AuthPageLayout extends StatelessWidget {
-  const AuthPageLayout({
-    required this.form,
-    super.key,
-  });
+  const AuthPageLayout({required this.form, super.key});
 
   final Widget form;
 
@@ -46,15 +43,23 @@ class AuthPageLayout extends StatelessWidget {
                         ? Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Expanded(child: _ProductIntroduction(isDark: isDark)),
+                              Expanded(
+                                child: _ProductIntroduction(isDark: isDark),
+                              ),
                               const SizedBox(width: AppSpacing.xxl),
-                              SizedBox(width: 420, child: _FormPanel(form: form)),
+                              SizedBox(
+                                width: 420,
+                                child: _FormPanel(form: form),
+                              ),
                             ],
                           )
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _ProductIntroduction(isDark: isDark, compact: true),
+                              _ProductIntroduction(
+                                isDark: isDark,
+                                compact: true,
+                              ),
                               const SizedBox(height: AppSpacing.lg),
                               _FormPanel(form: form),
                             ],
@@ -115,7 +120,10 @@ class _ProductIntroduction extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: const LinearGradient(colors: AppColors.heroGradient),
             borderRadius: AppRadii.pillRadius,
-            boxShadow: AppShadows.glow(color: colorScheme.primary, isDark: isDark),
+            boxShadow: AppShadows.glow(
+              color: colorScheme.primary,
+              isDark: isDark,
+            ),
           ),
           child: Text(
             'PIP  •  PERSONAL INTELLIGENCE PLATFORM',
@@ -128,7 +136,9 @@ class _ProductIntroduction extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.lg),
         Text(
-          compact ? 'Il tuo spazio,\npiù intelligente.' : 'Uno spazio per\npensare meglio.',
+          compact
+              ? 'Il tuo spazio,\npiù intelligente.'
+              : 'Uno spazio per\npensare meglio.',
           style: compact ? AppTypography.heading1 : AppTypography.display,
         ),
         const SizedBox(height: AppSpacing.md),
