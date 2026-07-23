@@ -855,6 +855,24 @@ Non ancora presenti: settings, billing.
   da solo non basta ad aspettare il timer di 4 secondi (una `Timer` pura non "schedula un
   fotogramma" come farebbe un'animazione, quindi `pumpAndSettle()` la considera già assestata):
   serve un `tester.pump(Duration(seconds: 5))` esplicito dopo la conferma.
+- **Filtro per categoria nel Bilancio** (richiesta esplicita dell'utente) — sopra l'elenco delle
+  transazioni confermate, una striscia orizzontale di `FilterChip` (una per categoria presente nel
+  mese selezionato, ordinate per etichetta) affianca la ricerca testuale già esistente: toccare una
+  categoria la seleziona/deseleziona, e i due filtri (testo + categoria) si combinano. La striscia
+  resta nascosta quando c'è al più una categoria (non avrebbe nulla da filtrare).
+- **Animazione d'ingresso sui grafici** (richiesta esplicita dell'utente) — `_TrendChart` e
+  `_CategoryTrendChart` (entrambi basati su `BarChart` di `fl_chart`, che estende già
+  `ImplicitlyAnimatedWidget`) partono con tutte le barre a altezza zero e, dopo il primo
+  fotogramma (`addPostFrameCallback`), passano al valore reale — l'animazione di interpolazione
+  (`swapAnimationDuration: 600ms`, `swapAnimationCurve: Curves.easeOutCubic`) è già incorporata nel
+  widget, nessun `AnimationController` scritto a mano. L'heatmap delle spese (`_ExpenseHeatmap`,
+  senza stato proprio) usa invece un `TweenAnimationBuilder` per un semplice dissolvenza in
+  ingresso (`Opacity` da 0 a 1 in 500ms). Verificato visivamente con uno screenshot offscreen a
+  metà animazione (poi rimosso, stesso metodo già usato per le altre migliorie grafiche) — nei
+  test automatici serve un `pump()` in più rispetto al solito prima di far avanzare l'orologio: il
+  primo `pump()` risolve i provider, il secondo fa scattare il rebuild innescato da
+  `addPostFrameCallback` (che avvia l'animazione con `elapsed=0`), solo allora un terzo `pump`
+  con una durata avanza l'animazione già partita.
 
 ## Setup locale
 

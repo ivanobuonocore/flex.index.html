@@ -69,6 +69,12 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
 
+  // Filtro per categoria nelle Transazioni confermate (integrazione richiesta
+  // esplicitamente), in aggiunta alla ricerca testuale già presente — stesso
+  // principio già usato dai tag delle Note: `null` = nessun filtro, tutte le
+  // categorie.
+  TransactionCategory? _filterCategory;
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -290,22 +296,67 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Builder(builder: (context) {
+                  // Solo le categorie effettivamente presenti tra le
+                  // transazioni confermate di questo mese, non l'intero set
+                  // fisso — una striscia con voci sempre vuote non aiuta a
+                  // filtrare nulla.
+                  final categoriesPresent = <TransactionCategory>{
+                    for (final t in confirmed) t.category,
+                  }.toList()
+                    ..sort((a, b) => TransactionCategoryMeta.of(a)
+                        .label
+                        .compareTo(TransactionCategoryMeta.of(b).label));
+
+                  if (categoriesPresent.length <= 1) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: SizedBox(
+                      height: 36,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: categoriesPresent.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(width: AppSpacing.xs),
+                        itemBuilder: (context, index) {
+                          final category = categoriesPresent[index];
+                          final meta = TransactionCategoryMeta.of(category);
+                          final isSelected = category == _filterCategory;
+                          return FilterChip(
+                            label: Text(meta.label),
+                            avatar: Icon(meta.icon, size: 16),
+                            selected: isSelected,
+                            onSelected: (_) => setState(
+                              () => _filterCategory =
+                                  isSelected ? null : category,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                }),
+                Builder(builder: (context) {
                   final query = _searchQuery.trim().toLowerCase();
-                  final visibleConfirmed = query.isEmpty
-                      ? confirmed
-                      : confirmed
-                          .where((t) =>
-                              t.description.toLowerCase().contains(query) ||
-                              t.tags.any(
-                                  (tag) => tag.toLowerCase().contains(query)))
-                          .toList(growable: false);
+                  final category = _filterCategory;
+                  final visibleConfirmed = confirmed.where((t) {
+                    final matchesQuery = query.isEmpty ||
+                        t.description.toLowerCase().contains(query) ||
+                        t.tags.any((tag) => tag.toLowerCase().contains(query));
+                    final matchesCategory =
+                        category == null || t.category == category;
+                    return matchesQuery && matchesCategory;
+                  }).toList(growable: false);
 
                   if (visibleConfirmed.isEmpty) {
                     return Padding(
                       padding:
                           const EdgeInsets.symmetric(vertical: AppSpacing.md),
-                      child: Text(
-                          'Nessun risultato per "${_searchController.text}".'),
+                      child: Text(_searchQuery.trim().isEmpty
+                          ? 'Nessun risultato per questa categoria.'
+                          : 'Nessun risultato per "${_searchController.text}".'),
                     );
                   }
 
@@ -799,7 +850,7 @@ void _showCategoryTrend(
   );
 }
 
-class _CategoryTrendChart extends StatelessWidget {
+class _CategoryTrendChart extends StatefulWidget {
   const _CategoryTrendChart({
     required this.months,
     required this.values,
@@ -811,7 +862,30 @@ class _CategoryTrendChart extends StatelessWidget {
   final Color color;
 
   @override
+  State<_CategoryTrendChart> createState() => _CategoryTrendChartState();
+}
+
+class _CategoryTrendChartState extends State<_CategoryTrendChart> {
+  // Le barre partono da altezza zero e crescono fino al valore reale al
+  // primo caricamento (richiesta esplicita dell'utente: "animazione
+  // d'ingresso sui grafici") — `BarChart` di fl_chart anima da solo la
+  // transizione tra due `BarChartData` diversi, basta cambiare i valori dopo
+  // il primo fotogramma.
+  bool _grown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _grown = true);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final months = widget.months;
+    final values = widget.values;
+    final color = widget.color;
     final maxValue = values.fold<int>(0, (max, v) => v > max ? v : max);
 
     return SizedBox(
@@ -821,6 +895,8 @@ class _CategoryTrendChart extends StatelessWidget {
               child: Text('Nessun importo confermato in questo periodo.'),
             )
           : BarChart(
+              swapAnimationDuration: const Duration(milliseconds: 600),
+              swapAnimationCurve: Curves.easeOutCubic,
               BarChartData(
                 maxY: maxValue * 1.2,
                 gridData: const FlGridData(show: false),
@@ -860,7 +936,7 @@ class _CategoryTrendChart extends StatelessWidget {
                       x: i,
                       barRods: [
                         BarChartRodData(
-                          toY: values[i].toDouble(),
+                          toY: _grown ? values[i].toDouble() : 0,
                           color: color,
                           width: 12,
                           borderRadius: BorderRadius.circular(4),
@@ -1187,13 +1263,32 @@ const _italianMonthsShort = [
 /// vedere l'andamento delle mie spese negli ultimi mesi"): entrate/uscite
 /// confermate degli ultimi 6 mesi, una coppia di barre per mese — stessa
 /// coppia di colori del grafico a torta sopra, per coerenza visiva.
-class _TrendChart extends StatelessWidget {
+class _TrendChart extends StatefulWidget {
   const _TrendChart({required this.trend});
 
   final List<MonthlyTotals> trend;
 
   @override
+  State<_TrendChart> createState() => _TrendChartState();
+}
+
+class _TrendChartState extends State<_TrendChart> {
+  // Le barre partono da altezza zero e crescono fino al valore reale al
+  // primo caricamento (richiesta esplicita dell'utente: "animazione
+  // d'ingresso sui grafici") — stessa tecnica di _CategoryTrendChart.
+  bool _grown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _grown = true);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final trend = widget.trend;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final incomeColor = AppColors.heroGradient[0];
     final expenseColor = AppColors.heroGradient[1];
@@ -1224,6 +1319,9 @@ class _TrendChart extends StatelessWidget {
                             'Nessun importo confermato in questo periodo.'),
                       )
                     : BarChart(
+                        swapAnimationDuration:
+                            const Duration(milliseconds: 600),
+                        swapAnimationCurve: Curves.easeOutCubic,
                         BarChartData(
                           maxY: maxValue * 1.2,
                           gridData: const FlGridData(show: false),
@@ -1265,13 +1363,17 @@ class _TrendChart extends StatelessWidget {
                                 x: i,
                                 barRods: [
                                   BarChartRodData(
-                                    toY: trend[i].incomeCents.toDouble(),
+                                    toY: _grown
+                                        ? trend[i].incomeCents.toDouble()
+                                        : 0,
                                     color: incomeColor,
                                     width: 8,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   BarChartRodData(
-                                    toY: trend[i].expenseCents.toDouble(),
+                                    toY: _grown
+                                        ? trend[i].expenseCents.toDouble()
+                                        : 0,
                                     color: expenseColor,
                                     width: 8,
                                     borderRadius: BorderRadius.circular(4),
@@ -1366,20 +1468,34 @@ class _ExpenseHeatmap extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                GridView.count(
-                  crossAxisCount: 7,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    for (var i = 0; i < leadingBlanks; i++)
-                      const SizedBox.shrink(),
-                    for (var day = 1; day <= daysInMonth; day++)
-                      _HeatmapDayCell(
-                        day: day,
-                        intensity: (dailyTotals[day] ?? 0) / maxCents,
-                        color: accent,
-                      ),
-                  ],
+                // Dissolvenza in ingresso al primo caricamento (richiesta
+                // esplicita dell'utente: "animazione d'ingresso sui
+                // grafici") — `TweenAnimationBuilder` anima da sola dal
+                // valore iniziale a quello finale non appena il widget
+                // compare, senza bisogno di un AnimationController esplicito.
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeOut,
+                  builder: (context, opacity, child) => Opacity(
+                    opacity: opacity,
+                    child: child,
+                  ),
+                  child: GridView.count(
+                    crossAxisCount: 7,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      for (var i = 0; i < leadingBlanks; i++)
+                        const SizedBox.shrink(),
+                      for (var day = 1; day <= daysInMonth; day++)
+                        _HeatmapDayCell(
+                          day: day,
+                          intensity: (dailyTotals[day] ?? 0) / maxCents,
+                          color: accent,
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ],

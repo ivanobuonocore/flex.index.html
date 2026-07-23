@@ -603,6 +603,89 @@ void main() {
   });
 
   testWidgets(
+      'la striscia di categoria filtra le transazioni confermate, in aggiunta alla ricerca',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final groceries = Transaction(
+      id: 't-groceries',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Spesa supermercato',
+      amountCents: 5000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      category: TransactionCategory.alimentari,
+    );
+    final fuel = Transaction(
+      id: 't-fuel',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Benzina',
+      amountCents: 2000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      category: TransactionCategory.trasporti,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([groceries, fuel]);
+    fakeBudget.emit(const []);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Spesa supermercato'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Spesa supermercato'), findsOneWidget);
+    expect(find.text('Benzina'), findsOneWidget);
+
+    // Tocca la chip "Trasporti": resta solo la Benzina.
+    await tester.tap(find.widgetWithText(FilterChip, 'Trasporti'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Spesa supermercato'), findsNothing);
+    expect(find.text('Benzina'), findsOneWidget);
+
+    // Toccando di nuovo la stessa chip il filtro si toglie.
+    await tester.tap(find.widgetWithText(FilterChip, 'Trasporti'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Spesa supermercato'), findsOneWidget);
+    expect(find.text('Benzina'), findsOneWidget);
+
+    // Combinato con la ricerca testuale: categoria "Alimentari" + testo che
+    // non corrisponde a nessuna descrizione in quella categoria.
+    await tester.tap(find.widgetWithText(FilterChip, 'Alimentari'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'benzina');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Spesa supermercato'), findsNothing);
+    expect(find.text('Benzina'), findsNothing);
+    expect(find.text('Nessun risultato per "benzina".'), findsOneWidget);
+  });
+
+  testWidgets(
       'il pulsante Condividi riepilogo apre il foglio con saldo e copia negli appunti',
       (tester) async {
     final fakeTransaction = FakeTransactionRepository();
