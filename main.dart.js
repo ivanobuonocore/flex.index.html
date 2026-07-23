@@ -34939,9 +34939,8 @@ return A.BS(B.G4,new A.yx(c,f,f,f,o,l,f,f,f,f,B.GP,f,f,f),new A.tU(c,B.o,f,f,f,i
 EI(a,b,c,d){return A.by0().$4$fontSize$fontWeight$height$letterSpacing(a,b,c,d)},
 b_V(){var s=0,r=A.t(t.H)
 var $async$b_V=A.o(function(a,b){if(a===1)return A.p(b,r)
-while(true)switch(s){case 0:A.a_(A.al("SUPABASE_URL e SUPABASE_ANON_KEY sono obbligatorie. Avvia con --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=... (vedi infrastructure/supabase/README.md)."))
-s=2
-return A.m(A.aCF("",""),$async$b_V)
+while(true)switch(s){case 0:s=2
+return A.m(A.aCF("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhY2NteXp4ZGp3dmp2bW1rdmpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0NTA5NTQsImV4cCI6MjEwMDAyNjk1NH0.DsSXR5ygMyuwx_WXI1IjCkZDqm42MafwmeZbCZnL3yo","https://sacccmyzxdjwvjvmmktjb.supabase.co"),$async$b_V)
 case 2:return A.q(null,r)}})
 return A.r($async$b_V,r)},
 bwj(a,b){return A.bmO(a,B.I0)},
