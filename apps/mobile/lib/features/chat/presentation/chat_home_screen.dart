@@ -10,17 +10,20 @@ import 'package:pip_shared/pip_shared.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../../core/providers.dart';
+import '../../../shared/widgets/document_thumbnail.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
+import '../../../shared/widgets/success_pulse.dart';
 import '../../auth/application/session_controller.dart';
-import '../../document/application/document_controller.dart';
 import '../../reminder/application/calendar_event_controller.dart';
+import '../../task/application/task_controller.dart';
 import '../../transaction/application/transaction_controller.dart';
 import '../../workspace/application/workspace_category_meta.dart';
 import '../../workspace/application/workspace_controller.dart';
 import '../../workspace/presentation/widgets/section_preview.dart';
 import '../application/chat_controller.dart';
+import '../application/markdown_lite.dart';
 import '../application/message_controller.dart';
 
 /// Home dell'app **e** unica Chat (Fase 3, "Chat unica" — richiesta esplicita
@@ -65,7 +68,20 @@ class _ChatHomeScreenState extends ConsumerState<ChatHomeScreen> {
     final chatAsync = ref.watch(singleChatProvider);
 
     return Scaffold(
-      appBar: GradientAppBar(title: Text(_greeting(user?.name))),
+      appBar: GradientAppBar(
+        title: Text(_greeting(user?.name)),
+        // Ricerca Universale (richiesta esplicita dell'utente: tolta dalla
+        // barra di navigazione, sostituita lì da Appuntamenti) — resta
+        // raggiungibile da qui, solo meno in vista: Note/Attività/Documenti/
+        // Spazi/Promemoria restano cercabili, la schermata non è cambiata.
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'Ricerca',
+            onPressed: () => context.push('/search'),
+          ),
+        ],
+      ),
       body: chatAsync.when(
         loading: () {
           final cachedId = _lastKnownChatId;
@@ -140,6 +156,11 @@ class _ChatHomeBodyState extends ConsumerState<_ChatHomeBody> {
 
     return Column(
       children: [
+        _TodayHighlights(
+          bilancioId: bilancioId,
+          appuntamentiId: appuntamentiId,
+          attivitaId: attivitaId,
+        ),
         if (sections.isNotEmpty)
           Container(
             decoration: BoxDecoration(
@@ -262,6 +283,163 @@ class _ChatHomeBodyState extends ConsumerState<_ChatHomeBody> {
       if (workspace.category == category) return workspace.id;
     }
     return null;
+  }
+}
+
+/// Blocco "Oggi" (richiesta esplicita dell'utente, dopo aver scartato una tab
+/// dedicata — `docs/product/06-information-architecture.md` l'aveva già
+/// esclusa in passato): riusa solo provider/funzioni pure già esistenti,
+/// nessuna nuova query. Ogni riga compare solo se ha qualcosa da mostrare; se
+/// non c'è nulla (nessun impegno oggi, nessuna attività aperta, nessuna
+/// transazione questo mese) il blocco non occupa spazio — stesso principio
+/// già usato per `_NotificationStatusBanner` in `reminder_list_screen.dart`.
+class _TodayHighlights extends ConsumerWidget {
+  const _TodayHighlights({
+    required this.bilancioId,
+    required this.appuntamentiId,
+    required this.attivitaId,
+  });
+
+  final String? bilancioId;
+  final String? appuntamentiId;
+  final String? attivitaId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = DateTime.now();
+
+    CalendarEvent? nextEventToday;
+    if (appuntamentiId != null) {
+      // `.asData?.value`, non `.value`: quest'ultimo rilancia l'eccezione
+      // originale su uno stato di errore (es. `calendarEventRepositoryProvider`
+      // non sovrascritto nei test, o un Workspace non ancora bootstrappato) —
+      // il blocco "Oggi" deve solo non mostrare quella riga, mai far fallire
+      // l'intera Chat Home per un provider secondario.
+      final events =
+          ref.watch(calendarEventsProvider(appuntamentiId!)).asData?.value ??
+              const [];
+      final today = remindersDueToday(events)
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      nextEventToday = today.isEmpty ? null : today.first;
+    }
+
+    var openTasksCount = 0;
+    if (attivitaId != null) {
+      final tasks =
+          ref.watch(tasksProvider(attivitaId!)).asData?.value ?? const [];
+      openTasksCount = openTasks(tasks).length;
+    }
+
+    int? projectedCents;
+    if (bilancioId != null) {
+      final transactions =
+          ref.watch(transactionsProvider(bilancioId!)).asData?.value ??
+              const [];
+      final confirmed = confirmedThisMonth(transactions, now: now);
+      if (confirmed.isNotEmpty) {
+        projectedCents = projectedMonthEndExpenseCents(
+          spentSoFarCents: totalExpenseCents(confirmed),
+          now: now,
+        );
+      }
+    }
+
+    final rows = <Widget>[
+      if (nextEventToday != null)
+        _TodayRow(
+          icon: Icons.event_outlined,
+          text: 'Prossimo: ${nextEventToday.title} alle '
+              '${_formatEventTime(nextEventToday.startsAt)}',
+          onTap: () => context.push('/workspace/$appuntamentiId/reminders'),
+        ),
+      if (openTasksCount > 0)
+        _TodayRow(
+          icon: Icons.checklist_outlined,
+          text: openTasksCount == 1
+              ? '1 attività da fare'
+              : '$openTasksCount attività da fare',
+          onTap: () => context.push('/workspace/$attivitaId/tasks'),
+        ),
+      if (projectedCents != null)
+        _TodayRow(
+          icon: Icons.trending_up,
+          text: 'Proiezione fine mese: ${_formatEventAmount(projectedCents)}',
+          onTap: () => context.push('/balance'),
+        ),
+    ];
+
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+          AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: AppColors.heroGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: AppRadii.standardRadius,
+        boxShadow: AppShadows.glow(
+          color: AppColors.heroGradient.first,
+          isDark: Theme.of(context).brightness == Brightness.dark,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0) const SizedBox(height: AppSpacing.xs),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatEventTime(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  String _formatEventAmount(int amountCents) =>
+      '${(amountCents / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
+}
+
+class _TodayRow extends StatelessWidget {
+  const _TodayRow({required this.icon, required this.text, this.onTap});
+
+  final IconData icon;
+  final String text;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadii.buttonRadius,
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: Colors.white.withOpacity(0.9)),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.caption.copyWith(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -673,11 +851,10 @@ class _MessageBubble extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           for (final attachmentId in message.attachmentIds) ...[
-            _AttachmentImage(documentId: attachmentId),
+            DocumentThumbnail(documentId: attachmentId),
             const SizedBox(height: AppSpacing.xs),
           ],
-          Text(message.content,
-              style: AppTypography.body.copyWith(color: textColor)),
+          _MessageText(content: message.content, color: textColor),
           const SizedBox(height: AppSpacing.xs),
           Align(
             alignment: Alignment.centerRight,
@@ -732,6 +909,47 @@ class _MessageBubble extends ConsumerWidget {
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+}
+
+/// Contenuto di una bolla di messaggio, con grassetto/elenchi puntati
+/// (`markdown_lite.dart`) quando presenti. Resta un `Text` semplice quando il
+/// contenuto non ha alcun marcatore — il caso comune, incluso ogni messaggio
+/// dell'utente e ogni fixture di test esistente — perché `find.text(...)`
+/// (usato in tutta `chat_home_screen_test.dart`) non trova testo dentro un
+/// `Text.rich`/`RichText` per difetto: passare sempre a `Text.rich`
+/// romperebbe quelle asserzioni.
+class _MessageText extends StatelessWidget {
+  const _MessageText({required this.content, required this.color});
+
+  final String content;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!containsMarkdownLite(content)) {
+      return Text(content, style: AppTypography.body.copyWith(color: color));
+    }
+
+    final lines = parseMarkdownLite(content);
+    return Text.rich(
+      TextSpan(
+        style: AppTypography.body.copyWith(color: color),
+        children: [
+          for (var i = 0; i < lines.length; i++) ...[
+            if (lines[i].isBullet) const TextSpan(text: '•  '),
+            for (final span in lines[i].spans)
+              TextSpan(
+                text: span.text,
+                style: span.bold
+                    ? const TextStyle(fontWeight: FontWeight.w700)
+                    : null,
+              ),
+            if (i < lines.length - 1) const TextSpan(text: '\n'),
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -803,15 +1021,29 @@ class _PendingTransactionActions extends ConsumerWidget {
   }
 }
 
-class _PendingTransactionActionTile extends ConsumerWidget {
+class _PendingTransactionActionTile extends ConsumerStatefulWidget {
   const _PendingTransactionActionTile({required this.transaction});
 
   final Transaction transaction;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_PendingTransactionActionTile> createState() =>
+      _PendingTransactionActionTileState();
+}
+
+class _PendingTransactionActionTileState
+    extends ConsumerState<_PendingTransactionActionTile> {
+  // Micro-animazione di conferma (richiesta esplicita dell'utente): il tocco
+  // su "Conferma" innesca subito il pop dell'icona, senza aspettare che il
+  // realtime rimuova la riga (la transazione confermata sparisce da qui solo
+  // quando `_PendingTransactionActions` sopra la filtra di nuovo — un tempo
+  // non garantito, il feedback visivo non deve dipendere da quello).
+  bool _justConfirmed = false;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isIncome = transaction.type == TransactionType.income;
+    final isIncome = widget.transaction.type == TransactionType.income;
     final isBusy = ref.watch(transactionFormControllerProvider).isLoading;
 
     return Container(
@@ -834,25 +1066,35 @@ class _PendingTransactionActionTile extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  transaction.description,
+                  widget.transaction.description,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.caption
                       .copyWith(fontWeight: FontWeight.w600),
                 ),
-                Text(_formatAmount(transaction.amountCents),
+                Text(_formatAmount(widget.transaction.amountCents),
                     style: AppTypography.caption),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.check_circle_outline, size: 20),
-            tooltip: 'Conferma',
-            onPressed: isBusy
-                ? null
-                : () => ref
-                    .read(transactionFormControllerProvider.notifier)
-                    .confirm(transaction.id),
+          SuccessPulse(
+            play: _justConfirmed,
+            child: IconButton(
+              icon: Icon(
+                Icons.check_circle_outline,
+                size: 20,
+                color: _justConfirmed ? AppColors.success : null,
+              ),
+              tooltip: 'Conferma',
+              onPressed: isBusy
+                  ? null
+                  : () {
+                      setState(() => _justConfirmed = true);
+                      ref
+                          .read(transactionFormControllerProvider.notifier)
+                          .confirm(widget.transaction.id);
+                    },
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.close, size: 20),
@@ -861,7 +1103,7 @@ class _PendingTransactionActionTile extends ConsumerWidget {
                 ? null
                 : () => ref
                     .read(transactionFormControllerProvider.notifier)
-                    .delete(transaction.id),
+                    .delete(widget.transaction.id),
           ),
         ],
       ),
@@ -870,46 +1112,6 @@ class _PendingTransactionActionTile extends ConsumerWidget {
 
   String _formatAmount(int amountCents) =>
       '${(amountCents / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
-}
-
-/// Foto allegata a un messaggio: la UI conosce solo l'id del [Document]
-/// ([Message.attachmentIds]), quindi legge l'oggetto e il suo URL firmato
-/// tramite [documentDownloadUrlProvider] prima di poterla mostrare.
-class _AttachmentImage extends ConsumerWidget {
-  const _AttachmentImage({required this.documentId});
-
-  final String documentId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final urlAsync = ref.watch(documentDownloadUrlProvider(documentId));
-
-    return ClipRRect(
-      borderRadius: AppRadii.standardRadius,
-      child: urlAsync.when(
-        loading: () => const SizedBox(
-          height: 160,
-          width: 160,
-          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        ),
-        error: (_, __) => const SizedBox(
-          height: 80,
-          width: 80,
-          child: Center(child: Icon(Icons.broken_image_outlined)),
-        ),
-        data: (url) => Image.network(
-          url,
-          height: 200,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => const SizedBox(
-            height: 80,
-            width: 80,
-            child: Center(child: Icon(Icons.broken_image_outlined)),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _MessageInput extends ConsumerStatefulWidget {
@@ -954,7 +1156,6 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
   String? _errorMessage;
   PlatformFile? _pendingPhoto;
   bool _isUploadingPhoto = false;
-  bool _showEmojiPicker = false;
 
   // Dettatura vocale (integrazione richiesta esplicitamente). `SpeechToText`
   // risolve da sé l'implementazione per piattaforma (canale nativo su
@@ -1031,20 +1232,6 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     _focusNode.dispose();
     if (_isListening) _speech.stop();
     super.dispose();
-  }
-
-  /// Applica un suggerimento rapido (richiesta esplicita dell'utente: "chip
-  /// di suggerimento in Chat") scrivendo il testo nel campo — non invia
-  /// subito: "Ricorda che..." e "Aggiungi alla lista" sono prefissi da
-  /// completare, non frasi pronte, e lo stesso comportamento per tutti i chip
-  /// (anche quelli già completi, es. il saldo) resta più prevedibile di due
-  /// meccaniche diverse a seconda del testo.
-  void _applySuggestion(String text) {
-    _controller.value = TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
-    );
-    _focusNode.requestFocus();
   }
 
   Future<void> _pickPhoto() async {
@@ -1146,21 +1333,6 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
     }
   }
 
-  /// Inserisce l'emoji alla posizione del cursore (non solo in coda al
-  /// testo) — così funziona anche se l'utente ha già scritto qualcosa e
-  /// vuole aggiungere l'emoji in mezzo alla frase.
-  void _insertEmoji(String emoji) {
-    final text = _controller.text;
-    final selection = _controller.selection;
-    final start = selection.start >= 0 ? selection.start : text.length;
-    final end = selection.end >= 0 ? selection.end : text.length;
-    final newText = text.replaceRange(start, end, emoji);
-    _controller.value = TextEditingValue(
-      text: newText,
-      selection: TextSelection.collapsed(offset: start + emoji.length),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isSending =
@@ -1200,36 +1372,8 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error)),
               const SizedBox(height: AppSpacing.sm),
             ],
-            // Nascosti appena l'utente inizia a scrivere (richiesta esplicita
-            // dell'utente: chip di suggerimento) — `ValueListenableBuilder`
-            // su `_controller` invece di un listener manuale + `setState`.
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _controller,
-              builder: (context, value, child) {
-                if (value.text.isNotEmpty || isSending) {
-                  return const SizedBox.shrink();
-                }
-                return child!;
-              },
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: _QuickSuggestionsRow(onSelected: _applySuggestion),
-              ),
-            ),
             Row(
               children: [
-                IconButton(
-                  tooltip: 'Emoji',
-                  onPressed: isSending
-                      ? null
-                      : () =>
-                          setState(() => _showEmojiPicker = !_showEmojiPicker),
-                  icon: Icon(
-                    _showEmojiPicker
-                        ? Icons.keyboard_outlined
-                        : Icons.emoji_emotions_outlined,
-                  ),
-                ),
                 IconButton(
                   tooltip: _canAttachPhoto
                       ? 'Allega una foto'
@@ -1273,150 +1417,8 @@ class _MessageInputState extends ConsumerState<_MessageInput> {
                 ),
               ],
             ),
-            if (_showEmojiPicker) ...[
-              const SizedBox(height: AppSpacing.sm),
-              _EmojiPicker(onSelected: _insertEmoji),
-            ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _QuickSuggestion {
-  const _QuickSuggestion(
-      {required this.label, required this.text, required this.icon});
-
-  final String label;
-  final String text;
-  final IconData icon;
-}
-
-/// Chip di suggerimento rapido sopra il campo di testo (richiesta esplicita
-/// dell'utente: "chip di suggerimento in Chat") — copre le tre azioni più
-/// comuni già supportate dall'assistente (saldo del mese: query di sola
-/// lettura sui dati reali; Memoria: `remember_fact`; liste: `manage_tasks`),
-/// senza dover ricordare come formularle.
-const _quickSuggestions = [
-  _QuickSuggestion(
-    label: 'Chiedi il saldo',
-    text: 'Quanto ho speso questo mese?',
-    icon: Icons.account_balance_wallet_outlined,
-  ),
-  _QuickSuggestion(
-    label: 'Ricorda che...',
-    text: 'Ricorda che ',
-    icon: Icons.psychology_outlined,
-  ),
-  _QuickSuggestion(
-    label: 'Aggiungi alla lista',
-    text: 'Aggiungi alla lista: ',
-    icon: Icons.checklist_outlined,
-  ),
-];
-
-class _QuickSuggestionsRow extends StatelessWidget {
-  const _QuickSuggestionsRow({required this.onSelected});
-
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    // `SingleChildScrollView` + `Row`, non `ListView.separated`: alcuni test
-    // esistenti usano `find.byType(ListView)` assumendo che ce ne sia una
-    // sola (la lista messaggi) — un secondo `ListView` qui li romperebbe.
-    return SizedBox(
-      height: 36,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (final suggestion in _quickSuggestions) ...[
-              ActionChip(
-                avatar: Icon(suggestion.icon, size: 16),
-                label: Text(suggestion.label),
-                onPressed: () => onSelected(suggestion.text),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Selettore di emoji semplice (stile WhatsApp: una tastiera alternativa
-/// sotto il campo di testo, non un menu a comparsa). Nessuna dipendenza
-/// esterna: sono solo caratteri Unicode, disegnati dal font di sistema —
-/// funzionano allo stesso modo su web, Android e iOS senza bisogno di un
-/// pacchetto dedicato.
-class _EmojiPicker extends StatelessWidget {
-  const _EmojiPicker({required this.onSelected});
-
-  final ValueChanged<String> onSelected;
-
-  static const _emojis = [
-    '😀',
-    '😂',
-    '🥰',
-    '😍',
-    '😊',
-    '😉',
-    '😎',
-    '🤔',
-    '😅',
-    '😭',
-    '😢',
-    '😡',
-    '🥳',
-    '😴',
-    '🤗',
-    '🙄',
-    '👍',
-    '👎',
-    '👏',
-    '🙏',
-    '💪',
-    '🤝',
-    '👋',
-    '✌️',
-    '❤️',
-    '🔥',
-    '✨',
-    '🎉',
-    '👌',
-    '💯',
-    '⭐',
-    '✅',
-    '☕',
-    '🍕',
-    '🎂',
-    '🚀',
-    '📌',
-    '📅',
-    '💰',
-    '🏠',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 160,
-      child: GridView.builder(
-        gridDelegate:
-            const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 8),
-        itemCount: _emojis.length,
-        itemBuilder: (context, index) {
-          final emoji = _emojis[index];
-          return InkWell(
-            borderRadius: AppRadii.buttonRadius,
-            onTap: () => onSelected(emoji),
-            child: Center(
-                child: Text(emoji, style: const TextStyle(fontSize: 22))),
-          );
-        },
       ),
     );
   }

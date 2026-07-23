@@ -6,12 +6,31 @@ import 'package:pip_shared/pip_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/providers.dart';
+import '../../transaction/application/transaction_controller.dart';
 
 /// Documenti di un Workspace, in tempo reale (Software Architecture,
 /// "Sincronizzazione" — Realtime lato Supabase).
 final documentsProvider = StreamProvider.autoDispose
     .family<List<Document>, String>((ref, workspaceId) {
   return ref.watch(documentRepositoryProvider).watchDocuments(workspaceId);
+});
+
+/// Id dei Documenti referenziati da almeno una Transazione di questo
+/// Workspace (Knowledge Graph "lite" — richiesta esplicita dell'utente):
+/// derivato interamente da [transactionsProvider], già la fonte di verità
+/// per `Transaction.documentId` — nessuna nuova query, nessuna nuova
+/// migrazione.
+final linkedDocumentIdsProvider =
+    Provider.autoDispose.family<Set<String>, String>((ref, workspaceId) {
+  // `.asData?.value`, non `.value`: quest'ultimo rilancia l'eccezione
+  // originale su uno stato di errore — un problema nel derivare i
+  // collegamenti non deve mai far fallire l'intera lista Documenti.
+  final transactions =
+      ref.watch(transactionsProvider(workspaceId)).asData?.value ?? const [];
+  return {
+    for (final t in transactions)
+      if (t.documentId != null) t.documentId!,
+  };
 });
 
 /// URL firmato di un Document dato solo il suo id — usato per renderizzare un

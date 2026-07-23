@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_mobile/core/providers.dart';
 import 'package:pip_mobile/features/chat/application/message_controller.dart';
@@ -300,6 +301,194 @@ void main() {
     expect(find.text('1'), findsNWidgets(2));
   });
 
+  testWidgets(
+      'il blocco "Oggi" mostra il prossimo impegno e le attività aperte '
+      'quando presenti', (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeCalendarEvent = FakeCalendarEventRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeCalendarEvent.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final sections = [
+      for (final category in SystemWorkspaceCategory.all)
+        Workspace(
+          id: 'w-$category',
+          ownerId: 'u1',
+          name: category,
+          icon: 'folder',
+          status: WorkspaceStatus.active,
+          createdAt: DateTime.utc(2026, 1, 1),
+          category: category,
+        ),
+    ];
+    final now = DateTime.now();
+    final eventToday = CalendarEvent(
+      id: 'e1',
+      workspaceId: 'w-${SystemWorkspaceCategory.appuntamenti}',
+      title: 'Dentista',
+      startsAt: now,
+      durationMinutes: 30,
+      createdAt: now,
+    );
+    final openTask = Task(
+      id: 'task-1',
+      workspaceId: 'w-${SystemWorkspaceCategory.attivita}',
+      title: 'Comprare il latte',
+      status: TaskStatus.todo,
+      priority: TaskPriority.medium,
+      createdAt: now,
+    );
+    final doneTask = Task(
+      id: 'task-2',
+      workspaceId: 'w-${SystemWorkspaceCategory.attivita}',
+      title: 'Fatto ieri',
+      status: TaskStatus.done,
+      priority: TaskPriority.medium,
+      createdAt: now,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          calendarEventRepositoryProvider.overrideWithValue(fakeCalendarEvent),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(sections);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit(const []);
+    fakeTask.emit([openTask, doneTask]);
+    fakeDocument.emit(const []);
+    fakeTransaction.emit(const []);
+    fakeCalendarEvent.emit([eventToday]);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Prossimo: Dentista alle'), findsOneWidget);
+    expect(find.text('1 attività da fare'), findsOneWidget);
+  });
+
+  testWidgets(
+      'il blocco "Oggi" non mostra nulla quando non c\'è nessun impegno, '
+      'attività aperta o transazione questo mese', (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeCalendarEvent = FakeCalendarEventRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeCalendarEvent.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final sections = [
+      for (final category in SystemWorkspaceCategory.all)
+        Workspace(
+          id: 'w-$category',
+          ownerId: 'u1',
+          name: category,
+          icon: 'folder',
+          status: WorkspaceStatus.active,
+          createdAt: DateTime.utc(2026, 1, 1),
+          category: category,
+        ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          calendarEventRepositoryProvider.overrideWithValue(fakeCalendarEvent),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(sections);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit(const []);
+    fakeTask.emit(const []);
+    fakeDocument.emit(const []);
+    fakeTransaction.emit(const []);
+    fakeCalendarEvent.emit(const []);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Prossimo:'), findsNothing);
+    expect(find.textContaining('attività da fare'), findsNothing);
+    expect(find.textContaining('Proiezione fine mese'), findsNothing);
+  });
+
   testWidgets('Il saluto scrive il nome dell\'utente con la maiuscola',
       (tester) async {
     final fakeAuth = FakeAuthRepository();
@@ -529,78 +718,6 @@ void main() {
 
     expect(find.text('Ciao subito'), findsOneWidget);
     expect(find.textContaining('sta scrivendo'), findsNothing);
-  });
-
-  testWidgets(
-      'i chip di suggerimento scrivono il testo nel campo senza inviarlo, e '
-      'scompaiono appena si scrive', (tester) async {
-    final fakeAuth = FakeAuthRepository();
-    final fakeWorkspace = FakeWorkspaceRepository();
-    final fakeChat = FakeChatRepository();
-    final fakeMessage = FakeMessageRepository();
-    final fakeTask = FakeTaskRepository();
-    final fakeDocument = FakeDocumentRepository();
-    final fakeTransaction = FakeTransactionRepository();
-    addTearDown(fakeAuth.dispose);
-    addTearDown(fakeWorkspace.dispose);
-    addTearDown(fakeChat.dispose);
-    addTearDown(fakeMessage.dispose);
-    addTearDown(fakeTask.dispose);
-    addTearDown(fakeDocument.dispose);
-    addTearDown(fakeTransaction.dispose);
-
-    final user = User(
-      id: 'u1',
-      email: 'ada@pip.app',
-      name: 'Ada',
-      plan: UserPlan.free,
-      createdAt: DateTime.utc(2026, 1, 1),
-      onboardingCompleted: true,
-    );
-    final chat = Chat(
-      id: 'c1',
-      ownerId: 'u1',
-      title: 'Assistente',
-      aiModel: 'claude-sonnet-5',
-      status: ChatStatus.active,
-      createdAt: DateTime.utc(2026, 1, 1),
-    );
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(fakeAuth),
-          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
-          chatRepositoryProvider.overrideWithValue(fakeChat),
-          messageRepositoryProvider.overrideWithValue(fakeMessage),
-          taskRepositoryProvider.overrideWithValue(fakeTask),
-          documentRepositoryProvider.overrideWithValue(fakeDocument),
-          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
-        ],
-        child: const PipApp(),
-      ),
-    );
-
-    fakeAuth.emit(user);
-    await tester.pump();
-    fakeWorkspace.emit(const []);
-    fakeChat.emit([chat]);
-    await tester.pump();
-    fakeMessage.emit(const []);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Chiedi il saldo'), findsOneWidget);
-    expect(find.text('Ricorda che...'), findsOneWidget);
-    expect(find.text('Aggiungi alla lista'), findsOneWidget);
-
-    await tester.tap(find.text('Ricorda che...'));
-    await tester.pump();
-
-    final field = tester.widget<TextField>(find.byType(TextField));
-    expect(field.controller!.text, 'Ricorda che ');
-
-    // Scompaiono appena il campo non è più vuoto.
-    expect(find.text('Chiedi il saldo'), findsNothing);
   });
 
   testWidgets(
@@ -1130,6 +1247,15 @@ void main() {
       pendingTransaction.copyWith(status: TransactionStatus.confirmed),
     );
     await tester.tap(find.byIcon(Icons.check_circle_outline));
+    // Micro-animazione di conferma (richiesta esplicita dell'utente): subito
+    // dopo il tocco, prima ancora che il realtime rimuova la riga, l'icona
+    // diventa verde (feedback ottimistico) — un solo pump, non pumpAndSettle,
+    // per osservare lo stato immediatamente dopo il tap.
+    await tester.pump();
+    final confirmedIcon =
+        tester.widget<Icon>(find.byIcon(Icons.check_circle_outline));
+    expect(confirmedIcon.color, AppColors.success);
+
     await tester.pumpAndSettle();
 
     expect(fakeTransaction.lastConfirmedId, 't1');
@@ -1143,5 +1269,170 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.check_circle_outline), findsNothing);
+  });
+
+  testWidgets(
+      'un messaggio con ** mostra il testo in grassetto (Text.rich), uno senza '
+      'marcatori resta un Text semplice', (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final plainMessage = Message(
+      id: 'm1',
+      chatId: 'c1',
+      role: MessageRole.user,
+      content: 'Ciao, come va?',
+      timestamp: DateTime.utc(2026, 1, 1),
+    );
+    final markdownMessage = Message(
+      id: 'm2',
+      chatId: 'c1',
+      role: MessageRole.ai,
+      content: 'Ho segnato **50,00 €** di spesa.',
+      timestamp: DateTime.utc(2026, 1, 1, 0, 1),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(const []);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit([plainMessage, markdownMessage]);
+    await tester.pumpAndSettle();
+
+    // Nessun marcatore: resta un `Text` semplice, `find.text(...)` esatto
+    // continua a funzionare come per ogni altro test di questo file.
+    expect(find.text('Ciao, come va?'), findsOneWidget);
+
+    // Con `**`: il testo letterale coi marcatori non compare più come `Text`
+    // semplice (i marcatori sono rimossi, il contenuto è diviso in frammenti
+    // dentro un `Text.rich`) — il testo intero (marcatori rimossi) resta
+    // comunque leggibile con `findRichText: true`, `RichText` concatena il
+    // testo di tutti i suoi `TextSpan`.
+    expect(find.text('Ho segnato **50,00 €** di spesa.'), findsNothing);
+    final richTextFinder =
+        find.text('Ho segnato 50,00 € di spesa.', findRichText: true);
+    expect(richTextFinder, findsOneWidget);
+
+    // Il frammento in grassetto è un TextSpan figlio con fontWeight w700, non
+    // ereditato dallo stile di base della bolla.
+    final richText = tester.widget<RichText>(richTextFinder);
+    // `Text.rich(mySpan)` avvolge `mySpan` come unico figlio di un TextSpan
+    // esterno (che porta lo stile ereditato da `DefaultTextStyle`): il
+    // `TextSpan` passato da `_MessageText` è quindi un livello più in
+    // profondità, non `richText.text` stesso.
+    final ourSpan = (richText.text as TextSpan).children!.single as TextSpan;
+    final boldChild = ourSpan.children!
+        .whereType<TextSpan>()
+        .firstWhere((span) => span.text == '50,00 €');
+    expect(boldChild.style?.fontWeight, FontWeight.w700);
+  });
+
+  testWidgets(
+      'l\'icona Ricerca in Chat Home apre la Ricerca Universale (tolta dalla '
+      'barra di navigazione, richiesta esplicita dell\'utente)',
+      (tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeChat = FakeChatRepository();
+    final fakeMessage = FakeMessageRepository();
+    final fakeTask = FakeTaskRepository();
+    final fakeDocument = FakeDocumentRepository();
+    final fakeTransaction = FakeTransactionRepository();
+    addTearDown(fakeAuth.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeChat.dispose);
+    addTearDown(fakeMessage.dispose);
+    addTearDown(fakeTask.dispose);
+    addTearDown(fakeDocument.dispose);
+    addTearDown(fakeTransaction.dispose);
+
+    final user = User(
+      id: 'u1',
+      email: 'ada@pip.app',
+      name: 'Ada',
+      plan: UserPlan.free,
+      createdAt: DateTime.utc(2026, 1, 1),
+      onboardingCompleted: true,
+    );
+    final chat = Chat(
+      id: 'c1',
+      ownerId: 'u1',
+      title: 'Assistente',
+      aiModel: 'claude-sonnet-5',
+      status: ChatStatus.active,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(fakeAuth),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          chatRepositoryProvider.overrideWithValue(fakeChat),
+          messageRepositoryProvider.overrideWithValue(fakeMessage),
+          taskRepositoryProvider.overrideWithValue(fakeTask),
+          documentRepositoryProvider.overrideWithValue(fakeDocument),
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+        ],
+        child: const PipApp(),
+      ),
+    );
+
+    fakeAuth.emit(user);
+    await tester.pump();
+    fakeWorkspace.emit(const []);
+    fakeChat.emit([chat]);
+    await tester.pump();
+    fakeMessage.emit(const []);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.search));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cerca tra i tuoi contenuti'), findsOneWidget);
   });
 }

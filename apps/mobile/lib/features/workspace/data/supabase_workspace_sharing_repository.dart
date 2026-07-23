@@ -40,7 +40,7 @@ class SupabaseWorkspaceSharingRepository implements WorkspaceSharingRepository {
         .eq('workspace_id', workspaceId)
         .order('joined_at', ascending: true)
         .map(
-          (rows) => rows.map(_memberFromDb).toList(growable: false),
+          (rows) => rows.map(parseWorkspaceMemberRow).toList(growable: false),
         );
   }
 
@@ -65,7 +65,7 @@ class SupabaseWorkspaceSharingRepository implements WorkspaceSharingRepository {
           })
           .select()
           .single();
-      return Result.ok(_inviteFromDb(row));
+      return Result.ok(parseWorkspaceInviteRow(row));
     } catch (e) {
       return Result.err(
         UnexpectedFailure('Non è stato possibile creare l\'invito.', cause: e),
@@ -160,30 +160,47 @@ class SupabaseWorkspaceSharingRepository implements WorkspaceSharingRepository {
       createdAt: DateTime.parse(row['created_at'] as String),
     );
   }
+}
 
-  WorkspaceMember _memberFromDb(Map<String, dynamic> row) {
-    return WorkspaceMember(
-      id: row['id'] as String,
-      workspaceId: row['workspace_id'] as String,
-      userId: row['user_id'] as String,
-      joinedAt: DateTime.parse(row['joined_at'] as String),
-      role: WorkspaceRole.values.byName(row['role'] as String),
-    );
-  }
+/// Converte una riga di `workspace_members`/`workspace_invites` in un ruolo
+/// tollerante a `null` invece che diretto: `role` è stata aggiunta da una
+/// migrazione additiva (Slice 3, permessi granulari) più recente dello
+/// schema originale di entrambe le tabelle — se non ancora applicata al
+/// progetto Supabase reale arriva `null`, non assente, e un cast diretto
+/// romperebbe il caricamento di ogni schermata di un Workspace condiviso
+/// (stesso bug già corretto per `messages.pending_transaction_ids`). Default
+/// `editor`, lo stesso della colonna SQL.
+WorkspaceRole workspaceRoleFromDb(String? value) =>
+    value == null ? WorkspaceRole.editor : WorkspaceRole.values.byName(value);
 
-  WorkspaceInvite _inviteFromDb(Map<String, dynamic> row) {
-    return WorkspaceInvite(
-      id: row['id'] as String,
-      workspaceId: row['workspace_id'] as String,
-      code: row['code'] as String,
-      createdBy: row['created_by'] as String,
-      createdAt: DateTime.parse(row['created_at'] as String),
-      expiresAt: DateTime.parse(row['expires_at'] as String),
-      role: WorkspaceRole.values.byName(row['role'] as String),
-      usedAt: row['used_at'] == null
-          ? null
-          : DateTime.parse(row['used_at'] as String),
-      usedBy: row['used_by'] as String?,
-    );
-  }
+/// Converte una riga di `workspace_members` in un [WorkspaceMember] —
+/// funzione pura (non un metodo privato) perché testabile senza mockare il
+/// client Supabase, stesso motivo di `parseMessageRow` in
+/// `supabase_message_repository.dart`.
+WorkspaceMember parseWorkspaceMemberRow(Map<String, dynamic> row) {
+  return WorkspaceMember(
+    id: row['id'] as String,
+    workspaceId: row['workspace_id'] as String,
+    userId: row['user_id'] as String,
+    joinedAt: DateTime.parse(row['joined_at'] as String),
+    role: workspaceRoleFromDb(row['role'] as String?),
+  );
+}
+
+/// Converte una riga di `workspace_invites` in un [WorkspaceInvite] — stesso
+/// motivo di [parseWorkspaceMemberRow].
+WorkspaceInvite parseWorkspaceInviteRow(Map<String, dynamic> row) {
+  return WorkspaceInvite(
+    id: row['id'] as String,
+    workspaceId: row['workspace_id'] as String,
+    code: row['code'] as String,
+    createdBy: row['created_by'] as String,
+    createdAt: DateTime.parse(row['created_at'] as String),
+    expiresAt: DateTime.parse(row['expires_at'] as String),
+    role: workspaceRoleFromDb(row['role'] as String?),
+    usedAt: row['used_at'] == null
+        ? null
+        : DateTime.parse(row['used_at'] as String),
+    usedBy: row['used_by'] as String?,
+  );
 }

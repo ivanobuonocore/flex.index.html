@@ -42,12 +42,10 @@ Implementate, con dati reali via Supabase:
   vecchio `workspaceId` della Chat). Si può allegare una foto a un messaggio: va sempre nella
   sezione Documenti (`Document` con `chat_id`, stesso bucket riusato — nessuna nuova
   infrastruttura) e l'assistente la "vede" tramite il supporto immagini di Claude.
-- **chat (chip di suggerimento)** (richiesta esplicita dell'utente) — tre `ActionChip` sopra il
-  campo di testo ("Chiedi il saldo", "Ricorda che...", "Aggiungi alla lista"): scrivono il testo nel
-  campo (non inviano subito, i due prefissi vanno completati) e spariscono appena l'utente inizia a
-  scrivere (`ValueListenableBuilder` sul `TextEditingController`, non un listener manuale). Riga
-  scorrevole con `SingleChildScrollView` + `Row`, non una seconda `ListView`: alcuni test esistenti
-  assumevano un solo `ListView` in albero (la lista messaggi) e si rompevano con una seconda.
+- **chat (chip di suggerimento)** (richiesta esplicita dell'utente, poi **rimossa** — vedi il punto
+  più sotto) — tre `ActionChip` sopra il campo di testo ("Chiedi il saldo", "Ricorda che...",
+  "Aggiungi alla lista"): scrivevano il testo nel campo (non inviavano subito, i due prefissi
+  andavano completati) e sparivano appena l'utente iniziava a scrivere.
 - **chat (scroll automatico)** (bug segnalato dall'utente: "quando risponde non si blocca la
   pagina ma che esca di seguito senza scatti, come una normale conversazione su whatsapp") — la
   lista messaggi scorre automaticamente in fondo a ogni nuovo messaggio (proprio o
@@ -386,6 +384,34 @@ Non ancora presenti: settings, billing.
   recapitata — non è verificabile senza un browser reale: su iPhone funziona solo dopo aver
   aggiunto il sito alla schermata Home (icona Condividi → Aggiungi a Home, richiede iOS 16.4+),
   mai da una scheda Safari normale.
+- Lo stesso per il banner di installazione PWA (`features/pwa_install`): la parte web-only è
+  verificata con `flutter analyze` e un vero `flutter build web` con dart2js, ma l'evento
+  `beforeinstallprompt` non è simulabile in `flutter test` — se e quando il browser lo emette
+  davvero (Chrome/Edge desktop e Android; mai su iOS Safari, che non lo supporta affatto) va
+  verificato manualmente. La disponibilità del prompt è comunque un provider runtime testabile con
+  un fake (`FakeInstallPromptService`), a differenza delle notifiche push che restano gated da una
+  costante di compilazione mai vera nei test.
+- **Markdown "lite" nelle risposte dell'assistente** (richiesta esplicita dell'utente, "anche solo
+  migliorie grafiche") — nuovo `features/chat/application/markdown_lite.dart`: parser scritto a
+  mano (regex, solo grassetto `**testo**` ed elenchi puntati con `- ` a inizio riga), non un
+  pacchetto (`flutter_markdown` non era tra le dipendenze e comprerebbe robustezza — link,
+  escaping, codice inline — non necessaria per messaggi di chat brevi, al costo di una dipendenza
+  in più). `containsMarkdownLite`/`parseMarkdownLite` sono funzioni pure, testabili senza Flutter
+  widget bindings. In `_MessageBubble` (`chat_home_screen.dart`), il nuovo widget `_MessageText`
+  resta un `Text` semplice quando il contenuto non ha alcun marcatore — il caso comune, incluso
+  ogni messaggio dell'utente e ogni fixture di test esistente — e diventa un `Text.rich` solo
+  quando li contiene davvero: `find.text(...)` (usato in tutta `chat_home_screen_test.dart`)
+  ignora `RichText`/`Text.rich` per difetto, quindi passare sempre a `Text.rich` avrebbe rotto
+  ogni asserzione esistente. Stile del grassetto: `fontWeight: FontWeight.w700` sul `TextSpan`
+  figlio (eredita colore/dimensione dallo stile di base impostato sul `TextSpan` padre). Il system
+  prompt (`ASSISTANT_PERSONA`, `ai-chat/index.ts`) guadagna un paragrafo che dice esplicitamente al
+  modello che grassetto ed elenchi puntati sono ora resi correttamente e possono essere usati con
+  moderazione — senza questo, il modello non avrebbe motivo di produrre quella sintassi. **Nota
+  tecnica sul test**: `Text.rich(mySpan)` avvolge `mySpan` come unico figlio di un `TextSpan`
+  esterno (quello che porta lo stile ereditato da `DefaultTextStyle`) — il test widget che verifica
+  lo stile del frammento in grassetto deve quindi scendere di un livello (`richText.text.children!
+  .single`) prima di ispezionare i figli reali prodotti da `_MessageText`, non `richText.text`
+  direttamente.
 - **Nessuna migrazione/Edge Function di questo progetto è mai stata applicata a un progetto
   Supabase reale da questa sessione**: serve un token di accesso Supabase (`supabase login`) che
   non è mai stato disponibile qui. Ogni `infrastructure/supabase/migrations/*.sql` scritto va
@@ -407,6 +433,22 @@ Non ancora presenti: settings, billing.
   testabile senza mockare Supabase) — la Chat carica sempre i messaggi esistenti anche prima che
   quella specifica migrazione sia stata applicata, semplicemente senza i chip Conferma/Scarta
   inline finché non lo è.
+- **Fix**: stesso gap operativo, stavolta sul Bilancio ("non è stato possibile caricare il
+  bilancio" dopo aver ripubblicato il sito con tutte le 8 integrazioni) — audit sistematico di ogni
+  colonna aggiunta da una migrazione additiva di questa sessione e letta con un cast diretto
+  (non nullable) lato client, per evitare di scoprirle una alla volta a ogni nuova segnalazione.
+  Trovate e corrette tre in più: `transactions.tags`/`documents.tags` (Slice 1, in
+  `parseTransactionRow`/`parseDocumentRow`, ex `_toDomain`) e `workspace_members.role`/
+  `workspace_invites.role` (Slice 3, in `parseWorkspaceMemberRow`/`parseWorkspaceInviteRow`, ex
+  `_memberFromDb`/`_inviteFromDb`) — tutte estratte in funzioni pure top-level e rese tolleranti a
+  `null` (lista vuota per i tag, `WorkspaceRole.editor` per il ruolo — lo stesso default della
+  colonna SQL), stesso principio del fix sopra. Verificate anche `calendar_events.google_event_id`
+  (già `String?`, sicura) e le colonne di `category_budgets` aggiunte per gli avvisi budget (mai
+  lette dal client, solo dalla Edge Function — sicure); non toccata `notes.tags`, presente fin
+  dalla migrazione originale delle Note (non una aggiunta di questa sessione, nessuna segnalazione
+  di rottura). **Resta comunque necessario** applicare le migrazioni mancanti con `npx supabase db
+  push`: questi fix evitano il crash e degradano (niente tag/ruoli differenziati finché lo schema
+  reale non è allineato), non sostituiscono la migrazione reale.
 - **Bilancio condiviso**: il codice d'invito va condiviso manualmente dall'utente (messaggio,
   chiamata, ecc.) — nessuna infrastruttura email/deep-link in questa slice. La migrazione
   `20260721160000_workspace_sharing.sql` (tabelle `workspace_members`/`workspace_invites`, RLS
@@ -572,6 +614,314 @@ Non ancora presenti: settings, billing.
   l'`AppBar`. Nessuna modifica di logica in questa slice: solo widget di presentazione, verificato
   che l'intera suite di test esistente (208 in `apps/mobile`, 40 in `packages/domain`) continuasse
   a passare invariata.
+- **Chat: suggerimenti integrati nelle risposte invece di pulsanti fissi** (richiesta esplicita
+  dell'utente: "non mi piacciono quei pulsanti... vorrei fossero integrate nelle risposte
+  dell'assistente non come pulsanti sotto") — rimossi del tutto `_QuickSuggestionsRow`/
+  `_QuickSuggestion`/`_applySuggestion` da `chat_home_screen.dart` (i tre `ActionChip` "Chiedi il
+  saldo"/"Ricorda che..."/"Aggiungi alla lista" sopra il campo di testo, introdotti in una slice
+  precedente): nessun elemento toccabile dedicato li sostituisce, per scelta esplicita dell'utente
+  (opzione "solo testo naturale, nessun pulsante" tra quelle proposte). Il system prompt
+  dell'Edge Function `ai-chat` (`ASSISTANT_PERSONA`) guadagna invece un paragrafo che invita
+  l'assistente a proporre lui stesso, a parole e quando naturale nel contesto, le stesse tre azioni
+  (es. "Vuoi che te lo ricordi?") — nessuna garanzia che compaia a ogni risposta (è una linea guida
+  di stile, non un pulsante deterministico): coerente con "l'assistente è un collaboratore
+  proattivo", non verificabile con un test automatico (dipende dal comportamento reale del
+  modello). Rimosso anche l'unico test che assumeva i tre chip fissi
+  (`chat_home_screen_test.dart`).
+- **"Oggi" in Chat Home** (richiesta esplicita dell'utente, dopo aver confermato la scelta di
+  arricchire la Chat Home esistente invece di una tab dedicata — `docs/product/
+  06-information-architecture.md` aveva già scartato una tab "Today" separata in passato) — nuovo
+  blocco `_TodayHighlights` in `chat_home_screen.dart`, sopra la striscia "Sezioni": prossimo
+  impegno di oggi (`calendarEventsProvider` + `remindersDueToday`, già in
+  `section_preview.dart`), attività aperte (`tasksProvider` + una nuova funzione pura
+  `openTasks` in `task_controller.dart`, condivisa anche da `_AttivitaPreview` per non duplicare
+  lo stesso filtro), proiezione di fine mese (`transactionsProvider` + `confirmedThisMonth`/
+  `totalExpenseCents`/`projectedMonthEndExpenseCents`, già in `transaction_controller.dart`) —
+  nessuna nuova query, solo provider già esistenti riletti nello stesso punto. Ogni riga compare
+  solo se ha qualcosa da dire; se tutte e tre sono vuote il blocco non occupa spazio (stesso
+  principio di `_NotificationStatusBanner`). Ogni riga è toccabile e porta alla schermata
+  pertinente (`context.push`, stesso pattern già usato da `search_screen.dart` per le route
+  annidate di un Workspace).
+- **Knowledge Graph "lite"** (richiesta esplicita dell'utente, scope ridotto rispetto alla visione
+  completa di `docs/product/19-knowledge-graph.md` — nessuna migrazione, nessun grafo/
+  embeddings/vettori, solo collegamenti che esistono già nello schema e vengono già scritti oggi)
+  — due superfici:
+  - **Documenti → Transazioni**: nuovo provider derivato `linkedDocumentIdsProvider` in
+    `document_controller.dart`, che osserva `transactionsProvider` (già la fonte di verità per
+    `Transaction.documentId`) e ne deriva l'insieme dei documenti referenziati — nessuna nuova
+    query. `document_list_screen.dart` mostra un badge "Collegato a una transazione" quando un
+    documento è in quell'insieme.
+  - **Promemoria creati dalla Chat**: `CalendarEvent.sourceChatId` è già scritto da
+    `create_reminder` nell'Edge Function `ai-chat` — nessun nuovo provider, è un campo diretto
+    sull'entità. `reminder_list_screen.dart` mostra un'icona "creato dalla Chat" accanto (non al
+    posto) all'icona "ricorrente" già esistente.
+  - **Contesto AI**: `buildSystemPrompt` (`ai-chat/index.ts`) amplia la `select` sui documenti per
+    includere `chat_id` e annota "(allegato in una conversazione)" quando presente — coerente con
+    `docs/product/13-prompt-engineering.md` ("documenti collegati").
+  - **Esclusioni esplicite**: `Task.documentId`/`Task.chatId`/`CalendarEvent.sourceTaskId` esistono
+    nel dominio ma non vengono mai scritti da nessun punto del codice attuale (verificato con
+    grep mirato prima di implementare) — costruirci sopra UI oggi mostrerebbe sempre il caso
+    vuoto, quindi esclusi da questa slice. Note non ha alcun campo di collegamento (richiederebbe
+    una nuova migrazione) — esclusa per scelta esplicita dell'utente, per non ripetere il
+    problema delle migrazioni non applicate avuto in questa stessa sessione.
+  - **Bug scoperto e corretto durante l'implementazione**: `ref.watch(provider).value` su un
+    `AsyncValue` in stato di errore **rilancia l'eccezione originale** invece di restituire
+    `null` (a differenza di quanto usato altrove in buona fede in questa sessione) — un
+    `calendarEventRepositoryProvider`/`transactionRepositoryProvider` non sovrascritto in un test,
+    o un Workspace non ancora bootstrappato in produzione, faceva fallire l'intera Chat Home
+    invece di limitarsi a non mostrare quella riga. Corretto usando `.asData?.value` (che invece
+    ritorna `null` in modo sicuro su qualunque stato diverso da dati) sia in `_TodayHighlights` sia
+    in `linkedDocumentIdsProvider` — scoperto grazie ai nuovi test widget di questa stessa slice,
+    non in produzione.
+- **Miniature immagine per i Documenti** (richiesta esplicita dell'utente, "anche solo migliorie
+  grafiche") — estratto in un nuovo widget condiviso `shared/widgets/document_thumbnail.dart` il
+  pattern già usato da `_AttachmentImage` in `chat_home_screen.dart` per gli allegati foto in Chat
+  (`documentDownloadUrlProvider` + `Image.network` con stati di caricamento/errore), parametrizzato
+  per dimensione. Riusato sia dalla Chat (che perde la sua versione locale duplicata) sia da
+  `document_list_screen.dart`, dove un documento `image/*` mostra ora una vera miniatura 48×48 al
+  posto dell'icona generica per tipo di file.
+- **Andamento per categoria nel tempo nel Bilancio** (richiesta esplicita dell'utente) — il tocco
+  su una categoria nel dettaglio Entrate/Uscite (`_CategoryBreakdownTile`, già raggiungibile dalle
+  pillole dell'hero o dal pulsante "Categorie di spesa") apre un nuovo sheet con un grafico a barre
+  dell'andamento di quella categoria negli ultimi 6 mesi. Nessuna nuova aggregazione: nuova funzione
+  pura `categoryMonthlyTotals` in `transaction_controller.dart`, composizione di `lastMonths`/
+  `confirmedThisMonth`/`amountCentsByCategory` già esistenti (richiede esplicitamente il tipo
+  entrata/uscita, per non sommare per sbaglio import ed export della stessa categoria nello stesso
+  mese). Il grafico (`_CategoryTrendChart`) riusa esattamente lo stile `BarChart` già stabilito da
+  `_TrendChart`.
+- **Pulsante "azione rapida" su un Workspace** (richiesta esplicita dell'utente) — nuovo
+  `FloatingActionButton` in `workspace_detail_screen.dart` che apre un `showModalBottomSheet` con
+  quattro `ListTile` (Nota/Attività/Transazione/Promemoria — i Documenti restano esclusi, si
+  caricano con un file picker, non con una sheet di testo), ciascuno instrada alla sheet di
+  creazione già esistente per quella entità. Gating: nascosto per un membro con ruolo `viewer`,
+  stesso principio già applicato a ogni altro pulsante di creazione nei Workspace condivisi
+  (`currentMemberRoleProvider`). **Bug scoperto e corretto in questa slice**: lo stesso
+  `currentMemberRoleProvider` (`workspace_sharing_controller.dart`) leggeva `sessionControllerProvider`/
+  `workspaceMembersProvider` con `.value` invece di `.asData?.value` — innocuo finché ogni schermata
+  che lo usava veniva sempre montata con quei provider già sovrascritti nei test, ma il nuovo FAB fa
+  sì che `WorkspaceDetailScreen` lo osservi incondizionatamente fin dalla prima build: un test senza
+  quegli override (`workspace_navigation_test.dart`, preesistente) ha iniziato a far fallire l'intera
+  schermata invece di limitarsi a trattare il ruolo come "nessuno". Stesso identico bug già
+  documentato sopra per `_TodayHighlights`/`linkedDocumentIdsProvider`, stessa correzione.
+- **Banner "Aggiungi alla schermata Home" (installazione PWA)** (richiesta esplicita dell'utente)
+  — nuovo `features/pwa_install/`, stesso pattern a tre file già stabilito per
+  `features/notifications/` (interfaccia `InstallPromptService` + `_stub.dart` + `_web.dart`,
+  import condizionale `if (dart.library.js_interop)`). L'implementazione web ascolta l'evento
+  browser `beforeinstallprompt` (proprietario di Chromium/Edge, non nello standard W3C — extension
+  type minimo `_BeforeInstallPromptEvent` con solo `prompt()`, dato che non è nei binding generati
+  di `package:web`), lo intercetta con `preventDefault()` per poterlo mostrare su richiesta invece
+  che automaticamente, ed espone `promptInstall()`; l'evento standard `appinstalled` segna
+  l'installazione avvenuta. Nuova card `_InstallAppCard` in `profile_screen.dart`, stesso stile di
+  `_NotificationsCard`: nascosta del tutto finché `installAvailableProvider` non emette `true`
+  (browser non Chromium/Edge, app già installata, o iOS Safari che non lo supporta affatto — copy
+  coerente con quanto già scritto per le notifiche push su iOS). A differenza delle card
+  Notifiche/Google Calendar (gated da una costante di compilazione mai vera nei test), qui la
+  disponibilità è un provider runtime: **testabile per intero con un fake**
+  (`FakeInstallPromptService`), non solo dichiarata non verificabile. **Non verificabile in questa
+  sandbox**: solo il comportamento reale dell'evento nel browser (nessun browser nel test runner,
+  `beforeinstallprompt` non è simulabile) — verificato che `flutter build web` compili
+  correttamente la forma dell'interop, comportamento a runtime da verificare manualmente in
+  Chrome/Edge, stesso limite già accettato per le notifiche push.
+- **Rimosso il selettore emoji dalla Chat** (richiesta esplicita dell'utente: "elimina l'emoji
+  accanto la tastiera perché non ha molto senso") — tolti il pulsante toggle
+  emoji/tastiera (`Icons.emoji_emotions_outlined`/`Icons.keyboard_outlined`), `_insertEmoji` e la
+  classe `_EmojiPicker` da `chat_home_screen.dart`. L'utente resta libero di scrivere emoji dalla
+  tastiera del sistema; l'assistente continua comunque a usarle nelle risposte
+  (`ASSISTANT_PERSONA`), quella parte non è cambiata.
+- **"Ricerca" tolta dalla barra di navigazione, sostituita da "Appuntamenti"** (richiesta esplicita
+  dell'utente) — la quarta voce della barra ora apre una nuova `AppointmentsOverviewScreen`
+  (`/appuntamenti`), che aggrega i promemoria di **tutti** i Workspace dell'utente in un unico
+  calendario, stesso principio già usato da `BalanceOverviewScreen` per il Bilancio globale:
+  `CalendarEventRepository.watchEvents` guadagna un `workspaceId` nullable (`null` = tutti i
+  Workspace, stessa forma già usata da `TransactionRepository.watchTransactions`). Il calendario "a
+  quadratini" (`_MonthCalendarGrid`/`_DayCell`) è stato estratto da `reminder_list_screen.dart` in
+  un nuovo widget condiviso pubblico `shared/widgets/month_calendar_grid.dart`
+  (`MonthCalendarGrid`), riusato da entrambe le schermate. Nessun FAB nella vista globale: un
+  promemoria appartiene sempre a un Workspace preciso, la creazione resta lì o via Chat — toccare
+  una riga apre `/workspace/:id/reminders` per modificarla/eliminarla. La Ricerca Universale
+  **non è stata rimossa** (resta uno dei pilastri di prodotto): la schermata `SearchScreen` è
+  invariata, solo spostata fuori dallo `StatefulShellRoute` (una route di primo livello come
+  login/onboarding, non più una delle 5 destinazioni principali) e raggiungibile da una nuova
+  icona nell'intestazione della Chat Home.
+- **Ricerca nelle Transazioni confermate, dentro il Bilancio** (richiesta esplicita dell'utente:
+  "la ricerca potrei comunque inserirla nel bilancio per ricercare le spese") — nuovo campo di
+  testo in `BalanceOverviewScreen`, sopra l'elenco "Transazioni confermate": filtra per descrizione
+  o tag (case-insensitive), solo quell'elenco — saldo/grafico/budget restano invariati, stesso
+  principio già usato dalla tendina del mese per la sola sezione "In attesa di conferma". **Nota
+  tecnica sui test**: un `TextField` porta con sé un secondo `Scrollable` interno (l'`EditableText`
+  lo usa per scrollare il cursore in vista) — ogni `scrollUntilVisible` in
+  `balance_overview_screen_test.dart` ha dovuto essere ristretto esplicitamente con `scrollable:
+  find.byType(Scrollable).first` (altrimenti `find.byType(Scrollable)` diventa ambiguo), e il test
+  del dialog "Imposta un budget" ha dovuto restringere `find.byType(TextField)` con
+  `find.descendant(of: find.byType(AlertDialog), ...)` per non confondersi con il nuovo campo di
+  ricerca sotto.
+- **Identità PWA personalizzata** (richiesta esplicita dell'utente, migliorie grafiche) —
+  `manifest.json`/`index.html` aggiornati con nome/descrizione/colore tema del brand ("PIP —
+  Personal Intelligence Platform", `#2563EB`, la stessa tinta di `AppColors.heroGradient`); icone
+  (`icons/Icon-192.png`, `icons/Icon-512.png`, `icons/Icon-maskable-192.png`,
+  `icons/Icon-maskable-512.png`, `favicon.png`) rigenerate con un gradiente blu→viola e una bolla
+  di chat stilizzata, coerenti con l'identità visiva già usata in Chat/Bilancio, al posto delle
+  icone segnaposto di Flutter.
+- **Micro-animazioni di conferma** (richiesta esplicita dell'utente) — nuovo widget condiviso
+  `shared/widgets/success_pulse.dart` (`SuccessPulse`): un "pop" (scala 1.0 → 1.35 → 1.0 su
+  380ms) che si attiva solo sul fronte di salita `play` falso→vero, non ad ogni rebuild. Usato dal
+  Checkbox di un'Attività completata (`task_list_screen.dart`) e dal pulsante "Conferma" di una
+  Transazione pending in Chat (`chat_home_screen.dart`, con stato locale `_justConfirmed` per un
+  feedback immediato indipendente dal tempismo del realtime).
+- **Heatmap delle spese nel Bilancio** (richiesta esplicita dell'utente) — nuova funzione pura
+  `dailyExpenseTotals` (`transaction_controller.dart`): uscite confermate per giorno del mese
+  selezionato. Nuovo widget `_ExpenseHeatmap` in `balance_overview_screen.dart`, un calendario a
+  quadratini colorati con intensità proporzionale alla spesa del giorno (stesso linguaggio visivo
+  di `MonthCalendarGrid`, `Color.alphaBlend` su `AppColors.error`), tra "Andamento ultimi 6 mesi" e
+  i Budget per categoria. Puramente visiva, nessun tocco/interazione: il dettaglio giorno per
+  giorno resta nell'elenco delle Transazioni confermate già presente sotto.
+
+- **ai-chat: `query_balance_summary` ora risponde anche senza un periodo specifico** (bug segnalato
+  dall'utente: "perché l'assistente non ha visibilità diretta sul totale ufficiale delle spese
+  confermate? Dovrebbe averne... vorrei che non dicesse di controllare la sezione bilancio ma che
+  mi desse tutte le informazioni in chat") — prima `period_start`/`period_end` erano entrambi
+  obbligatori nello schema dello strumento: una domanda senza un periodo esplicito (es. "quanto ho
+  speso in totale", "il totale ufficiale delle spese confermate") non aveva un modo pulito di
+  essere risolta in date concrete, e il modello finiva per rimandare l'utente alla sezione
+  Bilancio invece di rispondere. Ora entrambi i campi sono opzionali: omessi, `queryBalanceSummary`
+  (Edge Function `ai-chat`) non applica alcun limite di data e restituisce il totale su tutte le
+  transazioni confermate registrate da sempre — stesso identico filtro `status = confirmed` /
+  esclusione dei Bilanci condivisi già usato per un periodo delimitato, nessuna approssimazione.
+  `QUERY_TOOL_INSTRUCTIONS` istruisce ora esplicitamente il modello a non rimandare mai l'utente
+  alla sezione Bilancio per un dato che può ottenere da solo con questo strumento. Verificato solo
+  con `deno check`/`lint`/`fmt` (nessuna chiamata reale ad Anthropic disponibile in questa
+  sandbox, stesso limite già accettato per il resto di questo file).
+
+- **Grafico a torta del Bilancio: più profondità 3D, stessa palette** (richiesta esplicita
+  dell'utente: "deve essere più bello esteticamente... profondità dettata non solo da ombre...
+  senza stravolgere il colore") — `_BalancePieChart` in `balance_overview_screen.dart`: il
+  gradiente di ogni fetta passa da lineare a due tonalità a **radiale a tre tonalità**
+  (`RadialGradient` con fuoco in alto a sinistra: schiarito verso il centro luce, tinta piena,
+  leggermente scurito verso il bordo esterno) — simula una superficie sferica illuminata invece di
+  un colore piatto con un solo passaggio, restando dentro la stessa famiglia `AppColors.heroGradient`
+  (nessun colore nuovo). Aggiunto anche un sottile arco "riflesso vetro" (un unico settore bianco
+  semi-trasparente, sfumato ai due estremi, centrato in cima all'anello tramite `startDegreeOffset`)
+  sopra l'anello colorato, in un layer `IgnorePointer` separato per non intercettare i tocchi
+  destinati al grafico interattivo sottostante — stesso `centerSpaceRadius`/`radius` del grafico
+  reale, quindi sempre allineato senza calcoli manuali di geometria (stesso `Stack` centrato già
+  usato per la copia-ombra esistente). Verificato visivamente catturando uno screenshot del widget
+  renderizzato offscreen (`matchesGoldenFile` in un test temporaneo, poi rimosso) — nessun browser
+  reale necessario per questo controllo.
+
+- **Pass di rifinitura estetica** (richiesta esplicita dell'utente: "abbellimenti stilistici",
+  non layout/architettura) — tre migliorie indipendenti, tutte presentazione pura:
+  - **Coerenza delle intestazioni**: le 4 schermate rimaste con un `AppBar`/`SliverAppBar` piatto
+    ora usano lo stesso gradiente "premium" già in Chat/Bilancio — `MemoryListScreen`,
+    `WorkspaceMemoryListScreen`, `ProfileScreen` (passati a `GradientAppBar`, lo stesso widget
+    condiviso) e `WorkspaceDetailScreen` (`SliverAppBar` con `flexibleSpace` dello stesso
+    gradiente, non `GradientAppBar` direttamente: è dentro un `CustomScrollView` per il
+    comportamento `floating`, non un `Scaffold.appBar` semplice).
+  - **Shimmer sullo skeleton loading**: `shared/widgets/skeleton_list.dart` — sostituita la
+    dissolvenza di opacità uniforme con un vero effetto "shimmer" (`ShaderMask` con
+    `BlendMode.srcATop`, una banda di luce che attraversa ogni riga in un giro continuo), stesso
+    principio del pacchetto `shimmer` più diffuso senza aggiungere una dipendenza. Si propaga
+    automaticamente a ogni schermata che usa `SkeletonList` (un solo widget condiviso).
+  - **Effetto "vetro" esteso**: lo stesso gradiente radiale con fuoco di luce in alto a sinistra
+    già usato per le fette del grafico a torta è ora applicato anche all'avatar del Profilo
+    (tonalità bianche, sopra il gradiente colorato dell'hero) e al disco centrale del donut nel
+    Bilancio (un accenno molto tenue, per non intaccare la leggibilità del testo sopra).
+  Verificato visivamente con screenshot offscreen (`matchesGoldenFile` in test temporanei, poi
+  rimossi), stesso metodo già usato per il grafico a torta.
+
+- **Splash coerente all'avvio** (richiesta esplicita dell'utente, migliorie miste
+  estetiche/funzionali) — `web/index.html`: un overlay a schermo intero con lo stesso gradiente
+  `AppColors.heroGradient` e l'icona dell'app pulsante, al posto del lampo bianco prima che Flutter
+  finisca di caricarsi. Rimosso in JavaScript puro all'evento standard `flutter-first-frame`
+  (emesso dal motore Flutter Web una volta dipinto il primo fotogramma reale), mai lasciato a
+  copertura permanente. Anche lo sfondo di `html`/`body` è impostato sullo stesso gradiente, come
+  rete di sicurezza se lo splash sparisse prima che Flutter sia pronto su una rete lenta.
+- **Lightbox sulle foto allegate** (integrazione richiesta esplicitamente) — `DocumentThumbnail`
+  (widget condiviso, usato sia in Chat sia nella lista Documenti): un tocco sull'immagine già
+  caricata apre un visualizzatore a schermo intero (`InteractiveViewer`, pan/zoom fino a 4×) invece
+  di restare piccola. Solo sul caso "immagine caricata con successo" — un tocco su un
+  caricamento/errore non apre nulla. Verificato con `tester.takeException()` per consumare
+  l'inevitabile `NetworkImageLoadException` di `Image.network` in `flutter test` (nessuna vera
+  rete nel test binding, nessun `mockNetworkImagesFor` in questo progetto).
+- **"Annulla" su eliminazioni** (integrazione richiesta esplicitamente) — nuova utility condivisa
+  `shared/utils/undoable_delete.dart` (`scheduleUndoableDelete`): mostra uno SnackBar con l'azione
+  "Annulla" e posticipa di 4 secondi la cancellazione reale, invece di eseguirla subito. Applicata
+  a tutte e quattro le liste con swipe-to-delete (Attività, Note, Promemoria, Documenti), ciascuna
+  con il proprio insieme locale di id "scartati" per nascondere l'elemento durante l'attesa e farlo
+  ricomparire se l'utente annulla — `TaskListScreen` è passata da `ConsumerWidget` a
+  `ConsumerStatefulWidget` per poter tenere quello stato, le altre tre schermate erano già
+  Stateful. **Eccezione voluta**: l'eliminazione dell'intera serie di un promemoria ricorrente
+  resta immediata, senza "Annulla" — quella scelta (singola occorrenza o serie intera) è già una
+  conferma esplicita a sé, per non riscrivere quel flusso già testato. Nei test, `pumpAndSettle()`
+  da solo non basta ad aspettare il timer di 4 secondi (una `Timer` pura non "schedula un
+  fotogramma" come farebbe un'animazione, quindi `pumpAndSettle()` la considera già assestata):
+  serve un `tester.pump(Duration(seconds: 5))` esplicito dopo la conferma.
+- **Filtro per categoria nel Bilancio** (richiesta esplicita dell'utente) — sopra l'elenco delle
+  transazioni confermate, una striscia orizzontale di `FilterChip` (una per categoria presente nel
+  mese selezionato, ordinate per etichetta) affianca la ricerca testuale già esistente: toccare una
+  categoria la seleziona/deseleziona, e i due filtri (testo + categoria) si combinano. La striscia
+  resta nascosta quando c'è al più una categoria (non avrebbe nulla da filtrare).
+- **Animazione d'ingresso sui grafici** (richiesta esplicita dell'utente) — `_TrendChart` e
+  `_CategoryTrendChart` (entrambi basati su `BarChart` di `fl_chart`, che estende già
+  `ImplicitlyAnimatedWidget`) partono con tutte le barre a altezza zero e, dopo il primo
+  fotogramma (`addPostFrameCallback`), passano al valore reale — l'animazione di interpolazione
+  (`swapAnimationDuration: 600ms`, `swapAnimationCurve: Curves.easeOutCubic`) è già incorporata nel
+  widget, nessun `AnimationController` scritto a mano. L'heatmap delle spese (`_ExpenseHeatmap`,
+  senza stato proprio) usa invece un `TweenAnimationBuilder` per un semplice dissolvenza in
+  ingresso (`Opacity` da 0 a 1 in 500ms). Verificato visivamente con uno screenshot offscreen a
+  metà animazione (poi rimosso, stesso metodo già usato per le altre migliorie grafiche) — nei
+  test automatici serve un `pump()` in più rispetto al solito prima di far avanzare l'orologio: il
+  primo `pump()` risolve i provider, il secondo fa scattare il rebuild innescato da
+  `addPostFrameCallback` (che avvia l'animazione con `elapsed=0`), solo allora un terzo `pump`
+  con una durata avanza l'animazione già partita.
+- **Coach mark leggero sulle funzioni nuove** (richiesta esplicita dell'utente) — nuovo widget
+  condiviso `shared/widgets/coach_mark.dart` (`CoachMark`): un piccolo banner non invasivo (stesso
+  gradiente `AppColors.heroGradient` dell'header), mostrato sopra un widget la prima volta che
+  compare, con un pulsante di chiusura esplicito. Applicato a due punti già esistenti ma poco
+  scoperti: il calendario mensile in Appuntamenti ("tocca un giorno per filtrare") e la heatmap
+  delle spese nel Bilancio ("più intenso il colore, più hai speso"). Lo stato "già visto" è
+  puramente locale al dispositivo (nessun dato di dominio, nessuna sincronizzazione tra dispositivi
+  necessaria per un suggerimento grafico): persistito con `shared_preferences`, prima dipendenza di
+  storage locale in questo progetto — ogni altro stato "già visto" (es. onboarding) vive lato
+  Supabase perché deve restare coerente tra i dispositivi dello stesso utente, cosa non
+  necessaria qui. Nei test, `SharedPreferences.setMockInitialValues(...)` (hook ufficiale del
+  package) sostituisce l'istanza reale, senza bisogno di un repository fittizio dedicato.
+
+- **Pass di qualità percepita ("premium"), slice 1+2 — token e tema** (richiesta esplicita
+  dell'utente: "aumentare la qualità percepita dell'interfaccia... ispirata ad Apple, Arc Browser,
+  Linear e Notion", mantenendo la palette blu/viola attuale). Interviene solo su
+  `packages/design-system` — nessuna schermata toccata direttamente, l'effetto si propaga
+  ovunque tramite `Theme.of(context)` (AGENTS.md, "Design System").
+  - `AppShadows.subtle`: un secondo livello di ombra, più corto e più tenue di `AppShadows.card`
+    — gerarchia a più livelli invece di un'unica ombra piatta.
+  - `AppColors.hairlineLight`/`hairlineDark`: separatore quasi invisibile (stile Apple), usato dal
+    nuovo `dividerTheme` e dal bordo dei `Chip`.
+  - `AppTypography`: letter-spacing leggermente negativo sugli heading (`display`→-0.6 fino a
+    `heading3`→-0.2), non su `body`/`caption` (a quelle dimensioni stringere peggiorerebbe la
+    leggibilità invece di raffinarla).
+  - `AppMotion.emphasized`: nuova curva (accelerazione dolce, decelerazione marcata in coda), in
+    aggiunta a `AppMotion.curve` esistente — per pressioni/transizioni delle prossime slice.
+  - `AppRadii.pill`/`pillRadius`: arrotondamento esplicito "a pillola" per chip/badge.
+  - `AppTheme`: `cardTheme` guadagna un'elevazione minima (1.5) con `shadowColor` neutro e
+    `surfaceTintColor: transparent` (disattiva il lavaggio blu automatico di Material 3 sulle
+    superfici elevate) — prima ogni `Card` standard (liste di Note/Attività/Documenti/Promemoria)
+    era piatta (`elevation: 0`), indistinguibile dallo sfondo salvo gli angoli arrotondati.
+    `outlinedButtonTheme`/`textButtonTheme` condividono ora la stessa forma rettangolare
+    arrotondata dell'`ElevatedButton` (prima presa la forma "a pillola" di default, un'incoerenza
+    percepibile). `dialogTheme`/`bottomSheetTheme` guadagnano raggio/ombra coerenti col resto del
+    Design System; i bottom sheet mostrano sempre la maniglia di trascinamento (`showDragHandle:
+    true`, prima impostata esplicitamente solo in 6 sheet su 17). `chipTheme` esplicito (pillola,
+    bordo hairline). `snackBarTheme` con `SnackBarBehavior.floating` invece della barra a piena
+    larghezza di default. `appBarTheme` senza ombra/tinta al passaggio dello scroll (coerente con
+    `GradientAppBar`, che gestisce la propria profondità per conto proprio).
+  - **Limite noto della verifica visiva in sandbox**: `flutter test` disabilita le ombre reali
+    (`debugDisableShadows`, impostato da `AutomatedTestWidgetsFlutterBinding` per rendere i test
+    deterministici tra piattaforme) e le sostituisce con un contorno pieno senza sfocatura — sia
+    per le ombre Material basate su elevazione (`cardTheme`/`dialogTheme`/`bottomSheetTheme`) sia
+    per i `BoxShadow` custom (`AppShadows.card`/`.glow`/`.subtle`, quindi anche le migliorie
+    grafiche precedenti di questa sessione). Gli screenshot offscreen usati per la verifica
+    visiva in questa sessione confermano quindi forma/colore/posizionamento corretti, non la
+    resa sfumata reale — quella si vede solo su un dispositivo/browser vero (`LiveTestWidgets
+    FlutterBinding`, con `disableShadows => false`).
 
 ## Setup locale
 

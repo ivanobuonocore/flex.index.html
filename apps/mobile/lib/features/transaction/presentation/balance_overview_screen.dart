@@ -7,6 +7,7 @@ import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../shared/widgets/coach_mark.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
@@ -60,6 +61,26 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
   // uno storico (richiesta esplicita dell'utente: "vorrei che il Bilancio
   // avesse anche uno storico, una tendina dove poter scegliere il mese").
   DateTime? _selectedMonth;
+
+  // Ricerca nelle Transazioni confermate (richiesta esplicita dell'utente,
+  // al posto della tab Ricerca tolta dalla barra di navigazione: "la ricerca
+  // potrei comunque inserirla nel bilancio per ricercare le spese"). Filtra
+  // solo l'elenco sotto, non il saldo/grafico/budget — stesso principio già
+  // usato dalla tendina del mese per il solo elenco "In attesa di conferma".
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  // Filtro per categoria nelle Transazioni confermate (integrazione richiesta
+  // esplicitamente), in aggiunta alla ricerca testuale già presente — stesso
+  // principio già usato dai tag delle Note: `null` = nessun filtro, tutte le
+  // categorie.
+  TransactionCategory? _filterCategory;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -193,6 +214,8 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                 incomeByCategory: incomeByCategory,
                 expenseByCategory: expenseByCategory,
                 previousMonthPercentChange: balanceChangePercent,
+                transactions: transactions,
+                selectedMonth: selectedMonth,
               ),
               if (expenseByCategory.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.sm),
@@ -207,6 +230,9 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                     context,
                     title: 'Categorie di spesa',
                     byCategory: expenseByCategory,
+                    transactions: transactions,
+                    selectedMonth: selectedMonth,
+                    type: TransactionType.expense,
                   ),
                   icon: const Icon(Icons.category_outlined),
                   label: const Text('Categorie di spesa'),
@@ -230,6 +256,16 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
               const SizedBox(height: AppSpacing.lg),
               _TrendChart(trend: trend),
               const SizedBox(height: AppSpacing.lg),
+              CoachMark(
+                id: 'bilancio_heatmap',
+                message: 'Ogni casella è un giorno: più intenso il colore, '
+                    'più hai speso quel giorno.',
+                child: _ExpenseHeatmap(
+                  month: selectedMonth,
+                  dailyTotals: dailyExpenseTotals(transactions, selectedMonth),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
               _BudgetSection(expenseByCategory: expenseByCategory),
               if (pending.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
@@ -252,15 +288,99 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                   padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Text('Nessuna transazione confermata questo mese.'),
                 )
-              else
-                for (final transaction in confirmed) ...[
-                  _ConfirmedTransactionTile(
-                    transaction: transaction,
-                    workspaceName:
-                        workspaceNames[transaction.workspaceId] ?? 'Workspace',
+              else ...[
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Cerca per descrizione o tag…',
+                    prefixIcon: const Icon(Icons.search),
+                    isDense: true,
+                    border:
+                        OutlineInputBorder(borderRadius: AppRadii.buttonRadius),
                   ),
-                  const SizedBox(height: AppSpacing.xs),
-                ],
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Builder(builder: (context) {
+                  // Solo le categorie effettivamente presenti tra le
+                  // transazioni confermate di questo mese, non l'intero set
+                  // fisso — una striscia con voci sempre vuote non aiuta a
+                  // filtrare nulla.
+                  final categoriesPresent = <TransactionCategory>{
+                    for (final t in confirmed) t.category,
+                  }.toList()
+                    ..sort((a, b) => TransactionCategoryMeta.of(a)
+                        .label
+                        .compareTo(TransactionCategoryMeta.of(b).label));
+
+                  if (categoriesPresent.length <= 1) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: SizedBox(
+                      height: 36,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: categoriesPresent.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(width: AppSpacing.xs),
+                        itemBuilder: (context, index) {
+                          final category = categoriesPresent[index];
+                          final meta = TransactionCategoryMeta.of(category);
+                          final isSelected = category == _filterCategory;
+                          return FilterChip(
+                            label: Text(meta.label),
+                            avatar: Icon(meta.icon, size: 16),
+                            selected: isSelected,
+                            onSelected: (_) => setState(
+                              () => _filterCategory =
+                                  isSelected ? null : category,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                }),
+                Builder(builder: (context) {
+                  final query = _searchQuery.trim().toLowerCase();
+                  final category = _filterCategory;
+                  final visibleConfirmed = confirmed.where((t) {
+                    final matchesQuery = query.isEmpty ||
+                        t.description.toLowerCase().contains(query) ||
+                        t.tags.any((tag) => tag.toLowerCase().contains(query));
+                    final matchesCategory =
+                        category == null || t.category == category;
+                    return matchesQuery && matchesCategory;
+                  }).toList(growable: false);
+
+                  if (visibleConfirmed.isEmpty) {
+                    return Padding(
+                      padding:
+                          const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                      child: Text(_searchQuery.trim().isEmpty
+                          ? 'Nessun risultato per questa categoria.'
+                          : 'Nessun risultato per "${_searchController.text}".'),
+                    );
+                  }
+
+                  return Column(
+                    children: [
+                      for (final transaction in visibleConfirmed) ...[
+                        _ConfirmedTransactionTile(
+                          transaction: transaction,
+                          workspaceName:
+                              workspaceNames[transaction.workspaceId] ??
+                                  'Workspace',
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                      ],
+                    ],
+                  );
+                }),
+              ],
             ],
           );
         },
@@ -324,6 +444,8 @@ class _BalanceHeroCard extends StatelessWidget {
     required this.incomeByCategory,
     required this.expenseByCategory,
     required this.previousMonthPercentChange,
+    required this.transactions,
+    required this.selectedMonth,
   });
 
   final int balanceCents;
@@ -335,6 +457,12 @@ class _BalanceHeroCard extends StatelessWidget {
   /// `null` quando il mese precedente ha saldo 0 (nessun confronto
   /// sensato — vedi `percentChange`), non mostrato in quel caso.
   final double? previousMonthPercentChange;
+
+  /// Passate solo per l'andamento per categoria (richiesta esplicita
+  /// dell'utente), aperto dal tocco su una riga di `_CategoryBreakdownTile`
+  /// dentro `_showCategoryBreakdown` — non usate altrove in questo widget.
+  final List<Transaction> transactions;
+  final DateTime selectedMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -385,6 +513,9 @@ class _BalanceHeroCard extends StatelessWidget {
                             context,
                             title: 'Entrate per categoria',
                             byCategory: incomeByCategory,
+                            transactions: transactions,
+                            selectedMonth: selectedMonth,
+                            type: TransactionType.income,
                           ),
                 ),
               ),
@@ -400,6 +531,9 @@ class _BalanceHeroCard extends StatelessWidget {
                             context,
                             title: 'Uscite per categoria',
                             byCategory: expenseByCategory,
+                            transactions: transactions,
+                            selectedMonth: selectedMonth,
+                            type: TransactionType.expense,
                           ),
                 ),
               ),
@@ -573,6 +707,9 @@ void _showCategoryBreakdown(
   BuildContext context, {
   required String title,
   required Map<TransactionCategory, int> byCategory,
+  required List<Transaction> transactions,
+  required DateTime selectedMonth,
+  required TransactionType type,
 }) {
   final entries = byCategory.entries.toList()
     ..sort((a, b) => b.value.compareTo(a.value));
@@ -601,6 +738,13 @@ void _showCategoryBreakdown(
                 category: entry.key,
                 amountCents: entry.value,
                 percent: total == 0 ? 0 : entry.value / total * 100,
+                onTap: () => _showCategoryTrend(
+                  context,
+                  category: entry.key,
+                  transactions: transactions,
+                  selectedMonth: selectedMonth,
+                  type: type,
+                ),
               ),
               const SizedBox(height: AppSpacing.xs),
             ],
@@ -616,34 +760,198 @@ class _CategoryBreakdownTile extends StatelessWidget {
     required this.category,
     required this.amountCents,
     required this.percent,
+    required this.onTap,
   });
 
   final TransactionCategory category;
   final int amountCents;
   final double percent;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final meta = TransactionCategoryMeta.of(category);
-    return Row(
-      children: [
-        Icon(meta.icon, color: meta.color, size: 20),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Text(meta.label, style: AppTypography.body),
-        ),
-        Text(
-          '${percent.toStringAsFixed(0)}%',
-          style: AppTypography.caption.copyWith(
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadii.buttonRadius,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+          child: Row(
+            children: [
+              Icon(meta.icon, color: meta.color, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(meta.label, style: AppTypography.body),
+              ),
+              Text(
+                '${percent.toStringAsFixed(0)}%',
+                style: AppTypography.caption.copyWith(
+                  color:
+                      Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                _formatAmount(amountCents),
+                style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Icon(Icons.chevron_right,
+                  size: 18,
+                  color:
+                      Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
+            ],
           ),
         ),
-        const SizedBox(width: AppSpacing.sm),
-        Text(
-          _formatAmount(amountCents),
-          style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+/// Andamento di una singola categoria negli ultimi 6 mesi (richiesta
+/// esplicita dell'utente: "andamento per categoria nel tempo"), aperto
+/// toccando una riga di [_CategoryBreakdownTile] — stessa finestra di
+/// [_TrendChart] (`lastMonths(selectedMonth, 6)`), nessuna nuova
+/// aggregazione: [categoryMonthlyTotals] compone funzioni pure già esistenti.
+void _showCategoryTrend(
+  BuildContext context, {
+  required TransactionCategory category,
+  required List<Transaction> transactions,
+  required DateTime selectedMonth,
+  required TransactionType type,
+}) {
+  final months = lastMonths(selectedMonth, 6);
+  final values =
+      categoryMonthlyTotals(transactions, months, category, type: type);
+  final meta = TransactionCategoryMeta.of(category);
+
+  showModalBottomSheet(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md, 0, AppSpacing.md, AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(meta.icon, color: meta.color, size: 20),
+                const SizedBox(width: AppSpacing.sm),
+                Text('${meta.label} — ultimi 6 mesi',
+                    style: AppTypography.heading3),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _CategoryTrendChart(
+                months: months, values: values, color: meta.color),
+          ],
         ),
-      ],
+      ),
+    ),
+  );
+}
+
+class _CategoryTrendChart extends StatefulWidget {
+  const _CategoryTrendChart({
+    required this.months,
+    required this.values,
+    required this.color,
+  });
+
+  final List<DateTime> months;
+  final List<int> values;
+  final Color color;
+
+  @override
+  State<_CategoryTrendChart> createState() => _CategoryTrendChartState();
+}
+
+class _CategoryTrendChartState extends State<_CategoryTrendChart> {
+  // Le barre partono da altezza zero e crescono fino al valore reale al
+  // primo caricamento (richiesta esplicita dell'utente: "animazione
+  // d'ingresso sui grafici") — `BarChart` di fl_chart anima da solo la
+  // transizione tra due `BarChartData` diversi, basta cambiare i valori dopo
+  // il primo fotogramma.
+  bool _grown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _grown = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final months = widget.months;
+    final values = widget.values;
+    final color = widget.color;
+    final maxValue = values.fold<int>(0, (max, v) => v > max ? v : max);
+
+    return SizedBox(
+      height: 180,
+      child: maxValue == 0
+          ? const Center(
+              child: Text('Nessun importo confermato in questo periodo.'),
+            )
+          : BarChart(
+              swapAnimationDuration: const Duration(milliseconds: 600),
+              swapAnimationCurve: Curves.easeOutCubic,
+              BarChartData(
+                maxY: maxValue * 1.2,
+                gridData: const FlGridData(show: false),
+                borderData: FlBorderData(show: false),
+                titlesData: FlTitlesData(
+                  leftTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) {
+                        final index = value.toInt();
+                        if (index < 0 || index >= months.length) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.xs),
+                          child: Text(
+                            _italianMonthsShort[months[index].month - 1],
+                            style: AppTypography.caption,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                barGroups: [
+                  for (var i = 0; i < values.length; i++)
+                    BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: _grown ? values[i].toDouble() : 0,
+                          color: color,
+                          width: 12,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
     );
   }
 }
@@ -794,13 +1102,23 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                       for (var i = 0; i < slices.length; i++)
                         PieChartSectionData(
                           value: slices[i].amountCents.toDouble(),
-                          gradient: LinearGradient(
+                          // Gradiente radiale invece che a due punti lineare
+                          // (richiesta esplicita dell'utente: più profondità
+                          // "senza stravolgere il colore") — stessa tinta di
+                          // ogni fetta, solo schiarita verso un fuoco in alto
+                          // a sinistra e leggermente scurita verso il bordo
+                          // esterno: dà l'impressione di una superficie
+                          // sferica illuminata da una fonte di luce, non un
+                          // colore piatto con un solo passaggio di tono.
+                          gradient: RadialGradient(
+                            center: const Alignment(-0.5, -0.6),
+                            radius: 1.1,
                             colors: [
+                              Color.lerp(slices[i].color, Colors.white, 0.45)!,
                               slices[i].color,
-                              Color.lerp(slices[i].color, Colors.white, 0.25)!,
+                              Color.lerp(slices[i].color, Colors.black, 0.12)!,
                             ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                            stops: const [0.0, 0.55, 1.0],
                           ),
                           title: '${slices[i].percent.toStringAsFixed(0)}%',
                           radius: _touchedIndex == i ? 60 : 52,
@@ -819,6 +1137,54 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                     ],
                   ),
                 ),
+                // Riflesso "vetro" sopra l'anello colorato (richiesta
+                // esplicita dell'utente: più profondità "magari... non solo
+                // ombre"): un unico arco bianco semi-trasparente, sfumato ai
+                // due estremi, posizionato in alto — come un riflesso di
+                // luce su una superficie curva e lucida. `IgnorePointer`
+                // perché è puramente decorativo: il tocco deve continuare a
+                // raggiungere l'anello colorato sotto (che gestisce
+                // l'evidenziazione della fetta). Stessi `centerSpaceRadius`/
+                // `radius` del grafico reale sopra: nello stesso `Stack`
+                // centrato, fl_chart li dimensiona in modo identico, quindi
+                // l'arco resta sempre perfettamente allineato all'anello
+                // senza calcoli manuali di geometria.
+                IgnorePointer(
+                  child: PieChart(
+                    PieChartData(
+                      sectionsSpace: 0,
+                      centerSpaceRadius: 64,
+                      // Il primo settore (72°, un quinto del cerchio) parte
+                      // spostato indietro della metà della propria ampiezza,
+                      // così risulta centrato esattamente in cima invece che
+                      // partire da lì.
+                      startDegreeOffset: -36,
+                      sections: [
+                        PieChartSectionData(
+                          value: 20,
+                          radius: 52,
+                          showTitle: false,
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              Colors.white.withOpacity(0),
+                              Colors.white.withOpacity(0.4),
+                              Colors.white.withOpacity(0),
+                            ],
+                            stops: const [0.0, 0.5, 1.0],
+                          ),
+                        ),
+                        PieChartSectionData(
+                          value: 80,
+                          radius: 52,
+                          showTitle: false,
+                          color: Colors.transparent,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 // Centro del donut: il netto del mese a colpo d'occhio, senza
                 // dover sommare mentalmente le due fette. Un disco
                 // "sollevato" con un sottile bordo blu (non colorato a caso:
@@ -829,7 +1195,21 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                   height: 100,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Theme.of(context).colorScheme.surface,
+                    // Un accenno dello stesso gradiente radiale "vetro" delle
+                    // fette (richiesta esplicita dell'utente: "abbellimenti
+                    // stilistici") — molto tenue, per non intaccare la
+                    // leggibilità del testo sopra: un fuoco di luce quasi
+                    // impercettibile in alto a sinistra invece di un colore
+                    // piatto uniforme.
+                    gradient: RadialGradient(
+                      center: const Alignment(-0.4, -0.5),
+                      radius: 1.2,
+                      colors: [
+                        Color.lerp(Theme.of(context).colorScheme.surface,
+                            Colors.white, 0.12)!,
+                        Theme.of(context).colorScheme.surface,
+                      ],
+                    ),
                     border: Border.all(
                       color: incomeColor.withOpacity(0.25),
                       width: 1.5,
@@ -889,13 +1269,32 @@ const _italianMonthsShort = [
 /// vedere l'andamento delle mie spese negli ultimi mesi"): entrate/uscite
 /// confermate degli ultimi 6 mesi, una coppia di barre per mese — stessa
 /// coppia di colori del grafico a torta sopra, per coerenza visiva.
-class _TrendChart extends StatelessWidget {
+class _TrendChart extends StatefulWidget {
   const _TrendChart({required this.trend});
 
   final List<MonthlyTotals> trend;
 
   @override
+  State<_TrendChart> createState() => _TrendChartState();
+}
+
+class _TrendChartState extends State<_TrendChart> {
+  // Le barre partono da altezza zero e crescono fino al valore reale al
+  // primo caricamento (richiesta esplicita dell'utente: "animazione
+  // d'ingresso sui grafici") — stessa tecnica di _CategoryTrendChart.
+  bool _grown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _grown = true);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final trend = widget.trend;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final incomeColor = AppColors.heroGradient[0];
     final expenseColor = AppColors.heroGradient[1];
@@ -926,6 +1325,9 @@ class _TrendChart extends StatelessWidget {
                             'Nessun importo confermato in questo periodo.'),
                       )
                     : BarChart(
+                        swapAnimationDuration:
+                            const Duration(milliseconds: 600),
+                        swapAnimationCurve: Curves.easeOutCubic,
                         BarChartData(
                           maxY: maxValue * 1.2,
                           gridData: const FlGridData(show: false),
@@ -967,13 +1369,17 @@ class _TrendChart extends StatelessWidget {
                                 x: i,
                                 barRods: [
                                   BarChartRodData(
-                                    toY: trend[i].incomeCents.toDouble(),
+                                    toY: _grown
+                                        ? trend[i].incomeCents.toDouble()
+                                        : 0,
                                     color: incomeColor,
                                     width: 8,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   BarChartRodData(
-                                    toY: trend[i].expenseCents.toDouble(),
+                                    toY: _grown
+                                        ? trend[i].expenseCents.toDouble()
+                                        : 0,
                                     color: expenseColor,
                                     width: 8,
                                     borderRadius: BorderRadius.circular(4),
@@ -994,6 +1400,157 @@ class _TrendChart extends StatelessWidget {
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const _heatmapWeekdays = ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
+
+/// Heatmap delle spese del mese (integrazione richiesta esplicitamente):
+/// un calendario a quadratini colorati in base all'intensità di spesa di
+/// quel giorno — stesso linguaggio visivo di `MonthCalendarGrid`
+/// (`Color.alphaBlend` su `AppColors.error`), qui con un'intensità continua
+/// invece di un semplice on/off. Puramente visiva, nessun tocco/interazione:
+/// con altre due migliorie da consegnare in questo stesso giro, lo scope è
+/// stato volutamente limitato a un colpo d'occhio d'insieme — il dettaglio
+/// giorno per giorno resta comunque disponibile nell'elenco delle
+/// Transazioni confermate più sotto.
+class _ExpenseHeatmap extends StatelessWidget {
+  const _ExpenseHeatmap({required this.month, required this.dailyTotals});
+
+  final DateTime month;
+  final Map<int, int> dailyTotals;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final maxCents =
+        dailyTotals.values.fold<int>(0, (max, v) => v > max ? v : max);
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+    // weekday: 1 (lunedì) .. 7 (domenica) — stessa convenzione di
+    // MonthCalendarGrid, la settimana parte sempre di lunedì.
+    final leadingBlanks = DateTime(month.year, month.month, 1).weekday - 1;
+    const accent = AppColors.error;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: AppRadii.standardRadius,
+        boxShadow: AppShadows.glow(color: accent, isDark: isDark),
+      ),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Intensità di spesa', style: AppTypography.heading3),
+              const SizedBox(height: AppSpacing.md),
+              if (maxCents == 0)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: Text('Nessuna spesa confermata in questo mese.'),
+                )
+              else ...[
+                Row(
+                  children: [
+                    for (final label in _heatmapWeekdays)
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            label,
+                            style: AppTypography.caption.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withOpacity(0.5),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                // Dissolvenza in ingresso al primo caricamento (richiesta
+                // esplicita dell'utente: "animazione d'ingresso sui
+                // grafici") — `TweenAnimationBuilder` anima da sola dal
+                // valore iniziale a quello finale non appena il widget
+                // compare, senza bisogno di un AnimationController esplicito.
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeOut,
+                  builder: (context, opacity, child) => Opacity(
+                    opacity: opacity,
+                    child: child,
+                  ),
+                  child: GridView.count(
+                    crossAxisCount: 7,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      for (var i = 0; i < leadingBlanks; i++)
+                        const SizedBox.shrink(),
+                      for (var day = 1; day <= daysInMonth; day++)
+                        _HeatmapDayCell(
+                          day: day,
+                          intensity: (dailyTotals[day] ?? 0) / maxCents,
+                          color: accent,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeatmapDayCell extends StatelessWidget {
+  const _HeatmapDayCell({
+    required this.day,
+    required this.intensity,
+    required this.color,
+  });
+
+  final int day;
+  final double intensity;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasSpend = intensity > 0;
+    // Intensità minima visibile (0.12) anche per una spesa piccola rispetto
+    // al giorno più caro del mese: altrimenti sembrerebbe un giorno "vuoto"
+    // pur avendo almeno una transazione.
+    final fillColor = hasSpend
+        ? Color.alphaBlend(
+            color.withOpacity(0.12 + intensity * 0.68),
+            theme.colorScheme.surface,
+          )
+        : Colors.transparent;
+    final numberColor = hasSpend && intensity > 0.4
+        ? Colors.white
+        : theme.colorScheme.onSurface;
+
+    return Padding(
+      padding: const EdgeInsets.all(2),
+      child: Container(
+        decoration: BoxDecoration(
+          color: fillColor,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Center(
+          child: Text(
+            '$day',
+            style: AppTypography.caption.copyWith(color: numberColor),
           ),
         ),
       ),

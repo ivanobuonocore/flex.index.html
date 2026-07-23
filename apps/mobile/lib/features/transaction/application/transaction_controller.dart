@@ -282,6 +282,27 @@ List<MonthlyTotals> monthlyTotals(
   }).toList(growable: false);
 }
 
+/// Speso (o incassato) in una singola categoria per ciascuno dei [months]
+/// (richiesta esplicita dell'utente: "andamento per categoria nel tempo") —
+/// stessa composizione di [monthlyTotals], solo filtrata a un tipo e una
+/// categoria tramite [amountCentsByCategory] invece del totale entrate/uscite.
+/// [type] richiesto (non dedotto): lo stesso filtro che il chiamante applica
+/// già prima di costruire `incomeByCategory`/`expenseByCategory` in
+/// `balance_overview_screen.dart` — qui esplicito, per non sommare per
+/// sbaglio entrate e uscite della stessa categoria nello stesso mese.
+List<int> categoryMonthlyTotals(
+  List<Transaction> transactions,
+  List<DateTime> months,
+  TransactionCategory category, {
+  required TransactionType type,
+}) {
+  return months.map((month) {
+    final confirmed = confirmedThisMonth(transactions, now: month)
+        .where((t) => t.type == type);
+    return amountCentsByCategory(confirmed)[category] ?? 0;
+  }).toList(growable: false);
+}
+
 /// Estrapolazione lineare della spesa a fine mese (integrazione richiesta
 /// esplicitamente): proiezione di quanto già speso su tutti i giorni del
 /// mese, non un modello predittivo — ha senso solo per il mese in corso (il
@@ -296,4 +317,21 @@ int? projectedMonthEndExpenseCents({
   final dayOfMonth = now.day;
   if (dayOfMonth <= 1) return null;
   return (spentSoFarCents / dayOfMonth * daysInMonth).round();
+}
+
+/// Uscite confermate per ciascun giorno di [month] (richiesta esplicita
+/// dell'utente: "heatmap delle spese nel Bilancio") — chiave = giorno del
+/// mese (1-31), assente se quel giorno non ha alcuna uscita confermata. Pure,
+/// testabile senza Riverpod, stessa composizione di [confirmedThisMonth]/
+/// [totalExpenseCents] già usata altrove in questo file.
+Map<int, int> dailyExpenseTotals(
+    List<Transaction> transactions, DateTime month) {
+  final confirmed = confirmedThisMonth(transactions, now: month)
+      .where((t) => t.type == TransactionType.expense);
+  final totals = <int, int>{};
+  for (final t in confirmed) {
+    final day = t.occurredAt.day;
+    totals[day] = (totals[day] ?? 0) + t.amountCents;
+  }
+  return totals;
 }

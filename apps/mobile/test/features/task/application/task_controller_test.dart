@@ -63,4 +63,26 @@ void main() {
     await controller.delete(task.id);
     expect(fakeRepository.lastDeletedId, task.id);
   });
+
+  group('openTasks', () {
+    test('esclude le attività già completate', () {
+      final todo = task.copyWith(status: TaskStatus.todo);
+      final done = Task(
+        id: 't2',
+        workspaceId: workspaceId,
+        title: 'Fatto ieri',
+        status: TaskStatus.done,
+        priority: TaskPriority.medium,
+        createdAt: DateTime.utc(2026, 1, 1),
+      );
+
+      expect(openTasks([todo, done]), [todo]);
+    });
+
+    test('lista vuota se non ci sono attività aperte', () {
+      final done = task.copyWith(status: TaskStatus.done);
+
+      expect(openTasks([done]), isEmpty);
+    });
+  });
 }

@@ -3,6 +3,20 @@ import 'package:flutter/widgets.dart';
 /// Ombre leggere e diffuse (docs/product/05-design-system.md, "Ombre" —
 /// "l'interfaccia deve sembrare leggera").
 abstract final class AppShadows {
+  /// Livello più basso della gerarchia (redesign estetico — "gerarchia
+  /// visiva a più livelli invece di un'unica ombra piatta"): per superfici
+  /// "a livello lista" — `Card` standard di Note/Attività/Documenti/
+  /// Promemoria, tile di riepilogo — dove serve solo un accenno di
+  /// sollevamento dallo sfondo, non il rilievo più marcato di [card].
+  static List<BoxShadow> subtle({required bool isDark}) => [
+        BoxShadow(
+          color: (isDark ? const Color(0xFF000000) : const Color(0xFF111827))
+              .withOpacity(isDark ? 0.16 : 0.04),
+          blurRadius: 10,
+          offset: const Offset(0, 3),
+        ),
+      ];
+
   static List<BoxShadow> card({required bool isDark}) => [
         BoxShadow(
           color: (isDark ? const Color(0xFF000000) : const Color(0xFF111827))

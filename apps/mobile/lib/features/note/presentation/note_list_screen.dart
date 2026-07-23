@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
+import '../../../shared/utils/undoable_delete.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
@@ -30,6 +31,11 @@ class NoteListScreen extends ConsumerStatefulWidget {
 class _NoteListScreenState extends ConsumerState<NoteListScreen> {
   String? _filterTag;
 
+  // Rimozione ottimistica locale per "Annulla su eliminazioni" (integrazione
+  // richiesta esplicitamente): filtra subito la nota scartata dall'elenco,
+  // indipendentemente da quando (o se) il repository la cancella davvero.
+  final _dismissedIds = <String>{};
+
   @override
   Widget build(BuildContext context) {
     final notesAsync = ref.watch(notesProvider(widget.workspaceId));
@@ -55,7 +61,10 @@ class _NoteListScreenState extends ConsumerState<NoteListScreen> {
           message: 'Non è stato possibile caricare le note.',
           onRetry: () => ref.invalidate(notesProvider(widget.workspaceId)),
         ),
-        data: (notes) {
+        data: (allNotes) {
+          final notes = allNotes
+              .where((n) => !_dismissedIds.contains(n.id))
+              .toList(growable: false);
           if (notes.isEmpty) {
             return EmptyState(
               icon: Icons.sticky_note_2_outlined,
@@ -184,9 +193,22 @@ class _NoteListScreenState extends ConsumerState<NoteListScreen> {
                               child: const Icon(Icons.delete_outline,
                                   color: Colors.white),
                             ),
-                            onDismissed: (_) => ref
-                                .read(noteFormControllerProvider.notifier)
-                                .delete(note.id),
+                            onDismissed: (_) {
+                              setState(() => _dismissedIds.add(note.id));
+                              scheduleUndoableDelete(
+                                context,
+                                message: 'Nota eliminata.',
+                                onConfirmed: () => ref
+                                    .read(noteFormControllerProvider.notifier)
+                                    .delete(note.id),
+                                onUndo: () {
+                                  if (mounted) {
+                                    setState(
+                                        () => _dismissedIds.remove(note.id));
+                                  }
+                                },
+                              );
+                            },
                             child: card,
                           );
                         },

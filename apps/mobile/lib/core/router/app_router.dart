@@ -12,6 +12,7 @@ import '../../features/memory/presentation/workspace_memory_list_screen.dart';
 import '../../features/note/presentation/note_list_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/reminder/presentation/appointments_overview_screen.dart';
 import '../../features/reminder/presentation/reminder_list_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 import '../../features/task/presentation/task_list_screen.dart';
@@ -60,13 +61,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/onboarding',
           builder: (context, state) => const OnboardingScreen()),
+      // Ricerca Universale (richiesta esplicita dell'utente: tolta dalla
+      // barra di navigazione, sostituita lì da Appuntamenti — resta
+      // raggiungibile con un push da un'icona nell'intestazione della Chat
+      // Home) — fuori dallo StatefulShellRoute apposta: non è una delle 5
+      // destinazioni principali, ma una schermata "di passaggio" come
+      // login/onboarding, aperta e poi chiusa con "indietro".
+      GoRoute(
+          path: '/search', builder: (context, state) => const SearchScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
             AppShell(navigationShell: navigationShell),
         // Ordine della barra di navigazione (redesign estetico — richiesta
         // esplicita dell'utente): Workspace, Bilancio, [Chat al centro, in
-        // risalto], Ricerca, Profilo. L'ordine dei branch deve corrispondere
-        // 1:1 a quello delle destinazioni in `AppShell` (indice per indice).
+        // risalto], Appuntamenti, Profilo — Ricerca tolta da qui (richiesta
+        // esplicita dell'utente), resta raggiungibile da un'icona in Chat
+        // Home. L'ordine dei branch deve corrispondere 1:1 a quello delle
+        // destinazioni in `AppShell` (indice per indice).
         branches: [
           StatefulShellBranch(
             routes: [
@@ -147,8 +158,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                  path: '/search',
-                  builder: (context, state) => const SearchScreen()),
+                  path: '/appuntamenti',
+                  builder: (context, state) =>
+                      const AppointmentsOverviewScreen()),
             ],
           ),
           StatefulShellBranch(

@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -104,7 +105,8 @@ void main() {
     // L'hero del saldo + il grafico (redesign estetico 2.0) spingono
     // l'elenco delle transazioni confermate sotto la piega: va scorsa la
     // lista per trovarla, come farebbe l'utente.
-    await tester.scrollUntilVisible(find.text('Stipendio'), 300);
+    await tester.scrollUntilVisible(find.text('Stipendio'), 300,
+        scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
 
     // Solo la transazione del Bilancio personale conta: 1.000,00 € di
@@ -152,7 +154,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Di default (mese corrente) si vede la transazione di questo mese.
-    await tester.scrollUntilVisible(find.text('Stipendio'), 300);
+    await tester.scrollUntilVisible(find.text('Stipendio'), 300,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Stipendio'), findsOneWidget);
 
     // Torna in cima (la tendina del mese è nell'intestazione, scomparsa
@@ -169,7 +172,8 @@ void main() {
 
     // Ora il mese scorso è selezionato: la transazione di questo mese non
     // conta più nel totale/elenco, quella del mese scorso sì.
-    await tester.scrollUntilVisible(find.text('Spesa del mese scorso'), 300);
+    await tester.scrollUntilVisible(find.text('Spesa del mese scorso'), 300,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Spesa del mese scorso'), findsOneWidget);
     expect(find.text('Stipendio'), findsNothing);
   });
@@ -223,6 +227,84 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Proiezione di fine mese'), findsNothing);
+  });
+
+  testWidgets(
+      'la heatmap mostra "Intensità di spesa" quando ci sono uscite confermate questo mese',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final expense = Transaction(
+      id: 't-heatmap',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Spesa di oggi',
+      amountCents: 1500,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([expense]);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Intensità di spesa'), 300,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Intensità di spesa'), findsOneWidget);
+    expect(find.textContaining('Nessuna spesa confermata'), findsNothing);
+    expect(find.text('${now.day}'), findsWidgets);
+  });
+
+  testWidgets(
+      'la heatmap mostra lo stato vuoto senza uscite confermate questo mese',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([personalIncome]);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Intensità di spesa'), 300,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+
+    expect(
+        find.text('Nessuna spesa confermata in questo mese.'), findsOneWidget);
   });
 
   testWidgets('toccare la pillola Entrate apre il dettaglio per categoria',
@@ -280,6 +362,55 @@ void main() {
     expect(find.text('Altro'), findsOneWidget);
     expect(find.text('1000,00 €'), findsOneWidget);
     expect(find.text('200,00 €'), findsOneWidget);
+  });
+
+  testWidgets(
+      'toccare una categoria nel dettaglio apre l\'andamento negli ultimi 6 mesi',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final salary = Transaction(
+      id: 't-salary',
+      workspaceId: 'w-personal',
+      type: TransactionType.income,
+      description: 'Stipendio',
+      amountCents: 100000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      category: TransactionCategory.stipendio,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([salary]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Entrate'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Entrate per categoria'), findsOneWidget);
+
+    await tester.tap(find.text('Stipendio'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Stipendio — ultimi 6 mesi'), findsOneWidget);
+    expect(find.byType(BarChart), findsOneWidget);
   });
 
   testWidgets(
@@ -382,11 +513,176 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Benzina'),
       300,
-      scrollable: find.byType(Scrollable),
+      scrollable: find.byType(Scrollable).first,
     );
 
     expect(find.text('auto'), findsOneWidget);
     expect(find.text('lavoro'), findsOneWidget);
+  });
+
+  testWidgets(
+      'il campo di ricerca filtra le transazioni confermate per descrizione e tag',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final groceries = Transaction(
+      id: 't-groceries',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Spesa supermercato',
+      amountCents: 5000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      tags: const ['casa'],
+    );
+    final fuel = Transaction(
+      id: 't-fuel',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Benzina',
+      amountCents: 2000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      tags: const ['auto'],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([groceries, fuel]);
+    fakeBudget.emit(const []);
+    await tester.pumpAndSettle();
+
+    // Si scorre fino alla transazione stessa (non solo al campo di ricerca
+    // sopra di essa): con la heatmap delle spese aggiunta tra il grafico e
+    // il budget, il campo di ricerca da solo può già essere visibile mentre
+    // l'elenco sotto non lo è ancora.
+    await tester.scrollUntilVisible(
+      find.text('Spesa supermercato'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Spesa supermercato'), findsOneWidget);
+    expect(find.text('Benzina'), findsOneWidget);
+
+    // Filtro per descrizione.
+    await tester.enterText(find.byType(TextField), 'benzina');
+    await tester.pumpAndSettle();
+    expect(find.text('Spesa supermercato'), findsNothing);
+    expect(find.text('Benzina'), findsOneWidget);
+
+    // Filtro per tag: nessuna transazione con descrizione "cinema" ma una
+    // con tag "casa".
+    await tester.enterText(find.byType(TextField), 'casa');
+    await tester.pumpAndSettle();
+    expect(find.text('Spesa supermercato'), findsOneWidget);
+    expect(find.text('Benzina'), findsNothing);
+
+    // Nessun risultato.
+    await tester.enterText(find.byType(TextField), 'inesistente');
+    await tester.pumpAndSettle();
+    expect(find.text('Spesa supermercato'), findsNothing);
+    expect(find.text('Benzina'), findsNothing);
+    expect(find.text('Nessun risultato per "inesistente".'), findsOneWidget);
+  });
+
+  testWidgets(
+      'la striscia di categoria filtra le transazioni confermate, in aggiunta alla ricerca',
+      (tester) async {
+    final fakeTransaction = FakeTransactionRepository();
+    final fakeWorkspace = FakeWorkspaceRepository();
+    final fakeBudget = FakeBudgetRepository();
+    addTearDown(fakeTransaction.dispose);
+    addTearDown(fakeWorkspace.dispose);
+    addTearDown(fakeBudget.dispose);
+
+    final groceries = Transaction(
+      id: 't-groceries',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Spesa supermercato',
+      amountCents: 5000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      category: TransactionCategory.alimentari,
+    );
+    final fuel = Transaction(
+      id: 't-fuel',
+      workspaceId: 'w-personal',
+      type: TransactionType.expense,
+      description: 'Benzina',
+      amountCents: 2000,
+      occurredAt: now,
+      status: TransactionStatus.confirmed,
+      createdAt: now,
+      category: TransactionCategory.trasporti,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionRepositoryProvider.overrideWithValue(fakeTransaction),
+          workspaceRepositoryProvider.overrideWithValue(fakeWorkspace),
+          budgetRepositoryProvider.overrideWithValue(fakeBudget),
+        ],
+        child: const MaterialApp(home: BalanceOverviewScreen()),
+      ),
+    );
+
+    fakeWorkspace.emit([personalWorkspace]);
+    fakeTransaction.emit([groceries, fuel]);
+    fakeBudget.emit(const []);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Spesa supermercato'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Spesa supermercato'), findsOneWidget);
+    expect(find.text('Benzina'), findsOneWidget);
+
+    // Tocca la chip "Trasporti": resta solo la Benzina.
+    await tester.tap(find.widgetWithText(FilterChip, 'Trasporti'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Spesa supermercato'), findsNothing);
+    expect(find.text('Benzina'), findsOneWidget);
+
+    // Toccando di nuovo la stessa chip il filtro si toglie.
+    await tester.tap(find.widgetWithText(FilterChip, 'Trasporti'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Spesa supermercato'), findsOneWidget);
+    expect(find.text('Benzina'), findsOneWidget);
+
+    // Combinato con la ricerca testuale: categoria "Alimentari" + testo che
+    // non corrisponde a nessuna descrizione in quella categoria.
+    await tester.tap(find.widgetWithText(FilterChip, 'Alimentari'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'benzina');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Spesa supermercato'), findsNothing);
+    expect(find.text('Benzina'), findsNothing);
+    expect(find.text('Nessun risultato per "benzina".'), findsOneWidget);
   });
 
   testWidgets(
@@ -529,7 +825,8 @@ void main() {
     fakeBudget.emit([budget]);
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Budget per categoria'), 300);
+    await tester.scrollUntilVisible(find.text('Budget per categoria'), 300,
+        scrollable: find.byType(Scrollable).first);
     // "Alimentari" compare due volte: nel budget e nel badge categoria della
     // transazione confermata elencata più sotto nella stessa schermata.
     expect(find.text('Alimentari'), findsWidgets);
@@ -577,11 +874,21 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-        find.text('Imposta un budget per categoria'), 300);
+        find.text('Imposta un budget per categoria'), 300,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Imposta un budget per categoria'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField), '300');
+    // La schermata sotto ha ora un proprio TextField di ricerca (Bilancio,
+    // ricerca nelle Transazioni confermate): il finder va ristretto al
+    // TextField dentro l'AlertDialog per restare univoco.
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      ),
+      '300',
+    );
     await tester.tap(find.text('Salva'));
     await tester.pumpAndSettle();
 
@@ -629,7 +936,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('vs mese scorso'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Andamento ultimi 6 mesi'), 300);
+    await tester.scrollUntilVisible(find.text('Andamento ultimi 6 mesi'), 300,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Andamento ultimi 6 mesi'), findsOneWidget);
   });
 }

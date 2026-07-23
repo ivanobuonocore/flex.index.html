@@ -14,13 +14,11 @@ class SupabaseCalendarEventRepository implements CalendarEventRepository {
   static const _table = 'calendar_events';
 
   @override
-  Stream<List<CalendarEvent>> watchEvents(String workspaceId) {
-    return _client
-        .from(_table)
-        .stream(primaryKey: ['id'])
-        .eq('workspace_id', workspaceId)
-        .order('starts_at', ascending: true)
-        .map(
+  Stream<List<CalendarEvent>> watchEvents(String? workspaceId) {
+    final query = _client.from(_table).stream(primaryKey: ['id']);
+    final scoped =
+        workspaceId == null ? query : query.eq('workspace_id', workspaceId);
+    return scoped.order('starts_at', ascending: true).map(
           (rows) => rows
               .where((row) => row['deleted_at'] == null)
               .map(_toDomain)

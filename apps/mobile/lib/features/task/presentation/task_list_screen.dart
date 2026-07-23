@@ -3,29 +3,45 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
+import '../../../shared/utils/undoable_delete.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/skeleton_list.dart';
+import '../../../shared/widgets/success_pulse.dart';
 import '../../workspace/application/workspace_sharing_controller.dart';
 import '../application/task_controller.dart';
 import 'create_edit_task_sheet.dart';
 
 /// Elenco completo delle Task di un Workspace
 /// (docs/product/06-information-architecture.md, "Menu Workspace" — Attività).
-class TaskListScreen extends ConsumerWidget {
+///
+/// `Stateful` da questa slice (integrazione richiesta esplicitamente:
+/// "Annulla su eliminazioni") per tenere l'insieme locale delle Attività
+/// scartate in attesa dell'eliminazione reale, posticipata.
+class TaskListScreen extends ConsumerStatefulWidget {
   const TaskListScreen({super.key, required this.workspaceId});
 
   final String workspaceId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tasksAsync = ref.watch(tasksProvider(workspaceId));
+  ConsumerState<TaskListScreen> createState() => _TaskListScreenState();
+}
+
+class _TaskListScreenState extends ConsumerState<TaskListScreen> {
+  // Rimozione ottimistica locale per "Annulla su eliminazioni" (integrazione
+  // richiesta esplicitamente): filtra subito l'attività scartata, invece di
+  // aspettare che il repository la cancelli davvero.
+  final _dismissedIds = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
+    final tasksAsync = ref.watch(tasksProvider(widget.workspaceId));
     // Permessi granulari sui Workspace condivisi (integrazione richiesta
     // esplicitamente): `null` per un Workspace personale o per il
     // proprietario di uno condiviso, sempre accesso pieno in entrambi i
     // casi — solo un membro con ruolo `viewer` viene limitato qui.
-    final isViewer = ref.watch(currentMemberRoleProvider(workspaceId)) ==
+    final isViewer = ref.watch(currentMemberRoleProvider(widget.workspaceId)) ==
         WorkspaceRole.viewer;
 
     return Scaffold(
@@ -33,17 +49,20 @@ class TaskListScreen extends ConsumerWidget {
       floatingActionButton: isViewer
           ? null
           : FloatingActionButton(
-              onPressed: () =>
-                  showCreateEditTaskSheet(context, workspaceId: workspaceId),
+              onPressed: () => showCreateEditTaskSheet(context,
+                  workspaceId: widget.workspaceId),
               child: const Icon(Icons.add),
             ),
       body: tasksAsync.when(
         loading: () => const SkeletonList(),
         error: (error, stackTrace) => ErrorView(
           message: 'Non è stato possibile caricare le attività.',
-          onRetry: () => ref.invalidate(tasksProvider(workspaceId)),
+          onRetry: () => ref.invalidate(tasksProvider(widget.workspaceId)),
         ),
-        data: (tasks) {
+        data: (allTasks) {
+          final tasks = allTasks
+              .where((t) => !_dismissedIds.contains(t.id))
+              .toList(growable: false);
           if (tasks.isEmpty) {
             return EmptyState(
               icon: Icons.check_circle_outline,
@@ -56,7 +75,7 @@ class TaskListScreen extends ConsumerWidget {
                   ? null
                   : FilledButton(
                       onPressed: () => showCreateEditTaskSheet(context,
-                          workspaceId: workspaceId),
+                          workspaceId: widget.workspaceId),
                       child: const Text('Crea la prima attività'),
                     ),
             );
@@ -72,19 +91,22 @@ class TaskListScreen extends ConsumerWidget {
 
               final card = Card(
                 child: ListTile(
-                  leading: Checkbox(
-                    value: isDone,
-                    activeColor: AppColors.categoryAttivita,
-                    onChanged: isViewer
-                        ? null
-                        : (_) => ref
-                            .read(taskFormControllerProvider.notifier)
-                            .updateTask(
-                              task.copyWith(
-                                  status: isDone
-                                      ? TaskStatus.todo
-                                      : TaskStatus.done),
-                            ),
+                  leading: SuccessPulse(
+                    play: isDone,
+                    child: Checkbox(
+                      value: isDone,
+                      activeColor: AppColors.categoryAttivita,
+                      onChanged: isViewer
+                          ? null
+                          : (_) => ref
+                              .read(taskFormControllerProvider.notifier)
+                              .updateTask(
+                                task.copyWith(
+                                    status: isDone
+                                        ? TaskStatus.todo
+                                        : TaskStatus.done),
+                              ),
+                    ),
                   ),
                   title: Text(
                     task.title,
@@ -103,7 +125,7 @@ class TaskListScreen extends ConsumerWidget {
                       ? null
                       : () => showCreateEditTaskSheet(
                             context,
-                            workspaceId: workspaceId,
+                            workspaceId: widget.workspaceId,
                             task: task,
                           ),
                 ),
@@ -125,9 +147,21 @@ class TaskListScreen extends ConsumerWidget {
                   ),
                   child: const Icon(Icons.delete_outline, color: Colors.white),
                 ),
-                onDismissed: (_) => ref
-                    .read(taskFormControllerProvider.notifier)
-                    .delete(task.id),
+                onDismissed: (_) {
+                  setState(() => _dismissedIds.add(task.id));
+                  scheduleUndoableDelete(
+                    context,
+                    message: 'Attività eliminata.',
+                    onConfirmed: () => ref
+                        .read(taskFormControllerProvider.notifier)
+                        .delete(task.id),
+                    onUndo: () {
+                      if (mounted) {
+                        setState(() => _dismissedIds.remove(task.id));
+                      }
+                    },
+                  );
+                },
                 child: card,
               );
             },

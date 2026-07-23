@@ -22,6 +22,7 @@ dependencies:
   web: ^1.1.0
   fl_chart: ^0.68.0
   speech_to_text: ^7.0.0
+  shared_preferences: ^2.3.2
 
   pip_shared:
     path: ../../packages/shared

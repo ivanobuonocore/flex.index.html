@@ -201,7 +201,50 @@ void main() {
     await tester.drag(find.text('Dentista'), const Offset(-500, 0));
     await tester.pumpAndSettle();
 
+    // "Annulla su eliminazioni" (integrazione richiesta esplicitamente): la
+    // cancellazione reale è posticipata (SnackBar con azione "Annulla"), non
+    // immediata — serve un pump esplicito più lungo del ritardo di default
+    // (una `Timer` pura non fa fermare `pumpAndSettle()` ad aspettarla).
+    await tester.pump(const Duration(seconds: 5));
+
     expect(fakeRepository.lastDeletedId, 'e1');
+  });
+
+  testWidgets(
+      'toccare "Annulla" nello SnackBar dopo lo swipe ripristina il promemoria senza cancellarlo',
+      (tester) async {
+    final fakeRepository = FakeCalendarEventRepository();
+    addTearDown(fakeRepository.dispose);
+
+    final event = CalendarEvent(
+      id: 'e1',
+      workspaceId: 'w1',
+      title: 'Dentista',
+      startsAt: DateTime.now().add(const Duration(days: 1)),
+      durationMinutes: 30,
+      createdAt: DateTime.now(),
+    );
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([event]);
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+        find.byType(SingleChildScrollView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.text('Dentista'), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dentista'), findsNothing);
+    expect(fakeRepository.lastDeletedId, isNull);
+
+    await tester.tap(find.text('Annulla'));
+    await tester.pumpAndSettle();
+
+    await tester.pump(const Duration(seconds: 5));
+    expect(fakeRepository.lastDeletedId, isNull);
+    expect(find.text('Dentista'), findsOneWidget);
   });
 
   testWidgets(
@@ -241,6 +284,37 @@ void main() {
 
     expect(fakeRepository.lastDeletedRecurrenceGroupId, 'group-1');
     expect(fakeRepository.lastDeletedId, isNull);
+  });
+
+  testWidgets(
+      'un promemoria creato dalla Chat mostra l\'icona "creato dalla Chat" '
+      '(Knowledge Graph "lite")', (tester) async {
+    final fakeRepository = FakeCalendarEventRepository();
+    addTearDown(fakeRepository.dispose);
+
+    final fromChat = CalendarEvent(
+      id: 'e1',
+      workspaceId: 'w1',
+      title: 'Dentista',
+      startsAt: DateTime.now().add(const Duration(days: 1)),
+      durationMinutes: 30,
+      createdAt: DateTime.now(),
+      sourceChatId: 'chat-1',
+    );
+    final manual = CalendarEvent(
+      id: 'e2',
+      workspaceId: 'w1',
+      title: 'Barbiere',
+      startsAt: DateTime.now().add(const Duration(days: 2)),
+      durationMinutes: 30,
+      createdAt: DateTime.now(),
+    );
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([fromChat, manual]);
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.forum_outlined), findsOneWidget);
   });
 
   testWidgets(

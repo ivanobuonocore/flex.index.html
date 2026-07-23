@@ -8,6 +8,7 @@ import 'package:pip_mobile/features/document/application/document_controller.dar
 import 'package:pip_shared/pip_shared.dart';
 
 import '../../../support/fake_document_repository.dart';
+import '../../../support/fake_transaction_repository.dart';
 
 void main() {
   const workspaceId = 'w1';
@@ -94,5 +95,66 @@ void main() {
         .open(document);
 
     expect(failure, isA<UnexpectedFailure>());
+  });
+
+  group('linkedDocumentIdsProvider', () {
+    late FakeTransactionRepository fakeTransactionRepository;
+    late ProviderContainer kgContainer;
+
+    setUp(() {
+      fakeTransactionRepository = FakeTransactionRepository();
+      kgContainer = ProviderContainer(
+        overrides: [
+          transactionRepositoryProvider
+              .overrideWithValue(fakeTransactionRepository),
+        ],
+      );
+      addTearDown(kgContainer.dispose);
+      addTearDown(fakeTransactionRepository.dispose);
+    });
+
+    Transaction transactionWithDocument(String? documentId) => Transaction(
+          id: 'tx-${documentId ?? 'none'}',
+          workspaceId: workspaceId,
+          type: TransactionType.expense,
+          description: 'Spesa',
+          amountCents: 1000,
+          occurredAt: DateTime.utc(2026, 1, 1),
+          status: TransactionStatus.confirmed,
+          createdByAi: false,
+          createdAt: DateTime.utc(2026, 1, 1),
+          documentId: documentId,
+        );
+
+    test(
+        'contiene gli id dei Documenti referenziati da almeno una '
+        'Transazione', () async {
+      final subscription = kgContainer.listen(
+          linkedDocumentIdsProvider(workspaceId), (_, __) {});
+      addTearDown(subscription.close);
+
+      fakeTransactionRepository.emit([
+        transactionWithDocument('d1'),
+        transactionWithDocument(null),
+      ]);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        kgContainer.read(linkedDocumentIdsProvider(workspaceId)),
+        {'d1'},
+      );
+    });
+
+    test('insieme vuoto se nessuna Transazione ha un documento allegato',
+        () async {
+      final subscription = kgContainer.listen(
+          linkedDocumentIdsProvider(workspaceId), (_, __) {});
+      addTearDown(subscription.close);
+
+      fakeTransactionRepository.emit([transactionWithDocument(null)]);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(kgContainer.read(linkedDocumentIdsProvider(workspaceId)), isEmpty);
+    });
   });
 }

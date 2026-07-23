@@ -4,9 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_mobile/core/providers.dart';
 import 'package:pip_mobile/features/document/presentation/document_list_screen.dart';
+import 'package:pip_mobile/shared/widgets/document_thumbnail.dart';
 import 'package:pip_shared/pip_shared.dart';
 
 import '../../../support/fake_document_repository.dart';
+import '../../../support/fake_transaction_repository.dart';
 
 /// Conferma su swipe-to-delete (richiesta esplicita dell'utente: "conferma
 /// su swipe-to-delete per elementi non banali") — un Documento cancellato
@@ -26,12 +28,24 @@ void main() {
 
   Future<void> pumpScreen(
     WidgetTester tester,
-    FakeDocumentRepository fakeRepository,
-  ) {
+    FakeDocumentRepository fakeRepository, {
+    FakeTransactionRepository? fakeTransactionRepository,
+  }) {
+    final transactionRepository =
+        fakeTransactionRepository ?? FakeTransactionRepository();
+    addTearDown(transactionRepository.dispose);
+    // Knowledge Graph "lite" (richiesta esplicita dell'utente):
+    // `linkedDocumentIdsProvider` osservato dalla schermata dipende da
+    // `transactionsProvider`, quindi va sempre sovrascritto qui anche per i
+    // test che non testano quel comportamento — senza fake userebbe il vero
+    // client Supabase, mai inizializzato nei test.
+    transactionRepository.emit(const []);
     return tester.pumpWidget(
       ProviderScope(
         overrides: [
-          documentRepositoryProvider.overrideWithValue(fakeRepository)
+          documentRepositoryProvider.overrideWithValue(fakeRepository),
+          transactionRepositoryProvider
+              .overrideWithValue(transactionRepository),
         ],
         child: const MaterialApp(
           home: DocumentListScreen(workspaceId: workspaceId),
@@ -58,7 +72,41 @@ void main() {
     await tester.tap(find.text('Elimina'));
     await tester.pumpAndSettle();
 
+    // "Annulla su eliminazioni" (integrazione richiesta esplicitamente): la
+    // cancellazione reale è posticipata (SnackBar con azione "Annulla"), non
+    // immediata — `pumpAndSettle()` sopra ha già lasciato completare la
+    // chiusura del dialog e l'animazione di uscita del Dismissible (che
+    // avvia il timer); un pump esplicito più lungo del ritardo di default
+    // lo lascia scadere.
+    await tester.pump(const Duration(seconds: 5));
+
     expect(fakeRepository.lastDeletedId, 'd1');
+  });
+
+  testWidgets(
+      'toccare "Annulla" nello SnackBar dopo la conferma ripristina il documento senza cancellarlo',
+      (tester) async {
+    final fakeRepository = FakeDocumentRepository();
+    addTearDown(fakeRepository.dispose);
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([document]);
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(Dismissible), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Elimina'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('scontrino.jpg'), findsNothing);
+    expect(fakeRepository.lastDeletedId, isNull);
+
+    await tester.tap(find.text('Annulla'));
+    await tester.pumpAndSettle();
+
+    await tester.pump(const Duration(seconds: 5));
+    expect(fakeRepository.lastDeletedId, isNull);
+    expect(find.text('scontrino.jpg'), findsOneWidget);
   });
 
   testWidgets('un documento con tag mostra le pillole e permette di filtrare',
@@ -115,5 +163,74 @@ void main() {
 
     expect(fakeRepository.lastTagsUpdatedDocumentId, 'd1');
     expect(fakeRepository.lastTagsUpdatedTags, ['scontrini']);
+  });
+
+  testWidgets(
+      'un documento immagine mostra una miniatura invece dell\'icona generica '
+      '(richiesta esplicita dell\'utente: "miniature per i Documenti")',
+      (tester) async {
+    final pdfDocument = Document(
+      id: 'd3',
+      workspaceId: workspaceId,
+      name: 'contratto.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 2048,
+      storagePath: 'w1/d3',
+      hash: 'ghi',
+      uploadedAt: DateTime.utc(2026, 1, 3),
+    );
+    final fakeRepository = FakeDocumentRepository();
+    addTearDown(fakeRepository.dispose);
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([document, pdfDocument]);
+    await tester.pumpAndSettle();
+
+    // `document` è già image/jpeg (fixture in testa al file): miniatura, non
+    // l'icona generica di file.
+    expect(find.byType(DocumentThumbnail), findsOneWidget);
+    // Il PDF resta sull'icona generica per tipo di file.
+    expect(find.byIcon(Icons.picture_as_pdf_outlined), findsOneWidget);
+  });
+
+  testWidgets(
+      'un documento referenziato da una Transazione mostra il badge '
+      '"Collegato a una transazione" (Knowledge Graph "lite")', (tester) async {
+    final fakeRepository = FakeDocumentRepository();
+    addTearDown(fakeRepository.dispose);
+    final fakeTransactionRepository = FakeTransactionRepository();
+
+    await pumpScreen(tester, fakeRepository,
+        fakeTransactionRepository: fakeTransactionRepository);
+    fakeRepository.emit([document]);
+    fakeTransactionRepository.emit([
+      Transaction(
+        id: 'tx-1',
+        workspaceId: workspaceId,
+        type: TransactionType.expense,
+        description: 'Spesa',
+        amountCents: 500,
+        occurredAt: DateTime.utc(2026, 1, 1),
+        status: TransactionStatus.confirmed,
+        createdAt: DateTime.utc(2026, 1, 1),
+        documentId: document.id,
+      ),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Collegato a una transazione'), findsOneWidget);
+  });
+
+  testWidgets(
+      'un documento non referenziato da nessuna Transazione non mostra il '
+      'badge', (tester) async {
+    final fakeRepository = FakeDocumentRepository();
+    addTearDown(fakeRepository.dispose);
+
+    await pumpScreen(tester, fakeRepository);
+    fakeRepository.emit([document]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Collegato a una transazione'), findsNothing);
   });
 }

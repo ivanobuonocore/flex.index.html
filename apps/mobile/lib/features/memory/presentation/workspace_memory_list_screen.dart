@@ -4,6 +4,7 @@ import 'package:pip_design_system/pip_design_system.dart';
 
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
 import '../application/memory_controller.dart';
 
@@ -22,7 +23,7 @@ class WorkspaceMemoryListScreen extends ConsumerWidget {
     final memoriesAsync = ref.watch(workspaceMemoriesProvider(workspaceId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Memoria del Workspace')),
+      appBar: const GradientAppBar(title: Text('Memoria del Workspace')),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddMemoryDialog(context, ref),
         child: const Icon(Icons.add),

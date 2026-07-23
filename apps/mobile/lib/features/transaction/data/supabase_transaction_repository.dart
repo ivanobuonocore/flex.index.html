@@ -21,7 +21,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
     return scoped.order('occurred_at', ascending: false).map(
           (rows) => rows
               .where((row) => row['deleted_at'] == null)
-              .map(_toDomain)
+              .map(parseTransactionRow)
               .toList(growable: false),
         );
   }
@@ -63,7 +63,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
           })
           .select()
           .single();
-      return Result.ok(_toDomain(row));
+      return Result.ok(parseTransactionRow(row));
     } catch (e) {
       return Result.err(UnexpectedFailure(
           'Non è stato possibile creare la transazione.',
@@ -95,7 +95,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
           .eq('id', transaction.id)
           .select()
           .single();
-      return Result.ok(_toDomain(row));
+      return Result.ok(parseTransactionRow(row));
     } catch (e) {
       return Result.err(
         UnexpectedFailure('Non è stato possibile aggiornare la transazione.',
@@ -113,7 +113,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
           .eq('id', transactionId)
           .select()
           .single();
-      return Result.ok(_toDomain(row));
+      return Result.ok(parseTransactionRow(row));
     } catch (e) {
       return Result.err(
         UnexpectedFailure('Non è stato possibile confermare la transazione.',
@@ -150,7 +150,7 @@ class SupabaseTransactionRepository implements TransactionRepository {
           .eq('id', transactionId)
           .select()
           .single();
-      return Result.ok(_toDomain(row));
+      return Result.ok(parseTransactionRow(row));
     } catch (e) {
       return Result.err(
         UnexpectedFailure('Non è stato possibile allegare lo scontrino.',
@@ -180,28 +180,39 @@ class SupabaseTransactionRepository implements TransactionRepository {
       return const Result.ok(null);
     }
   }
+}
 
-  Transaction _toDomain(Map<String, dynamic> row) {
-    return Transaction(
-      id: row['id'] as String,
-      workspaceId: row['workspace_id'] as String,
-      chatId: row['chat_id'] as String?,
-      type: TransactionType.values.byName(row['type'] as String),
-      description: row['description'] as String,
-      amountCents: row['amount_cents'] as int,
-      currency: row['currency'] as String,
-      occurredAt: DateTime.parse(row['occurred_at'] as String),
-      status: TransactionStatus.values.byName(row['status'] as String),
-      createdByAi: row['created_by_ai'] as bool,
-      createdAt: DateTime.parse(row['created_at'] as String),
-      deletedAt: row['deleted_at'] != null
-          ? DateTime.parse(row['deleted_at'] as String)
-          : null,
-      category: TransactionCategory.values.byName(row['category'] as String),
-      documentId: row['document_id'] as String?,
-      tags: (row['tags'] as List<dynamic>).cast<String>(),
-    );
-  }
+/// Converte una riga di `transactions` in un [Transaction] — funzione pura
+/// (non un metodo privato) perché testabile senza mockare il client
+/// Supabase, stesso motivo di `parseMessageRow` in
+/// `supabase_message_repository.dart`.
+///
+/// `tags` è letta con un cast tollerante a `null` invece che diretto: è stata
+/// aggiunta da una migrazione additiva (Slice 1) più recente dello schema
+/// originale di `transactions` — se non ancora applicata al progetto
+/// Supabase reale arriva `null`, non assente, e un cast diretto romperebbe il
+/// caricamento dell'intero Bilancio (stesso bug già corretto per
+/// `messages.pending_transaction_ids`).
+Transaction parseTransactionRow(Map<String, dynamic> row) {
+  return Transaction(
+    id: row['id'] as String,
+    workspaceId: row['workspace_id'] as String,
+    chatId: row['chat_id'] as String?,
+    type: TransactionType.values.byName(row['type'] as String),
+    description: row['description'] as String,
+    amountCents: row['amount_cents'] as int,
+    currency: row['currency'] as String,
+    occurredAt: DateTime.parse(row['occurred_at'] as String),
+    status: TransactionStatus.values.byName(row['status'] as String),
+    createdByAi: row['created_by_ai'] as bool,
+    createdAt: DateTime.parse(row['created_at'] as String),
+    deletedAt: row['deleted_at'] != null
+        ? DateTime.parse(row['deleted_at'] as String)
+        : null,
+    category: TransactionCategory.values.byName(row['category'] as String),
+    documentId: row['document_id'] as String?,
+    tags: (row['tags'] as List<dynamic>?)?.cast<String>() ?? const [],
+  );
 }
 
 /// Converte la risposta grezza di `ai-chat` (modalità `extractReceiptDocumentId`,

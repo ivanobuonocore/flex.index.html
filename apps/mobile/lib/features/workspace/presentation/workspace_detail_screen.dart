@@ -9,10 +9,15 @@ import '../../../shared/widgets/loading_view.dart';
 import '../../document/application/document_controller.dart';
 import '../../memory/application/memory_controller.dart';
 import '../../note/application/note_controller.dart';
+import '../../note/presentation/create_edit_note_sheet.dart';
 import '../../reminder/application/calendar_event_controller.dart';
+import '../../reminder/presentation/create_reminder_sheet.dart';
 import '../../task/application/task_controller.dart';
+import '../../task/presentation/create_edit_task_sheet.dart';
 import '../../transaction/application/transaction_controller.dart';
+import '../../transaction/presentation/create_edit_transaction_sheet.dart';
 import '../application/workspace_controller.dart';
+import '../application/workspace_sharing_controller.dart';
 
 /// Home del Workspace (docs/product/06-information-architecture.md, "Home del
 /// Workspace"): nome, descrizione, anteprima Note/Task/Documenti/Bilancio/
@@ -27,8 +32,19 @@ class WorkspaceDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final workspacesAsync = ref.watch(workspacesProvider);
+    // Permessi granulari sui Workspace condivisi (stesso principio già
+    // applicato a ogni altro pulsante di creazione nelle schermate di un
+    // Workspace condiviso): un membro con ruolo `viewer` non vede il FAB.
+    final isViewer = ref.watch(currentMemberRoleProvider(workspaceId)) ==
+        WorkspaceRole.viewer;
 
     return Scaffold(
+      floatingActionButton: isViewer
+          ? null
+          : FloatingActionButton(
+              onPressed: () => _showQuickActions(context, workspaceId),
+              child: const Icon(Icons.add),
+            ),
       body: workspacesAsync.when(
         loading: () => const LoadingView(),
         error: (error, stackTrace) => ErrorView(
@@ -75,7 +91,31 @@ class _WorkspaceDetailBody extends ConsumerWidget {
 
     return CustomScrollView(
       slivers: [
-        SliverAppBar(title: Text(workspace.name), floating: true),
+        // Stesso gradiente "premium" già usato da GradientAppBar (redesign
+        // estetico 2.0) — qui applicato via `flexibleSpace` invece del widget
+        // condiviso perché questa schermata usa uno SliverAppBar dentro un
+        // CustomScrollView (per il comportamento `floating`), non un AppBar
+        // semplice compatibile con `Scaffold.appBar`.
+        SliverAppBar(
+          title: Text(workspace.name),
+          floating: true,
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: AppColors.heroGradient,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: AppShadows.glow(
+                color: AppColors.heroGradient.first,
+                isDark: theme.brightness == Brightness.dark,
+              ),
+            ),
+          ),
+        ),
         SliverPadding(
           padding: const EdgeInsets.all(AppSpacing.md),
           sliver: SliverList.list(
@@ -350,6 +390,56 @@ class _WorkspaceDetailBody extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// Menu "azione rapida" del FAB (richiesta esplicita dell'utente: "migliorie
+/// anche solo grafiche" ha incluso un modo più diretto di creare contenuti da
+/// un Workspace). I Documenti restano esclusi: si caricano con un file
+/// picker, non con una sheet di testo come le altre quattro.
+void _showQuickActions(BuildContext context, String workspaceId) {
+  showModalBottomSheet(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.note_add_outlined),
+            title: const Text('Nota'),
+            onTap: () {
+              Navigator.of(context).pop();
+              showCreateEditNoteSheet(context, workspaceId: workspaceId);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.add_task_outlined),
+            title: const Text('Attività'),
+            onTap: () {
+              Navigator.of(context).pop();
+              showCreateEditTaskSheet(context, workspaceId: workspaceId);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.account_balance_wallet_outlined),
+            title: const Text('Transazione'),
+            onTap: () {
+              Navigator.of(context).pop();
+              showCreateEditTransactionSheet(context, workspaceId: workspaceId);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.notifications_none_outlined),
+            title: const Text('Promemoria'),
+            onTap: () {
+              Navigator.of(context).pop();
+              showCreateReminderSheet(context, workspaceId: workspaceId);
+            },
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _SectionHeader extends StatelessWidget {

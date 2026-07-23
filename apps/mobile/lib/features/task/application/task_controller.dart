@@ -11,6 +11,13 @@ final tasksProvider =
   return ref.watch(taskRepositoryProvider).watchTasks(workspaceId);
 });
 
+/// Attività non ancora completate — funzione pura (richiesta esplicita
+/// dell'utente: blocco "Oggi" in Chat Home), condivisa con
+/// `section_preview.dart`'s `_AttivitaPreview` invece di duplicare lo stesso
+/// filtro in due punti.
+List<Task> openTasks(List<Task> tasks) =>
+    tasks.where((t) => t.status != TaskStatus.done).toList(growable: false);
+
 final taskFormControllerProvider =
     AsyncNotifierProvider.autoDispose<TaskFormController, void>(
         TaskFormController.new);

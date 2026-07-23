@@ -5,6 +5,8 @@ import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:pip_shared/pip_shared.dart';
 
+import '../../../shared/utils/undoable_delete.dart';
+import '../../../shared/widgets/document_thumbnail.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
@@ -77,6 +79,11 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   Widget build(BuildContext context) {
     final documentsAsync = ref.watch(documentsProvider(widget.workspaceId));
     final isUploading = ref.watch(documentFormControllerProvider).isLoading;
+    // Knowledge Graph "lite" (richiesta esplicita dell'utente): quali
+    // Documenti di questo Workspace sono referenziati da una Transazione
+    // (es. uno scontrino allegato) — derivato, nessuna nuova query.
+    final linkedDocumentIds =
+        ref.watch(linkedDocumentIdsProvider(widget.workspaceId));
 
     return Scaffold(
       appBar: const GradientAppBar(title: Text('Documenti')),
@@ -188,14 +195,36 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                             ),
                             onDismissed: (_) {
                               setState(() => _dismissedIds.add(document.id));
-                              ref
-                                  .read(documentFormControllerProvider.notifier)
-                                  .delete(document.id);
+                              // "Annulla" su eliminazioni (integrazione
+                              // richiesta esplicitamente): la cancellazione
+                              // reale è posticipata di qualche secondo, non
+                              // immediata — l'id resta comunque filtrato
+                              // dalla lista per tutta l'attesa.
+                              scheduleUndoableDelete(
+                                context,
+                                message: 'Documento eliminato.',
+                                onConfirmed: () => ref
+                                    .read(
+                                        documentFormControllerProvider.notifier)
+                                    .delete(document.id),
+                                onUndo: () {
+                                  if (mounted) {
+                                    setState(() =>
+                                        _dismissedIds.remove(document.id));
+                                  }
+                                },
+                              );
                             },
                             child: Card(
                               child: ListTile(
-                                leading: Icon(_iconFor(document.mimeType),
-                                    color: AppColors.categoryDocumenti),
+                                leading: document.mimeType.startsWith('image/')
+                                    ? DocumentThumbnail(
+                                        documentId: document.id,
+                                        height: 48,
+                                        width: 48,
+                                      )
+                                    : Icon(_iconFor(document.mimeType),
+                                        color: AppColors.categoryDocumenti),
                                 title: Text(document.name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis),
@@ -204,6 +233,28 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(_formatSize(document.sizeBytes)),
+                                    if (linkedDocumentIds
+                                        .contains(document.id)) ...[
+                                      const SizedBox(height: AppSpacing.xs),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                              Icons.receipt_long_outlined,
+                                              size: 14,
+                                              color:
+                                                  AppColors.categoryBilancio),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            'Collegato a una transazione',
+                                            style: AppTypography.caption
+                                                .copyWith(
+                                                    color: AppColors
+                                                        .categoryBilancio),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                     if (document.tags.isNotEmpty) ...[
                                       const SizedBox(height: AppSpacing.xs),
                                       Wrap(
