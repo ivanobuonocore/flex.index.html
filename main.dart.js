@@ -34940,7 +34940,7 @@ EI(a,b,c,d){return A.by0().$4$fontSize$fontWeight$height$letterSpacing(a,b,c,d)}
 b_V(){var s=0,r=A.t(t.H)
 var $async$b_V=A.o(function(a,b){if(a===1)return A.p(b,r)
 while(true)switch(s){case 0:s=2
-return A.m(A.aCF("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhY2NteXp4ZGp3dmp2bW1rdmpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0NTA5NTQsImV4cCI6MjEwMDAyNjk1NH0.DsSXR5ygMyuwx_WXI1IjCkZDqm42MafwmeZbCZnL3yo","https://sacccmyzxdjwvjvmmktjb.supabase.co"),$async$b_V)
+return A.m(A.aCF("sb_publishable_2jn0yioTd7-ENj2UtvS95A_b7Vj_bAe","https://saccmyzxdjwvjvmmkvjb.supabase.co"),$async$b_V)
 case 2:return A.q(null,r)}})
 return A.r($async$b_V,r)},
 bwj(a,b){return A.bmO(a,B.I0)},
