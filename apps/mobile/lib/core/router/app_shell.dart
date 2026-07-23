@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 
 import '../../features/transaction/application/transaction_controller.dart';
+import '../../shared/widgets/pressable_scale.dart';
 
 /// Bottom Navigation a 5 sezioni (redesign estetico — richiesta esplicita
 /// dell'utente: "inseriscila al centro al posto di 'ricerca'... mettila in
@@ -36,7 +37,23 @@ class AppShell extends ConsumerWidget {
             );
 
     return Scaffold(
-      body: navigationShell,
+      // Ogni sezione entra con una dissolvenza e un lieve scorrimento. Il
+      // contenuto non cambia e le tab continuano a conservare il proprio
+      // stato grazie allo StatefulShellRoute.
+      body: TweenAnimationBuilder<double>(
+        key: ValueKey(navigationShell.currentIndex),
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        builder: (context, value, child) => Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 10 * (1 - value)),
+            child: child,
+          ),
+        ),
+        child: navigationShell,
+      ),
       bottomNavigationBar: _BottomBar(
         currentIndex: navigationShell.currentIndex,
         onSelect: (index) => navigationShell.goBranch(
@@ -212,16 +229,21 @@ class _NavItem extends StatelessWidget {
     return Expanded(
       child: InkWell(
         onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(selected ? selectedIcon : icon, color: tint, size: iconSize),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: AppTypography.caption.copyWith(color: tint, fontSize: 11),
-            ),
-          ],
+        child: AnimatedScale(
+          scale: selected ? 1 : 0.92,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(selected ? selectedIcon : icon, color: tint, size: iconSize),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: AppTypography.caption.copyWith(color: tint, fontSize: 11),
+              ),
+            ],
+          ),
         ),
       ),
     );
