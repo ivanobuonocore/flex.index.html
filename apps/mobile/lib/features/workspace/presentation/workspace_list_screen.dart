@@ -52,10 +52,22 @@ class WorkspaceListScreen extends ConsumerWidget {
 
           return ListView.separated(
             padding: const EdgeInsets.all(AppSpacing.md),
-            itemCount: workspaces.length,
-            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+            itemCount: workspaces.length + 2,
+            separatorBuilder: (_, index) => SizedBox(
+              height: index == 0 ? AppSpacing.lg : AppSpacing.sm,
+            ),
             itemBuilder: (context, index) {
-              final workspace = workspaces[index];
+              if (index == 0) {
+                return _SpacesHero(
+                  count: workspaces.length,
+                  onCreate: () => showCreateWorkspaceSheet(context),
+                );
+              }
+              if (index == 1) {
+                return Text('I tuoi spazi', style: AppTypography.heading3);
+              }
+
+              final workspace = workspaces[index - 2];
               return WorkspaceCard(
                 workspace: workspace,
                 // La sezione Appuntamenti apre direttamente il calendario
@@ -72,6 +84,81 @@ class WorkspaceListScreen extends ConsumerWidget {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+/// Rende la lista una vera pagina di ingresso: prima della lista l'utente
+/// vede quante aree ha a disposizione e come crearne una nuova, invece di
+/// trovarsi direttamente davanti a una sequenza di card.
+class _SpacesHero extends StatelessWidget {
+  const _SpacesHero({required this.count, required this.onCreate});
+
+  final int count;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: AppColors.heroGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: AppRadii.cardPremiumRadius,
+        boxShadow: AppShadows.glow(
+          color: AppColors.heroGradient.first,
+          isDark: isDark,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.18),
+                  borderRadius: AppRadii.buttonRadius,
+                ),
+                child: const Icon(Icons.space_dashboard_rounded,
+                    color: Colors.white),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  '$count ${count == 1 ? 'spazio attivo' : 'spazi attivi'}',
+                  style: AppTypography.heading3.copyWith(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Organizza progetti, attività e documenti in un unico posto.',
+            style: AppTypography.body.copyWith(
+              color: Colors.white.withOpacity(0.86),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          OutlinedButton.icon(
+            onPressed: onCreate,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Nuovo spazio'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: BorderSide(color: Colors.white.withOpacity(0.65)),
+            ),
+          ),
+        ],
       ),
     );
   }
