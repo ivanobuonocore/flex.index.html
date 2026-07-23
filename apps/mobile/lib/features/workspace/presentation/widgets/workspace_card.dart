@@ -4,6 +4,7 @@ import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
 import '../../../../shared/widgets/colorful_icon_badge.dart';
+import '../../../../shared/widgets/pressable_scale.dart';
 
 import '../../application/workspace_category_meta.dart';
 import '../../application/workspace_controller.dart';
@@ -42,17 +43,19 @@ class WorkspaceCard extends ConsumerWidget {
     // sottile barra di accento a sinistra nel colore della categoria: la
     // categoria resta riconoscibile a colpo d'occhio senza che ogni Card
     // "urli" un colore diverso.
-    return Container(
-      decoration: BoxDecoration(
+    return PressableScale(
+      enabled: onTap != null,
+      child: Container(
+        decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: AppRadii.standardRadius,
         boxShadow: AppShadows.card(isDark: theme.brightness == Brightness.dark),
       ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: AppRadii.standardRadius,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: AppRadii.standardRadius,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
           borderRadius: AppRadii.standardRadius,
           onTap: onTap,
           child: IntrinsicHeight(
@@ -117,6 +120,7 @@ class WorkspaceCard extends ConsumerWidget {
                 ),
               ],
             ),
+          ),
           ),
         ),
       ),
