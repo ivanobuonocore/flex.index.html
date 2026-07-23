@@ -873,6 +873,18 @@ Non ancora presenti: settings, billing.
   primo `pump()` risolve i provider, il secondo fa scattare il rebuild innescato da
   `addPostFrameCallback` (che avvia l'animazione con `elapsed=0`), solo allora un terzo `pump`
   con una durata avanza l'animazione già partita.
+- **Coach mark leggero sulle funzioni nuove** (richiesta esplicita dell'utente) — nuovo widget
+  condiviso `shared/widgets/coach_mark.dart` (`CoachMark`): un piccolo banner non invasivo (stesso
+  gradiente `AppColors.heroGradient` dell'header), mostrato sopra un widget la prima volta che
+  compare, con un pulsante di chiusura esplicito. Applicato a due punti già esistenti ma poco
+  scoperti: il calendario mensile in Appuntamenti ("tocca un giorno per filtrare") e la heatmap
+  delle spese nel Bilancio ("più intenso il colore, più hai speso"). Lo stato "già visto" è
+  puramente locale al dispositivo (nessun dato di dominio, nessuna sincronizzazione tra dispositivi
+  necessaria per un suggerimento grafico): persistito con `shared_preferences`, prima dipendenza di
+  storage locale in questo progetto — ogni altro stato "già visto" (es. onboarding) vive lato
+  Supabase perché deve restare coerente tra i dispositivi dello stesso utente, cosa non
+  necessaria qui. Nei test, `SharedPreferences.setMockInitialValues(...)` (hook ufficiale del
+  package) sostituisce l'istanza reale, senza bisogno di un repository fittizio dedicato.
 
 ## Setup locale
 

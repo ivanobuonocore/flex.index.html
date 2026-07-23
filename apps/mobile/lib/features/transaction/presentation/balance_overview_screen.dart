@@ -7,6 +7,7 @@ import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../shared/widgets/coach_mark.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
@@ -255,9 +256,14 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
               const SizedBox(height: AppSpacing.lg),
               _TrendChart(trend: trend),
               const SizedBox(height: AppSpacing.lg),
-              _ExpenseHeatmap(
-                month: selectedMonth,
-                dailyTotals: dailyExpenseTotals(transactions, selectedMonth),
+              CoachMark(
+                id: 'bilancio_heatmap',
+                message: 'Ogni casella è un giorno: più intenso il colore, '
+                    'più hai speso quel giorno.',
+                child: _ExpenseHeatmap(
+                  month: selectedMonth,
+                  dailyTotals: dailyExpenseTotals(transactions, selectedMonth),
+                ),
               ),
               const SizedBox(height: AppSpacing.lg),
               _BudgetSection(expenseByCategory: expenseByCategory),

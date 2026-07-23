@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 
+import '../../../shared/widgets/coach_mark.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
@@ -82,18 +83,23 @@ class _AppointmentsOverviewScreenState
           return SingleChildScrollView(
             child: Column(
               children: [
-                MonthCalendarGrid(
-                  month: _visibleMonth,
-                  selectedDay: selectedDay,
-                  events: events,
-                  onMonthChanged: (month) =>
-                      setState(() => _visibleMonth = month),
-                  onDaySelected: (day) => setState(() {
-                    _selectedDay = (selectedDay != null &&
-                            isSameCalendarDay(selectedDay, day))
-                        ? null
-                        : day;
-                  }),
+                CoachMark(
+                  id: 'appuntamenti_calendario',
+                  message: 'Tocca un giorno per vedere solo gli impegni di '
+                      'quella data, toccalo di nuovo per tornare a tutti.',
+                  child: MonthCalendarGrid(
+                    month: _visibleMonth,
+                    selectedDay: selectedDay,
+                    events: events,
+                    onMonthChanged: (month) =>
+                        setState(() => _visibleMonth = month),
+                    onDaySelected: (day) => setState(() {
+                      _selectedDay = (selectedDay != null &&
+                              isSameCalendarDay(selectedDay, day))
+                          ? null
+                          : day;
+                    }),
+                  ),
                 ),
                 const Divider(height: 1),
                 if (visibleEvents.isEmpty)
