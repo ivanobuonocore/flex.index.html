@@ -5,6 +5,7 @@ import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
 import '../../../core/env/app_env.dart';
+import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/application/session_controller.dart';
 import '../../export/presentation/data_export_sheet.dart';
@@ -26,7 +27,7 @@ class ProfileScreen extends ConsumerWidget {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profilo')),
+      appBar: const GradientAppBar(title: Text('Profilo')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.md),
@@ -53,21 +54,35 @@ class ProfileScreen extends ConsumerWidget {
               child: Row(
                 children: [
                   Container(
+                    width: 56,
+                    height: 56,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
+                      // Gradiente radiale "vetro" invece di un colore piatto
+                      // (richiesta esplicita dell'utente: "abbellimenti
+                      // stilistici") — stesso fuoco di luce in alto a
+                      // sinistra già usato per le fette del grafico a torta,
+                      // qui in tonalità bianche perché l'avatar poggia sul
+                      // gradiente colorato dell'hero, non su una superficie
+                      // neutra.
+                      gradient: RadialGradient(
+                        center: const Alignment(-0.4, -0.5),
+                        radius: 1.1,
+                        colors: [
+                          Colors.white.withOpacity(0.38),
+                          Colors.white.withOpacity(0.16),
+                        ],
+                      ),
                       boxShadow: AppShadows.glow(
                         color: AppColors.heroGradient.first,
                         isDark: theme.brightness == Brightness.dark,
                       ),
                     ),
-                    child: CircleAvatar(
-                      radius: 28,
-                      backgroundColor: Colors.white.withOpacity(0.2),
-                      child: Text(
-                        _initials(user?.name),
-                        style: AppTypography.heading3
-                            .copyWith(color: Colors.white),
-                      ),
+                    child: Text(
+                      _initials(user?.name),
+                      style:
+                          AppTypography.heading3.copyWith(color: Colors.white),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.md),

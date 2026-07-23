@@ -808,6 +808,26 @@ Non ancora presenti: settings, billing.
   renderizzato offscreen (`matchesGoldenFile` in un test temporaneo, poi rimosso) — nessun browser
   reale necessario per questo controllo.
 
+- **Pass di rifinitura estetica** (richiesta esplicita dell'utente: "abbellimenti stilistici",
+  non layout/architettura) — tre migliorie indipendenti, tutte presentazione pura:
+  - **Coerenza delle intestazioni**: le 4 schermate rimaste con un `AppBar`/`SliverAppBar` piatto
+    ora usano lo stesso gradiente "premium" già in Chat/Bilancio — `MemoryListScreen`,
+    `WorkspaceMemoryListScreen`, `ProfileScreen` (passati a `GradientAppBar`, lo stesso widget
+    condiviso) e `WorkspaceDetailScreen` (`SliverAppBar` con `flexibleSpace` dello stesso
+    gradiente, non `GradientAppBar` direttamente: è dentro un `CustomScrollView` per il
+    comportamento `floating`, non un `Scaffold.appBar` semplice).
+  - **Shimmer sullo skeleton loading**: `shared/widgets/skeleton_list.dart` — sostituita la
+    dissolvenza di opacità uniforme con un vero effetto "shimmer" (`ShaderMask` con
+    `BlendMode.srcATop`, una banda di luce che attraversa ogni riga in un giro continuo), stesso
+    principio del pacchetto `shimmer` più diffuso senza aggiungere una dipendenza. Si propaga
+    automaticamente a ogni schermata che usa `SkeletonList` (un solo widget condiviso).
+  - **Effetto "vetro" esteso**: lo stesso gradiente radiale con fuoco di luce in alto a sinistra
+    già usato per le fette del grafico a torta è ora applicato anche all'avatar del Profilo
+    (tonalità bianche, sopra il gradiente colorato dell'hero) e al disco centrale del donut nel
+    Bilancio (un accenno molto tenue, per non intaccare la leggibilità del testo sopra).
+  Verificato visivamente con screenshot offscreen (`matchesGoldenFile` in test temporanei, poi
+  rimossi), stesso metodo già usato per il grafico a torta.
+
 ## Setup locale
 
 ```

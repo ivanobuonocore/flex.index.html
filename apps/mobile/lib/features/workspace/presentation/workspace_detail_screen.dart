@@ -91,7 +91,31 @@ class _WorkspaceDetailBody extends ConsumerWidget {
 
     return CustomScrollView(
       slivers: [
-        SliverAppBar(title: Text(workspace.name), floating: true),
+        // Stesso gradiente "premium" già usato da GradientAppBar (redesign
+        // estetico 2.0) — qui applicato via `flexibleSpace` invece del widget
+        // condiviso perché questa schermata usa uno SliverAppBar dentro un
+        // CustomScrollView (per il comportamento `floating`), non un AppBar
+        // semplice compatibile con `Scaffold.appBar`.
+        SliverAppBar(
+          title: Text(workspace.name),
+          floating: true,
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: AppColors.heroGradient,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: AppShadows.glow(
+                color: AppColors.heroGradient.first,
+                isDark: theme.brightness == Brightness.dark,
+              ),
+            ),
+          ),
+        ),
         SliverPadding(
           padding: const EdgeInsets.all(AppSpacing.md),
           sliver: SliverList.list(

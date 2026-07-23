@@ -1113,7 +1113,21 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                   height: 100,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Theme.of(context).colorScheme.surface,
+                    // Un accenno dello stesso gradiente radiale "vetro" delle
+                    // fette (richiesta esplicita dell'utente: "abbellimenti
+                    // stilistici") — molto tenue, per non intaccare la
+                    // leggibilità del testo sopra: un fuoco di luce quasi
+                    // impercettibile in alto a sinistra invece di un colore
+                    // piatto uniforme.
+                    gradient: RadialGradient(
+                      center: const Alignment(-0.4, -0.5),
+                      radius: 1.2,
+                      colors: [
+                        Color.lerp(Theme.of(context).colorScheme.surface,
+                            Colors.white, 0.12)!,
+                        Theme.of(context).colorScheme.surface,
+                      ],
+                    ),
                     border: Border.all(
                       color: incomeColor.withOpacity(0.25),
                       width: 1.5,
