@@ -657,44 +657,47 @@ class _HeroStatPill extends StatelessWidget {
           borderRadius: AppRadii.buttonRadius,
           onTap: onTap,
           child: Container(
-          padding: const EdgeInsets.symmetric(
+            padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.14),
-            borderRadius: AppRadii.buttonRadius,
-            border: Border.all(color: Colors.white.withOpacity(0.22)),
-          ),
-          child: Row(
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 18)),
-              const SizedBox(width: AppSpacing.xs),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: AppTypography.caption
-                          .copyWith(color: Colors.white.withOpacity(0.8)),
-                    ),
-                    Text(
-                      _formatAmount(amountCents),
-                      style: AppTypography.body.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.14),
+              borderRadius: AppRadii.buttonRadius,
+              border: Border.all(color: Colors.white.withOpacity(0.22)),
+            ),
+            child: Row(
+              children: [
+                Text(emoji, style: const TextStyle(fontSize: 18)),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        style: AppTypography.caption
+                            .copyWith(color: Colors.white.withOpacity(0.8)),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                      Text(
+                        _formatAmount(amountCents),
+                        style: AppTypography.body.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              if (onTap != null)
-                Icon(Icons.chevron_right,
-                    color: Colors.white.withOpacity(0.7), size: 18),
-            ],
-          ),
+                if (onTap != null)
+                  Icon(
+                    Icons.chevron_right,
+                    color: Colors.white.withOpacity(0.7),
+                    size: 18,
+                  ),
+              ],
+            ),
           ),
         ),
       ),
