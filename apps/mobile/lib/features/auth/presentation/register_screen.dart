@@ -36,9 +36,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       _infoMessage = null;
     });
 
-    final failure = await ref
-        .read(authControllerProvider.notifier)
-        .signUp(
+    final failure = await ref.read(authControllerProvider.notifier).signUp(
           name: _nameController.text.trim(),
           email: _emailController.text.trim(),
           password: _passwordController.text,
