@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 import 'package:pip_domain/pip_domain.dart';
 
+import '../../../../shared/widgets/colorful_icon_badge.dart';
+
 import '../../application/workspace_category_meta.dart';
 import '../../application/workspace_controller.dart';
 import '../edit_workspace_sheet.dart';
@@ -31,7 +33,7 @@ class WorkspaceCard extends ConsumerWidget {
     final categoryMeta = WorkspaceCategoryMeta.of(workspace.category);
     final isSystem = categoryMeta != null;
     final tint = categoryMeta?.color ?? theme.colorScheme.primary;
-    final emoji = categoryMeta?.emoji ?? _emojiFor(workspace.icon);
+    final icon = categoryMeta?.icon ?? _iconFor(workspace.icon);
 
     // Sostituisce la Card piatta (elevation 0 nel tema globale) con un
     // Container decorato: superficie neutra + ombra neutra (non colorata per
@@ -63,18 +65,10 @@ class WorkspaceCard extends ConsumerWidget {
                     padding: const EdgeInsets.all(AppSpacing.md),
                     child: Row(
                       children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: tint.withOpacity(0.12),
-                            borderRadius: AppRadii.buttonRadius,
-                          ),
-                          child: Text(
-                            emoji,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 25),
-                          ),
+                        ColorfulIconBadge(
+                          icon: icon,
+                          color: tint,
+                          size: 44,
                         ),
                         const SizedBox(width: AppSpacing.md),
                         Expanded(
@@ -166,20 +160,20 @@ class WorkspaceCard extends ConsumerWidget {
     }
   }
 
-  String _emojiFor(String icon) {
+  IconData _iconFor(String icon) {
     switch (icon) {
       case 'briefcase':
-        return '💼';
+        return Icons.business_center_outlined;
       case 'school':
-        return '🎓';
+        return Icons.school_outlined;
       case 'home':
-        return '🏠';
+        return Icons.home_outlined;
       case 'campaign':
-        return '📣';
+        return Icons.campaign_outlined;
       case 'flight':
-        return '✈️';
+        return Icons.flight_outlined;
       default:
-        return '📁';
+        return Icons.folder_outlined;
     }
   }
 }
