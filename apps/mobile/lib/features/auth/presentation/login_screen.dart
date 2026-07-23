@@ -30,7 +30,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _errorMessage = null);
 
-    final failure = await ref.read(authControllerProvider.notifier).signIn(
+    final failure = await ref
+        .read(authControllerProvider.notifier)
+        .signIn(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
@@ -61,26 +63,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
             const SizedBox(height: AppSpacing.xl),
             TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      autofillHints: const [AutofillHints.email],
-                      decoration: const InputDecoration(labelText: 'Email'),
-                      validator: (value) =>
-                          (value == null || !value.contains('@'))
-                              ? 'Email non valida'
-                              : null,
-                    ),
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(labelText: 'Email'),
+              validator: (value) => (value == null || !value.contains('@'))
+                  ? 'Email non valida'
+                  : null,
+            ),
             const SizedBox(height: AppSpacing.md),
             TextFormField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      autofillHints: const [AutofillHints.password],
-                      decoration: const InputDecoration(labelText: 'Password'),
-                      validator: (value) => (value == null || value.length < 8)
-                          ? 'Almeno 8 caratteri'
-                          : null,
-                      onFieldSubmitted: (_) => _submit(),
-                    ),
+              controller: _passwordController,
+              obscureText: true,
+              autofillHints: const [AutofillHints.password],
+              decoration: const InputDecoration(labelText: 'Password'),
+              validator: (value) => (value == null || value.length < 8)
+                  ? 'Almeno 8 caratteri'
+                  : null,
+              onFieldSubmitted: (_) => _submit(),
+            ),
             if (_errorMessage != null) ...[
               const SizedBox(height: AppSpacing.md),
               Text(
@@ -90,20 +91,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ],
             const SizedBox(height: AppSpacing.lg),
             ElevatedButton(
-                      onPressed: isLoading ? null : _submit,
-                      child: isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Accedi'),
-                    ),
+              onPressed: isLoading ? null : _submit,
+              child: isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Accedi'),
+            ),
             const SizedBox(height: AppSpacing.md),
             TextButton(
-                      onPressed:
-                          isLoading ? null : () => context.go('/register'),
-                      child: const Text('Non hai un account? Registrati'),
+              onPressed: isLoading ? null : () => context.go('/register'),
+              child: const Text('Non hai un account? Registrati'),
             ),
           ],
         ),
