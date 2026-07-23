@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
+
+import '../../../shared/widgets/pressable_scale.dart';
 import 'package:pip_domain/pip_domain.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -646,13 +648,15 @@ class _HeroStatPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: AppRadii.buttonRadius,
-      child: InkWell(
+    return PressableScale(
+      enabled: onTap != null,
+      child: Material(
+        color: Colors.transparent,
         borderRadius: AppRadii.buttonRadius,
-        onTap: onTap,
-        child: Container(
+        child: InkWell(
+          borderRadius: AppRadii.buttonRadius,
+          onTap: onTap,
+          child: Container(
           padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
           decoration: BoxDecoration(
@@ -690,6 +694,7 @@ class _HeroStatPill extends StatelessWidget {
                 Icon(Icons.chevron_right,
                     color: Colors.white.withOpacity(0.7), size: 18),
             ],
+          ),
           ),
         ),
       ),
