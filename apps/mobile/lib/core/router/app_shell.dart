@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 
 import '../../features/transaction/application/transaction_controller.dart';
-import '../../shared/widgets/pressable_scale.dart';
 
 /// Bottom Navigation a 5 sezioni (redesign estetico — richiesta esplicita
 /// dell'utente: "inseriscila al centro al posto di 'ricerca'... mettila in
