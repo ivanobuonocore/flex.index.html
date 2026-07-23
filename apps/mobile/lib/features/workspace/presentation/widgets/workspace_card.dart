@@ -47,74 +47,75 @@ class WorkspaceCard extends ConsumerWidget {
       enabled: onTap != null,
       child: Container(
         decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: AppRadii.standardRadius,
-        boxShadow: AppShadows.card(isDark: theme.brightness == Brightness.dark),
-      ),
+          color: theme.colorScheme.surface,
+          borderRadius: AppRadii.standardRadius,
+          boxShadow:
+              AppShadows.card(isDark: theme.brightness == Brightness.dark),
+        ),
         child: Material(
           color: Colors.transparent,
           borderRadius: AppRadii.standardRadius,
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-          borderRadius: AppRadii.standardRadius,
-          onTap: onTap,
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(width: 4, color: tint),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    child: Row(
-                      children: [
-                        ColorfulIconBadge(
-                          icon: icon,
-                          color: tint,
-                          size: 44,
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                workspace.name,
-                                style: theme.textTheme.headlineSmall,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+            borderRadius: AppRadii.standardRadius,
+            onTap: onTap,
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(width: 4, color: tint),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      child: Row(
+                        children: [
+                          ColorfulIconBadge(
+                            icon: icon,
+                            color: tint,
+                            size: 44,
+                          ),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  workspace.name,
+                                  style: theme.textTheme.headlineSmall,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                subtitle ??
+                                    (workspace.description != null &&
+                                            workspace.description!.isNotEmpty
+                                        ? Text(
+                                            workspace.description!,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: theme.textTheme.bodySmall,
+                                          )
+                                        : const SizedBox.shrink()),
+                              ],
+                            ),
+                          ),
+                          PopupMenuButton<_WorkspaceCardAction>(
+                            icon: const Icon(Icons.more_vert),
+                            onSelected: (action) =>
+                                _onAction(context, ref, action),
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: _WorkspaceCardAction.rename,
+                                child: Text('Rinomina'),
                               ),
-                              const SizedBox(height: 2),
-                              subtitle ??
-                                  (workspace.description != null &&
-                                          workspace.description!.isNotEmpty
-                                      ? Text(
-                                          workspace.description!,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: theme.textTheme.bodySmall,
-                                        )
-                                      : const SizedBox.shrink()),
+                              if (!isSystem)
+                                const PopupMenuItem(
+                                  value: _WorkspaceCardAction.delete,
+                                  child: Text('Elimina'),
+                                ),
                             ],
                           ),
-                        ),
-                        PopupMenuButton<_WorkspaceCardAction>(
-                          icon: const Icon(Icons.more_vert),
-                          onSelected: (action) =>
-                              _onAction(context, ref, action),
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: _WorkspaceCardAction.rename,
-                              child: Text('Rinomina'),
-                            ),
-                            if (!isSystem)
-                              const PopupMenuItem(
-                                value: _WorkspaceCardAction.delete,
-                                child: Text('Elimina'),
-                              ),
-                          ],
-                        ),
-                      ],
+                        ],
                     ),
                   ),
                 ),
