@@ -510,7 +510,6 @@ class _BalanceHeroCard extends StatelessWidget {
               Expanded(
                 child: _HeroStatPill(
                   emoji: '💰',
-                  emojiColor: const Color(0xFF16A34A),
                   label: 'Entrate',
                   amountCents: incomeCents,
                   onTap: incomeCents == 0
@@ -529,7 +528,6 @@ class _BalanceHeroCard extends StatelessWidget {
               Expanded(
                 child: _HeroStatPill(
                   emoji: '💸',
-                  emojiColor: const Color(0xFFEF4444),
                   label: 'Uscite',
                   amountCents: expenseCents,
                   onTap: expenseCents == 0
@@ -636,14 +634,12 @@ class _PercentChangeBadge extends StatelessWidget {
 class _HeroStatPill extends StatelessWidget {
   const _HeroStatPill({
     required this.emoji,
-    required this.emojiColor,
     required this.label,
     required this.amountCents,
     this.onTap,
   });
 
   final String emoji;
-  final Color emojiColor;
   final String label;
   final int amountCents;
   final VoidCallback? onTap;
@@ -666,27 +662,7 @@ class _HeroStatPill extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [emojiColor, emojiColor.withOpacity(0.66)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: emojiColor.withOpacity(0.35),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Text(emoji, style: const TextStyle(fontSize: 19)),
-              ),
+              Text(emoji, style: const TextStyle(fontSize: 18)),
               const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Column(
