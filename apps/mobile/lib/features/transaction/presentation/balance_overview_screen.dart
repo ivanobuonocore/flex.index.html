@@ -1020,13 +1020,23 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                       for (var i = 0; i < slices.length; i++)
                         PieChartSectionData(
                           value: slices[i].amountCents.toDouble(),
-                          gradient: LinearGradient(
+                          // Gradiente radiale invece che a due punti lineare
+                          // (richiesta esplicita dell'utente: più profondità
+                          // "senza stravolgere il colore") — stessa tinta di
+                          // ogni fetta, solo schiarita verso un fuoco in alto
+                          // a sinistra e leggermente scurita verso il bordo
+                          // esterno: dà l'impressione di una superficie
+                          // sferica illuminata da una fonte di luce, non un
+                          // colore piatto con un solo passaggio di tono.
+                          gradient: RadialGradient(
+                            center: const Alignment(-0.5, -0.6),
+                            radius: 1.1,
                             colors: [
+                              Color.lerp(slices[i].color, Colors.white, 0.45)!,
                               slices[i].color,
-                              Color.lerp(slices[i].color, Colors.white, 0.25)!,
+                              Color.lerp(slices[i].color, Colors.black, 0.12)!,
                             ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                            stops: const [0.0, 0.55, 1.0],
                           ),
                           title: '${slices[i].percent.toStringAsFixed(0)}%',
                           radius: _touchedIndex == i ? 60 : 52,
@@ -1043,6 +1053,54 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                           ),
                         ),
                     ],
+                  ),
+                ),
+                // Riflesso "vetro" sopra l'anello colorato (richiesta
+                // esplicita dell'utente: più profondità "magari... non solo
+                // ombre"): un unico arco bianco semi-trasparente, sfumato ai
+                // due estremi, posizionato in alto — come un riflesso di
+                // luce su una superficie curva e lucida. `IgnorePointer`
+                // perché è puramente decorativo: il tocco deve continuare a
+                // raggiungere l'anello colorato sotto (che gestisce
+                // l'evidenziazione della fetta). Stessi `centerSpaceRadius`/
+                // `radius` del grafico reale sopra: nello stesso `Stack`
+                // centrato, fl_chart li dimensiona in modo identico, quindi
+                // l'arco resta sempre perfettamente allineato all'anello
+                // senza calcoli manuali di geometria.
+                IgnorePointer(
+                  child: PieChart(
+                    PieChartData(
+                      sectionsSpace: 0,
+                      centerSpaceRadius: 64,
+                      // Il primo settore (72°, un quinto del cerchio) parte
+                      // spostato indietro della metà della propria ampiezza,
+                      // così risulta centrato esattamente in cima invece che
+                      // partire da lì.
+                      startDegreeOffset: -36,
+                      sections: [
+                        PieChartSectionData(
+                          value: 20,
+                          radius: 52,
+                          showTitle: false,
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              Colors.white.withOpacity(0),
+                              Colors.white.withOpacity(0.4),
+                              Colors.white.withOpacity(0),
+                            ],
+                            stops: const [0.0, 0.5, 1.0],
+                          ),
+                        ),
+                        PieChartSectionData(
+                          value: 80,
+                          radius: 52,
+                          showTitle: false,
+                          color: Colors.transparent,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 // Centro del donut: il netto del mese a colpo d'occhio, senza

@@ -792,6 +792,22 @@ Non ancora presenti: settings, billing.
   con `deno check`/`lint`/`fmt` (nessuna chiamata reale ad Anthropic disponibile in questa
   sandbox, stesso limite già accettato per il resto di questo file).
 
+- **Grafico a torta del Bilancio: più profondità 3D, stessa palette** (richiesta esplicita
+  dell'utente: "deve essere più bello esteticamente... profondità dettata non solo da ombre...
+  senza stravolgere il colore") — `_BalancePieChart` in `balance_overview_screen.dart`: il
+  gradiente di ogni fetta passa da lineare a due tonalità a **radiale a tre tonalità**
+  (`RadialGradient` con fuoco in alto a sinistra: schiarito verso il centro luce, tinta piena,
+  leggermente scurito verso il bordo esterno) — simula una superficie sferica illuminata invece di
+  un colore piatto con un solo passaggio, restando dentro la stessa famiglia `AppColors.heroGradient`
+  (nessun colore nuovo). Aggiunto anche un sottile arco "riflesso vetro" (un unico settore bianco
+  semi-trasparente, sfumato ai due estremi, centrato in cima all'anello tramite `startDegreeOffset`)
+  sopra l'anello colorato, in un layer `IgnorePointer` separato per non intercettare i tocchi
+  destinati al grafico interattivo sottostante — stesso `centerSpaceRadius`/`radius` del grafico
+  reale, quindi sempre allineato senza calcoli manuali di geometria (stesso `Stack` centrato già
+  usato per la copia-ombra esistente). Verificato visivamente catturando uno screenshot del widget
+  renderizzato offscreen (`matchesGoldenFile` in un test temporaneo, poi rimosso) — nessun browser
+  reale necessario per questo controllo.
+
 ## Setup locale
 
 ```
