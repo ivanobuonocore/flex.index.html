@@ -235,11 +235,16 @@ class _NavItem extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(selected ? selectedIcon : icon, color: tint, size: iconSize),
+              Icon(
+                selected ? selectedIcon : icon,
+                color: tint,
+                size: iconSize,
+              ),
               const SizedBox(height: 2),
               Text(
                 label,
-                style: AppTypography.caption.copyWith(color: tint, fontSize: 11),
+                style: AppTypography.caption
+                    .copyWith(color: tint, fontSize: 11),
               ),
             ],
           ),
