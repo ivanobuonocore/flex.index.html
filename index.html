@@ -45,10 +45,53 @@
       height: 100%;
       margin: 0;
       overflow: hidden;
+      /* Stesso sfondo dello splash sotto: se lo splash sparisce prima che
+         Flutter dipinga il primo fotogramma (rete lenta), il browser mostra
+         comunque il gradiente invece di un lampo bianco. */
+      background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
+    }
+
+    /* Splash coerente con l'identità dell'app (richiesta esplicita
+       dell'utente: "abbellimenti stilistici") — stesso gradiente
+       AppColors.heroGradient già usato in Chat/Bilancio/AppBar, al posto del
+       lampo bianco prima che Flutter finisca di caricarsi. Rimosso da
+       flutter_bootstrap.js una volta dipinto il primo fotogramma reale
+       dell'app (evento standard `flutter-first-frame`, emesso dal motore
+       Flutter Web) — mai lasciato a copertura permanente dell'interfaccia. */
+    #splash {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
+      z-index: 9999;
+      transition: opacity 0.25s ease-out;
+    }
+
+    #splash img {
+      width: 72px;
+      height: 72px;
+      border-radius: 20px;
+      animation: pip-splash-pulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes pip-splash-pulse {
+      0%, 100% { opacity: 0.65; transform: scale(0.94); }
+      50% { opacity: 1; transform: scale(1); }
     }
   </style>
 </head>
 <body>
+  <div id="splash"><img src="icons/Icon-192.png" alt=""></div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var splash = document.getElementById('splash');
+      if (!splash) return;
+      splash.style.opacity = '0';
+      splash.addEventListener('transitionend', function () { splash.remove(); });
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
