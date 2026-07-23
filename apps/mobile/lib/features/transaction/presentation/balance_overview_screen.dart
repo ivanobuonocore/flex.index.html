@@ -992,6 +992,20 @@ class _BalancePieChartState extends State<_BalancePieChart> {
   // `slices` costruita in build.
   int? _touchedIndex;
 
+  /// Il donut non compare già completo: la parte colorata cresce dalla
+  /// posizione iniziale fino a occupare l'intero anello. La fetta rimanente
+  /// resta trasparente durante l'animazione, così le percentuali di Entrate
+  /// e Uscite restano corrette anche mentre il grafico si sta componendo.
+  double _drawProgress = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _drawProgress = 1);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final incomeCents = widget.incomeCents;
@@ -1043,7 +1057,61 @@ class _BalancePieChartState extends State<_BalancePieChart> {
         ? slices[_touchedIndex!]
         : null;
 
-    return Container(
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: _drawProgress),
+      duration: const Duration(milliseconds: 620),
+      curve: Curves.easeOutCubic,
+      builder: (context, progress, child) {
+        final remainingValue = total.toDouble() * (1 - progress);
+
+        List<PieChartSectionData> buildSections({
+          required bool shadow,
+          required bool interactive,
+        }) => [
+          for (var i = 0; i < slices.length; i++)
+            PieChartSectionData(
+              value: slices[i].amountCents.toDouble() * progress,
+              color: shadow ? Colors.black : null,
+              gradient: shadow
+                  ? null
+                  : RadialGradient(
+                      center: const Alignment(-0.5, -0.6),
+                      radius: 1.1,
+                      colors: [
+                        Color.lerp(slices[i].color, Colors.white, 0.45)!,
+                        slices[i].color,
+                        Color.lerp(slices[i].color, Colors.black, 0.12)!,
+                      ],
+                      stops: const [0.0, 0.55, 1.0],
+                    ),
+              title: interactive
+                  ? '${slices[i].percent.toStringAsFixed(0)}%'
+                  : '',
+              radius: interactive && _touchedIndex == i ? 60 : 52,
+              borderSide: interactive
+                  ? BorderSide(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surface
+                          .withOpacity(0.6),
+                      width: 2,
+                    )
+                  : BorderSide.none,
+              titleStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          if (remainingValue > 0)
+            PieChartSectionData(
+              value: remainingValue,
+              color: Colors.transparent,
+              radius: 52,
+              showTitle: false,
+            ),
+        ];
+
+        return Container(
       // Un solo alone, blu (AppShadows.glow, la stessa usata per l'hero del
       // saldo e l'AppBar) invece del multicolore: profondità senza perdere
       // la sobrietà richiesta ("più professionale").
@@ -1051,7 +1119,7 @@ class _BalancePieChartState extends State<_BalancePieChart> {
         borderRadius: AppRadii.standardRadius,
         boxShadow: AppShadows.glow(color: incomeColor, isDark: isDark),
       ),
-      child: Card(
+          child: Card(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.md),
           child: SizedBox(
@@ -1065,7 +1133,7 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                 // semi-trasparente dello stesso anello, spostata di pochi
                 // pixel, simula un rilievo reale sulla forma — l'alone della
                 // Card da solo resta rettangolare, non segue il cerchio.
-                Transform.translate(
+                    Transform.translate(
                   offset: const Offset(0, 6),
                   child: Opacity(
                     opacity: isDark ? 0.45 : 0.20,
@@ -1073,22 +1141,10 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                       PieChartData(
                         sectionsSpace: 6,
                         centerSpaceRadius: 64,
-                        sections: [
-                          if (incomeCents > 0)
-                            PieChartSectionData(
-                              value: incomeCents.toDouble(),
-                              color: Colors.black,
-                              radius: 52,
-                              showTitle: false,
-                            ),
-                          if (expenseCents > 0)
-                            PieChartSectionData(
-                              value: expenseCents.toDouble(),
-                              color: Colors.black,
-                              radius: 52,
-                              showTitle: false,
-                            ),
-                        ],
+                        sections: buildSections(
+                          shadow: true,
+                          interactive: false,
+                        ),
                       ),
                     ),
                   ),
@@ -1116,43 +1172,10 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                         }
                       },
                     ),
-                    sections: [
-                      for (var i = 0; i < slices.length; i++)
-                        PieChartSectionData(
-                          value: slices[i].amountCents.toDouble(),
-                          // Gradiente radiale invece che a due punti lineare
-                          // (richiesta esplicita dell'utente: più profondità
-                          // "senza stravolgere il colore") — stessa tinta di
-                          // ogni fetta, solo schiarita verso un fuoco in alto
-                          // a sinistra e leggermente scurita verso il bordo
-                          // esterno: dà l'impressione di una superficie
-                          // sferica illuminata da una fonte di luce, non un
-                          // colore piatto con un solo passaggio di tono.
-                          gradient: RadialGradient(
-                            center: const Alignment(-0.5, -0.6),
-                            radius: 1.1,
-                            colors: [
-                              Color.lerp(slices[i].color, Colors.white, 0.45)!,
-                              slices[i].color,
-                              Color.lerp(slices[i].color, Colors.black, 0.12)!,
-                            ],
-                            stops: const [0.0, 0.55, 1.0],
-                          ),
-                          title: '${slices[i].percent.toStringAsFixed(0)}%',
-                          radius: _touchedIndex == i ? 60 : 52,
-                          borderSide: BorderSide(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surface
-                                .withOpacity(0.6),
-                            width: 2,
-                          ),
-                          titleStyle: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                    ],
+                    sections: buildSections(
+                      shadow: false,
+                      interactive: true,
+                    ),
                   ),
                 ),
                 // Riflesso "vetro" sopra l'anello colorato (richiesta
@@ -1168,7 +1191,9 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                 // l'arco resta sempre perfettamente allineato all'anello
                 // senza calcoli manuali di geometria.
                 IgnorePointer(
-                  child: PieChart(
+                  child: Opacity(
+                    opacity: progress,
+                    child: PieChart(
                     PieChartData(
                       sectionsSpace: 0,
                       centerSpaceRadius: 64,
@@ -1201,6 +1226,7 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                         ),
                       ],
                     ),
+                    ),
                   ),
                 ),
                 // Centro del donut: il netto del mese a colpo d'occhio, senza
@@ -1208,7 +1234,11 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                 // "sollevato" con un sottile bordo blu (non colorato a caso:
                 // stessa tinta delle fette) invece di testo semplice
                 // sullo sfondo della Card.
-                Container(
+                Opacity(
+                  opacity: Curves.easeOut.transform(
+                    ((progress - 0.25) / 0.75).clamp(0.0, 1.0).toDouble(),
+                  ),
+                  child: Container(
                   width: 100,
                   height: 100,
                   decoration: BoxDecoration(
@@ -1258,12 +1288,15 @@ class _BalancePieChartState extends State<_BalancePieChart> {
                             ],
                     ),
                   ),
+                  ),
                 ),
               ],
             ),
           ),
         ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
