@@ -27,7 +27,7 @@ jobs:
         working-directory: apps/mobile
         run: |
           flutter pub get
-          flutter build web --release --base-href /flex.index.html/
+          flutter build web --release --base-href /flex.index.html/ --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
 
       - name: Publish to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
