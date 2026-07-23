@@ -31,7 +31,7 @@ class WorkspaceCard extends ConsumerWidget {
     final categoryMeta = WorkspaceCategoryMeta.of(workspace.category);
     final isSystem = categoryMeta != null;
     final tint = categoryMeta?.color ?? theme.colorScheme.primary;
-    final iconData = categoryMeta?.icon ?? _iconFor(workspace.icon);
+    final emoji = categoryMeta?.emoji ?? _emojiFor(workspace.icon);
 
     // Sostituisce la Card piatta (elevation 0 nel tema globale) con un
     // Container decorato: superficie neutra + ombra neutra (non colorata per
@@ -70,7 +70,11 @@ class WorkspaceCard extends ConsumerWidget {
                             color: tint.withOpacity(0.12),
                             borderRadius: AppRadii.buttonRadius,
                           ),
-                          child: Icon(iconData, color: tint),
+                          child: Text(
+                            emoji,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 25),
+                          ),
                         ),
                         const SizedBox(width: AppSpacing.md),
                         Expanded(
@@ -162,20 +166,20 @@ class WorkspaceCard extends ConsumerWidget {
     }
   }
 
-  IconData _iconFor(String icon) {
+  String _emojiFor(String icon) {
     switch (icon) {
       case 'briefcase':
-        return Icons.work_outline;
+        return '💼';
       case 'school':
-        return Icons.school_outlined;
+        return '🎓';
       case 'home':
-        return Icons.home_outlined;
+        return '🏠';
       case 'campaign':
-        return Icons.campaign_outlined;
+        return '📣';
       case 'flight':
-        return Icons.flight_outlined;
+        return '✈️';
       default:
-        return Icons.folder_outlined;
+        return '📁';
     }
   }
 }
