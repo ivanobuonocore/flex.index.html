@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 
 import '../application/auth_controller.dart';
+import 'widgets/auth_page_layout.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -53,23 +54,30 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Widget build(BuildContext context) {
     final isLoading = ref.watch(authControllerProvider).isLoading;
 
-    return Scaffold(
-      appBar: AppBar(),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Crea il tuo account', style: AppTypography.heading1),
-                    const SizedBox(height: AppSpacing.xl),
-                    TextFormField(
+    return AuthPageLayout(
+      form: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              onPressed: isLoading ? null : () => context.go('/login'),
+              icon: const Icon(Icons.arrow_back_rounded),
+              tooltip: 'Torna all\'accesso',
+              alignment: Alignment.centerLeft,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text('Crea il tuo account', style: AppTypography.heading1),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Inizia a organizzare ciò che conta.',
+              style: AppTypography.body.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            TextFormField(
                       controller: _nameController,
                       decoration: const InputDecoration(labelText: 'Nome'),
                       validator: (value) =>
@@ -77,8 +85,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               ? 'Nome obbligatorio'
                               : null,
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    TextFormField(
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       autofillHints: const [AutofillHints.email],
@@ -88,8 +96,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               ? 'Email non valida'
                               : null,
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    TextFormField(
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
                       controller: _passwordController,
                       obscureText: true,
                       autofillHints: const [AutofillHints.newPassword],
@@ -99,15 +107,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           : null,
                       onFieldSubmitted: (_) => _submit(),
                     ),
-                    if (_errorMessage != null) ...[
+            if (_errorMessage != null) ...[
                       const SizedBox(height: AppSpacing.md),
                       Text(
                         _errorMessage!,
                         style: TextStyle(
                             color: Theme.of(context).colorScheme.error),
                       ),
-                    ],
-                    if (_infoMessage != null) ...[
+            ],
+            if (_infoMessage != null) ...[
                       const SizedBox(height: AppSpacing.md),
                       Container(
                         padding: const EdgeInsets.all(AppSpacing.md),
@@ -138,9 +146,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           ],
                         ),
                       ),
-                    ],
-                    const SizedBox(height: AppSpacing.lg),
-                    ElevatedButton(
+            ],
+            const SizedBox(height: AppSpacing.lg),
+            ElevatedButton(
                       onPressed: isLoading ? null : _submit,
                       child: isLoading
                           ? const SizedBox(
@@ -150,16 +158,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             )
                           : const Text('Registrati'),
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    TextButton(
+            const SizedBox(height: AppSpacing.md),
+            TextButton(
                       onPressed: isLoading ? null : () => context.go('/login'),
                       child: const Text('Hai già un account? Accedi'),
-                    ),
-                  ],
-                ),
-              ),
             ),
-          ),
+          ],
         ),
       ),
     );
