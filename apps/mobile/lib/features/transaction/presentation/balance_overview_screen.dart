@@ -509,7 +509,8 @@ class _BalanceHeroCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _HeroStatPill(
-                  emoji: '💰',
+                  icon: Icons.south_west_rounded,
+                  color: AppColors.success,
                   label: 'Entrate',
                   amountCents: incomeCents,
                   onTap: incomeCents == 0
@@ -527,7 +528,8 @@ class _BalanceHeroCard extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: _HeroStatPill(
-                  emoji: '💸',
+                  icon: Icons.north_east_rounded,
+                  color: AppColors.error,
                   label: 'Uscite',
                   amountCents: expenseCents,
                   onTap: expenseCents == 0
@@ -626,23 +628,22 @@ class _PercentChangeBadge extends StatelessWidget {
 }
 
 /// Pillola statistica dentro l'hero del saldo (Entrate/Uscite) — sfondo
-/// bianco traslucido, non un colore semantico proprio: sul gradiente
-/// heroGradient, il verde/rosso di AppColors.success/error perderebbe
-/// leggibilità. Un'emoji al posto dell'icona +/- (richiesta esplicita
-/// dell'utente: "non mi piacciono i segni + e - accanto a entrate e
-/// uscite"): 💰/💸 comunicano lo stesso a colpo d'occhio senza sembrare un
-/// segno matematico isolato. Tocco opzionale (richiesta esplicita
+/// bianco traslucido, con una piccola icona rotonda e colorata: il contrasto
+/// rende Entrate e Uscite riconoscibili a colpo d'occhio. Tocco opzionale
+/// (richiesta esplicita
 /// dell'utente: dettaglio per categoria) — `null` quando non c'è nulla da
 /// mostrare (importo a zero).
 class _HeroStatPill extends StatelessWidget {
   const _HeroStatPill({
-    required this.emoji,
+    required this.icon,
+    required this.color,
     required this.label,
     required this.amountCents,
     this.onTap,
   });
 
-  final String emoji;
+  final IconData icon;
+  final Color color;
   final String label;
   final int amountCents;
   final VoidCallback? onTap;
@@ -665,7 +666,7 @@ class _HeroStatPill extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Text(emoji, style: const TextStyle(fontSize: 18)),
+              ColorfulIconBadge(icon: icon, color: color, size: 30),
               const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Column(
