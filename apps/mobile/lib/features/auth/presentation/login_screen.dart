@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 
 import '../application/auth_controller.dart';
+import 'widgets/auth_page_layout.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -43,32 +44,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final isLoading = ref.watch(authControllerProvider).isLoading;
 
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Bentornato', style: AppTypography.heading1),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      'Accedi al tuo Workspace',
-                      style: AppTypography.body.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withOpacity(0.6),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    TextFormField(
+    return AuthPageLayout(
+      form: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Bentornato', style: AppTypography.heading1),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Accedi al tuo Workspace',
+              style: AppTypography.body.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       autofillHints: const [AutofillHints.email],
@@ -78,8 +70,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ? 'Email non valida'
                               : null,
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    TextFormField(
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
                       controller: _passwordController,
                       obscureText: true,
                       autofillHints: const [AutofillHints.password],
@@ -89,16 +81,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           : null,
                       onFieldSubmitted: (_) => _submit(),
                     ),
-                    if (_errorMessage != null) ...[
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        _errorMessage!,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error),
-                      ),
-                    ],
-                    const SizedBox(height: AppSpacing.lg),
-                    ElevatedButton(
+            if (_errorMessage != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                _errorMessage!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.lg),
+            ElevatedButton(
                       onPressed: isLoading ? null : _submit,
                       child: isLoading
                           ? const SizedBox(
@@ -108,17 +99,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             )
                           : const Text('Accedi'),
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    TextButton(
+            const SizedBox(height: AppSpacing.md),
+            TextButton(
                       onPressed:
                           isLoading ? null : () => context.go('/register'),
                       child: const Text('Non hai un account? Registrati'),
-                    ),
-                  ],
-                ),
-              ),
             ),
-          ),
+          ],
         ),
       ),
     );
