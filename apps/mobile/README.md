@@ -776,6 +776,22 @@ Non ancora presenti: settings, billing.
   i Budget per categoria. Puramente visiva, nessun tocco/interazione: il dettaglio giorno per
   giorno resta nell'elenco delle Transazioni confermate già presente sotto.
 
+- **ai-chat: `query_balance_summary` ora risponde anche senza un periodo specifico** (bug segnalato
+  dall'utente: "perché l'assistente non ha visibilità diretta sul totale ufficiale delle spese
+  confermate? Dovrebbe averne... vorrei che non dicesse di controllare la sezione bilancio ma che
+  mi desse tutte le informazioni in chat") — prima `period_start`/`period_end` erano entrambi
+  obbligatori nello schema dello strumento: una domanda senza un periodo esplicito (es. "quanto ho
+  speso in totale", "il totale ufficiale delle spese confermate") non aveva un modo pulito di
+  essere risolta in date concrete, e il modello finiva per rimandare l'utente alla sezione
+  Bilancio invece di rispondere. Ora entrambi i campi sono opzionali: omessi, `queryBalanceSummary`
+  (Edge Function `ai-chat`) non applica alcun limite di data e restituisce il totale su tutte le
+  transazioni confermate registrate da sempre — stesso identico filtro `status = confirmed` /
+  esclusione dei Bilanci condivisi già usato per un periodo delimitato, nessuna approssimazione.
+  `QUERY_TOOL_INSTRUCTIONS` istruisce ora esplicitamente il modello a non rimandare mai l'utente
+  alla sezione Bilancio per un dato che può ottenere da solo con questo strumento. Verificato solo
+  con `deno check`/`lint`/`fmt` (nessuna chiamata reale ad Anthropic disponibile in questa
+  sandbox, stesso limite già accettato per il resto di questo file).
+
 ## Setup locale
 
 ```

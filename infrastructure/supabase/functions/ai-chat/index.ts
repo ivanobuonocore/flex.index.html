@@ -215,36 +215,52 @@ risposta testuale breve che confermi cosa hai memorizzato.`;
 const QUERY_TOOL_INSTRUCTIONS =
   `Quando l'utente fa una domanda che richiede di conoscere i suoi dati reali (es. "quanto ho
 speso questo mese", "quante entrate ci sono state", "quanto ho speso in alimentari ad aprile",
-"ho appuntamenti il mese prossimo", "cosa ho in agenda questa settimana"), usa lo strumento
+"ho appuntamenti il mese prossimo", "cosa ho in agenda questa settimana", "qual è il totale
+ufficiale delle spese confermate", "quanto ho speso in totale"), usa lo strumento
 query_balance_summary (spese/entrate/saldo) o query_reminders (promemoria/appuntamenti) invece di
-rispondere a memoria o inventare un numero (AI Constitution, "non inventare informazioni").
+rispondere a memoria o inventare un numero (AI Constitution, "non inventare informazioni"). Hai
+visibilità diretta e completa su questi dati tramite lo strumento: non esiste alcuna informazione
+nella sezione Bilancio che tu non possa leggere e riportare direttamente in chat. NON rimandare
+MAI l'utente a "controllare la sezione Bilancio" o simili per un dato che puoi ottenere tu stesso
+con questo strumento — usalo sempre e rispondi con il numero reale.
 Risolvi il periodo richiesto in date concrete (period_start/period_end, formato YYYY-MM-DD)
-usando la data odierna fornita nel contesto. Dopo aver ricevuto il risultato dello strumento,
-rispondi SEMPRE dichiarando esplicitamente il totale richiesto in una frase diretta (es. "Hai
-speso 340,00€ questo mese" oppure "Hai avuto 3 entrate per un totale di 1.500,00€") — non
-limitarti a elencare le singole transazioni o i singoli promemoria: l'utente ha chiesto un
-riepilogo, non un elenco. Un elenco puntuale delle voci (poche righe) può seguire il totale come
-dettaglio aggiuntivo, ma il totale deve comparire per primo ed essere inequivocabile.`;
+usando la data odierna fornita nel contesto. Se l'utente chiede un totale complessivo senza
+riferirsi a un periodo specifico (es. "quanto ho speso in totale", "il totale ufficiale delle
+spese confermate", "il mio saldo da sempre"), chiama lo strumento omettendo period_start e
+period_end: restituisce il totale su tutte le transazioni confermate registrate, da sempre. Dopo
+aver ricevuto il risultato dello strumento, rispondi SEMPRE dichiarando esplicitamente il totale
+richiesto in una frase diretta (es. "Hai speso 340,00€ questo mese" oppure "Hai avuto 3 entrate
+per un totale di 1.500,00€") — non limitarti a elencare le singole transazioni o i singoli
+promemoria: l'utente ha chiesto un riepilogo, non un elenco. Un elenco puntuale delle voci (poche
+righe) può seguire il totale come dettaglio aggiuntivo, ma il totale deve comparire per primo ed
+essere inequivocabile.`;
 
 const QUERY_BALANCE_SUMMARY_TOOL = {
   name: "query_balance_summary",
   description:
     "Restituisce il riepilogo di entrate/uscite confermate del Bilancio personale (esclude i " +
-    "Bilanci condivisi) per un periodo, con il dettaglio per categoria di spesa. Usalo per " +
-    "domande come 'quanto ho speso questo mese' o 'quanto ho speso in alimentari ad aprile'.",
+    "Bilanci condivisi) per un periodo, con il dettaglio per categoria di spesa — lo stesso " +
+    "identico dato ufficiale mostrato nella sezione Bilancio, mai una stima approssimata. Usalo " +
+    "per domande come 'quanto ho speso questo mese' o 'quanto ho speso in alimentari ad aprile'. " +
+    "Omettendo period_start e period_end restituisce il totale su tutte le transazioni " +
+    "confermate registrate da sempre: usalo così per domande senza un periodo specifico, come " +
+    "'quanto ho speso in totale' o 'il totale ufficiale delle spese confermate'.",
   input_schema: {
     type: "object",
     properties: {
       period_start: {
         type: "string",
-        description: "Inizio del periodo, formato YYYY-MM-DD (incluso).",
+        description:
+          "Inizio del periodo, formato YYYY-MM-DD (incluso). Omesso insieme a period_end per " +
+          "un totale complessivo da sempre, senza limite di data.",
       },
       period_end: {
         type: "string",
-        description: "Fine del periodo, formato YYYY-MM-DD (incluso).",
+        description:
+          "Fine del periodo, formato YYYY-MM-DD (incluso). Omesso insieme a period_start per " +
+          "un totale complessivo da sempre, senza limite di data.",
       },
     },
-    required: ["period_start", "period_end"],
   },
 };
 
@@ -1532,8 +1548,12 @@ function extractToolUseBlocks(
 }
 
 interface BalanceSummaryResult {
-  periodStart: string;
-  periodEnd: string;
+  // `null` = nessun limite su quel lato del periodo (richiesta esplicita
+  // dell'utente: "l'assistente dovrebbe avere visibilità diretta sul totale
+  // ufficiale delle spese confermate" — un totale complessivo "da sempre",
+  // non solo per un mese specifico).
+  periodStart: string | null;
+  periodEnd: string | null;
   incomeCents: number;
   expenseCents: number;
   balanceCents: number;
@@ -1552,6 +1572,12 @@ const SHARED_BALANCE_CATEGORY = "bilancio_condiviso";
 // stessa esclusione già applicata lato client in BalanceOverviewScreen (Fase 3, "Bilancio
 // condiviso": due Bilanci separati, non un unico totale che li confonda) — replicata qui
 // perché questa function non ha altro modo di saperlo.
+//
+// `period_start`/`period_end` sono entrambi opzionali (richiesta esplicita dell'utente:
+// "l'assistente dovrebbe avere visibilità diretta sul totale ufficiale delle spese
+// confermate", non solo per un mese specifico) — omessi, la query non applica alcun
+// limite di data su quel lato del periodo: un "da sempre" reale, non un'approssimazione,
+// stesso identico filtro `status = confirmed` già usato per un periodo delimitato.
 async function queryBalanceSummary(
   // deno-lint-ignore no-explicit-any
   supabase: any,
@@ -1560,18 +1586,21 @@ async function queryBalanceSummary(
   const input = (typeof rawInput === "object" && rawInput !== null)
     ? rawInput as Record<string, unknown>
     : {};
-  const periodStart = typeof input.period_start === "string"
+  const rawPeriodStart = typeof input.period_start === "string"
     ? input.period_start
     : "";
-  const periodEnd = typeof input.period_end === "string"
+  const rawPeriodEnd = typeof input.period_end === "string"
     ? input.period_end
     : "";
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(periodStart) ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd)
-  ) {
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (rawPeriodStart !== "" && !dateRegex.test(rawPeriodStart)) {
     return { error: "Periodo non valido." };
   }
+  if (rawPeriodEnd !== "" && !dateRegex.test(rawPeriodEnd)) {
+    return { error: "Periodo non valido." };
+  }
+  const periodStart = rawPeriodStart === "" ? null : rawPeriodStart;
+  const periodEnd = rawPeriodEnd === "" ? null : rawPeriodEnd;
 
   const { data: workspaces, error: workspacesError } = await supabase
     .from("workspaces")
@@ -1602,13 +1631,19 @@ async function queryBalanceSummary(
     };
   }
 
-  const { data: transactions, error: transactionsError } = await supabase
+  let transactionsQuery = supabase
     .from("transactions")
     .select("type, amount_cents, category")
     .in("workspace_id", personalWorkspaceIds)
-    .eq("status", "confirmed")
-    .gte("occurred_at", periodStart)
-    .lte("occurred_at", periodEnd);
+    .eq("status", "confirmed");
+  if (periodStart !== null) {
+    transactionsQuery = transactionsQuery.gte("occurred_at", periodStart);
+  }
+  if (periodEnd !== null) {
+    transactionsQuery = transactionsQuery.lte("occurred_at", periodEnd);
+  }
+  const { data: transactions, error: transactionsError } =
+    await transactionsQuery;
 
   if (transactionsError) {
     console.error(
