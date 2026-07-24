@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 /// Modello inviato di default per le nuove Chat. Coerente con il system
 /// prompt costruito dalla Edge Function `ai-chat`
 /// (`infrastructure/supabase/functions/ai-chat`).
-const kDefaultAiModel = 'claude-sonnet-5';
+const kDefaultAiModel = 'claude-sonnet-4-20250514';
 
 /// Implementazione di [ChatRepository] su Supabase Postgres. L'isolamento tra
 /// utenti è garantito dalle policy RLS della tabella `chats`
