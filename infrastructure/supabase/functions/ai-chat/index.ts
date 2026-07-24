@@ -25,7 +25,7 @@ import { createClient as createSupabaseClient } from "npm:@supabase/supabase-js@
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
-const DEFAULT_AI_MODEL = "claude-sonnet-4-20250514";
+const DEFAULT_AI_MODEL = "claude-sonnet-5";
 // 1024 si è rivelato insufficiente in produzione: senza `thinking: disabled`,
 // il modello può usare l'intero budget in ragionamento esteso interno prima
 // di scrivere anche solo un token di risposta visibile (osservato: 1024
