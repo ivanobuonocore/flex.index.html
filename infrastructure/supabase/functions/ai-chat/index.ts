@@ -21,7 +21,7 @@
 // prosa basata sul risultato reale (vedi buildSystemPrompt/QUERY_TOOL_INSTRUCTIONS e il
 // ramo `queryToolUseBlocks.length > 0` più sotto).
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient as createSupabaseClient } from "npm:@supabase/supabase-js@2.49.1";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -605,7 +605,7 @@ Deno.serve(async (req) => {
     // Modalità isolata "leggi uno scontrino" (vedi RequestBody.extractReceiptDocumentId):
     // esce subito, prima di richiedere/usare `chatId` — nessuna riga `messages` coinvolta.
     if (body.extractReceiptDocumentId) {
-      const supabaseForReceipt = createClient(supabaseUrl, supabaseAnonKey, {
+      const supabaseForReceipt = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: authHeader } },
       });
       return await handleExtractReceipt(
@@ -621,7 +621,7 @@ Deno.serve(async (req) => {
 
     // Client con il JWT dell'utente: tutte le query qui sotto sono soggette a RLS
     // esattamente come se le facesse l'app mobile.
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabase = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
@@ -1156,11 +1156,6 @@ Deno.serve(async (req) => {
       content: finalReplyText,
       tokens_used: anthropicBody?.usage?.output_tokens ?? null,
       source_references: sourceReferences,
-      // Se l'insert delle transazioni è fallito, non c'è nulla da confermare inline:
-      // la Chat mostra Conferma/Scarta solo per transazioni davvero salvate.
-      pending_transaction_ids: transactionInsertFailed
-        ? []
-        : insertedTransactionIds,
     });
 
     if (insertError) {
