@@ -96,13 +96,23 @@ extract_transactions per registrarle — non limitarti a scriverle in prosa. Cla
 transazione nella categoria più adatta tra quelle disponibili nello schema dello strumento (es.
 "barbiere" è "svago", "supermercato" è "alimentari", uno stipendio è "stipendio"): se nessuna
 categoria specifica calza, usa "altro" — non lasciare il campo indeciso. Le transazioni estratte
-restano "in attesa di conferma" finché l'utente non le conferma esplicitamente nella sezione
-Bilancio: non contano ancora nel saldo. Includi sempre, oltre all'eventuale uso dello strumento,
-una risposta testuale breve che nomini cosa hai registrato (tipo, descrizione e importo di
-ciascuna transazione) e che è in attesa di conferma. Usa questo strumento solo per una nuova
+restano in attesa **solo nella Chat**: qui l'utente trova i pulsanti Conferma/Scarta. Non deve
+mai dover aprire il Bilancio per approvarle e non contano nel saldo finché non preme Conferma in
+chat. Includi sempre, oltre all'eventuale uso dello strumento, una risposta testuale breve che
+nomini cosa hai registrato e chieda la conferma in chat. Usa questo strumento solo per una nuova
 spesa o entrata dichiarata nell'ULTIMO messaggio dell'utente: non estrarre mai dati dai messaggi
 precedenti, non registrare di nuovo spese già presenti nella cronologia e non riproporre mai
 transazioni già confermate o già in attesa.`;
+
+// La richiesta di eliminazione è sempre una proposta, mai un'azione immediata:
+// l'app mostra il candidato trovato e richiede un ultimo tocco esplicito in Chat.
+const DELETE_TRANSACTION_TOOL_INSTRUCTIONS =
+  `Quando l'utente vuole eliminare, cancellare o rimuovere una spesa/entrata già registrata
+(es. "elimina la spesa sushi", "cancella il barbiere da 23€"), usa lo strumento
+prepare_transaction_deletion. Inserisci una descrizione breve e riconoscibile; se l'utente ha
+indicato un importo o il tipo, passali per rendere la ricerca più precisa. NON dire mai che hai
+già eliminato la voce e non usare extract_transactions per una cancellazione: il sistema mostrerà
+sempre in Chat una conferma esplicita "Sei sicuro?" prima di modificare il Bilancio.`;
 
 // Addendum al system prompt, solo quando è disponibile un Workspace reale (stesso gate di
 // TRANSACTION_TOOL_INSTRUCTIONS — vedi `transactionToolEnabled`): richiesta esplicita
@@ -441,6 +451,35 @@ const EXTRACT_TRANSACTIONS_TOOL = {
   },
 };
 
+const PREPARE_TRANSACTION_DELETION_TOOL = {
+  name: "prepare_transaction_deletion",
+  description:
+    "Trova una transazione esistente che l'utente desidera eliminare e prepara una conferma " +
+    "esplicita in chat. Non elimina mai direttamente la transazione.",
+  input_schema: {
+    type: "object",
+    properties: {
+      description: {
+        type: "string",
+        description:
+          "Parole distintive della voce da cercare, es. 'sushi' o 'barbiere'.",
+      },
+      amount_cents: {
+        type: "integer",
+        description:
+          "Importo in centesimi se l'utente lo ha indicato; ometti altrimenti.",
+      },
+      type: {
+        type: "string",
+        enum: ["income", "expense"],
+        description:
+          "Tipo della voce se chiaro dal messaggio; ometti altrimenti.",
+      },
+    },
+    required: ["description"],
+  },
+};
+
 const CREATE_RECURRING_TRANSACTION_TOOL = {
   name: "create_recurring_transaction",
   description:
@@ -518,6 +557,12 @@ interface TransactionSuggestion {
   amountCents: number;
   occurredAt: string;
   category: TransactionCategory;
+}
+
+interface TransactionDeletionSuggestion {
+  description: string;
+  amountCents: number | null;
+  type: "income" | "expense" | null;
 }
 
 // Solo weekly/monthly (a differenza di RecurrenceFrequency dei Promemoria, che include
@@ -708,6 +753,7 @@ Deno.serve(async (req) => {
         // Workspace attivo).
         tools: [
           ...(transactionToolEnabled ? [EXTRACT_TRANSACTIONS_TOOL] : []),
+          ...(transactionToolEnabled ? [PREPARE_TRANSACTION_DELETION_TOOL] : []),
           ...(transactionToolEnabled ? [CREATE_RECURRING_TRANSACTION_TOOL] : []),
           ...(reminderToolEnabled ? [CREATE_REMINDER_TOOL] : []),
           ...(taskToolEnabled ? [MANAGE_TASKS_TOOL] : []),
@@ -811,6 +857,17 @@ Deno.serve(async (req) => {
         .map(sanitizeTransaction)
         .filter((s): s is TransactionSuggestion => s !== null)
       : [];
+
+    const deletionSuggestions = transactionToolEnabled
+      ? extractTransactionDeletionSuggestions(anthropicBody)
+        .map(sanitizeTransactionDeletion)
+        .filter((s): s is TransactionDeletionSuggestion => s !== null)
+      : [];
+    const pendingDeletionTransactionIds = await findTransactionDeletionCandidates(
+      supabase,
+      body.workspaceId,
+      deletionSuggestions,
+    );
 
     // Protezione idempotente: se il modello riprende una spesa già presente
     // nella cronologia della stessa Chat, non deve crearne una seconda riga.
@@ -1105,7 +1162,14 @@ Deno.serve(async (req) => {
     if (memoryInsertFailed) failedInserts.push("le informazioni da ricordare");
 
     let finalReplyText = replyText;
-    if (duplicateSuggestionsSkipped && suggestions.length === 0) {
+    if (deletionSuggestions.length > 0 && pendingDeletionTransactionIds.length > 0) {
+      finalReplyText = pendingDeletionTransactionIds.length === 1
+        ? "Ho trovato la voce richiesta. Sei sicuro di volerla eliminare? Confermalo con il pulsante qui sotto."
+        : `Ho trovato ${pendingDeletionTransactionIds.length} voci compatibili. Controlla e conferma in chat quella da eliminare.`;
+    } else if (deletionSuggestions.length > 0) {
+      finalReplyText =
+        "Non ho trovato una voce corrispondente da eliminare. Prova a indicarmi descrizione, importo o data.";
+    } else if (duplicateSuggestionsSkipped && suggestions.length === 0) {
       finalReplyText =
         "Queste spese risultano già registrate nel Bilancio, quindi non le ho duplicate.";
     } else if (failedInserts.length > 0) {
@@ -1115,7 +1179,7 @@ Deno.serve(async (req) => {
     } else if (!finalReplyText && suggestions.length > 0) {
       finalReplyText = `Ho registrato ${suggestions.length} ${
         suggestions.length === 1 ? "transazione" : "transazioni"
-      } in attesa di conferma nella sezione Bilancio.`;
+      }: confermala qui in chat con il pulsante qui sotto.`;
     } else if (!finalReplyText && recurringTransactionSuggestions.length > 0) {
       const frequencyLabel = recurringTransactionSuggestions[0].frequency === "weekly"
         ? "ogni settimana"
@@ -1156,6 +1220,8 @@ Deno.serve(async (req) => {
       content: finalReplyText,
       tokens_used: anthropicBody?.usage?.output_tokens ?? null,
       source_references: sourceReferences,
+      pending_transaction_ids: insertedTransactionIds,
+      pending_deletion_transaction_ids: pendingDeletionTransactionIds,
     });
 
     if (insertError) {
@@ -1840,6 +1906,87 @@ function sanitizeTransaction(raw: unknown): TransactionSuggestion | null {
   if (!Number.isFinite(amountCents) || amountCents <= 0) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(occurredAt)) return null;
   return { type, description, amountCents, occurredAt, category };
+}
+
+// Stesso pattern difensivo delle altre estrazioni: il modello può proporre
+// solo una chiave di ricerca, mai un id di database scelto autonomamente.
+function extractTransactionDeletionSuggestions(anthropicBody: any): unknown[] {
+  const blocks = anthropicBody?.content;
+  if (!Array.isArray(blocks)) return [];
+  return blocks
+    .filter((block: { type: string; name?: string }) =>
+      block.type === "tool_use" && block.name === "prepare_transaction_deletion"
+    )
+    .map((block: { input: unknown }) => block.input);
+}
+
+function sanitizeTransactionDeletion(
+  raw: unknown,
+): TransactionDeletionSuggestion | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const value = raw as Record<string, unknown>;
+  const description = typeof value.description === "string"
+    ? value.description.trim()
+    : "";
+  if (description.length < 2 || description.length > 100) return null;
+
+  const rawAmount = value.amount_cents;
+  const amountCents = typeof rawAmount === "number" &&
+      Number.isInteger(rawAmount) && rawAmount > 0
+    ? rawAmount
+    : null;
+  const type = value.type === "income" || value.type === "expense"
+    ? value.type
+    : null;
+  return { description, amountCents, type };
+}
+
+/// Cerca un massimo di tre candidati, sempre nel solo Workspace della Chat e
+/// sotto le normali RLS dell'utente. Non esegue nessuna cancellazione: gli id
+/// vengono usati esclusivamente per costruire la conferma visibile in Chat.
+async function findTransactionDeletionCandidates(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  workspaceId: string | null | undefined,
+  suggestions: TransactionDeletionSuggestion[],
+): Promise<string[]> {
+  if (!workspaceId || suggestions.length === 0) return [];
+
+  const ids = new Set<string>();
+  for (const suggestion of suggestions.slice(0, 3)) {
+    // `%` e `_` sono wildcard di ILIKE: rimuoverli mantiene la ricerca
+    // letterale e impedisce a una frase vaga di trasformarsi in "tutto".
+    const description = suggestion.description
+      .replaceAll(/[\\%_]/g, " ")
+      .replaceAll(/\s+/g, " ")
+      .trim();
+    if (description.length < 2) continue;
+
+    let query = supabase
+      .from("transactions")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null)
+      .ilike("description", `%${description}%`);
+    if (suggestion.amountCents !== null) {
+      query = query.eq("amount_cents", suggestion.amountCents);
+    }
+    if (suggestion.type !== null) {
+      query = query.eq("type", suggestion.type);
+    }
+
+    const { data, error } = await query
+      .order("occurred_at", { ascending: false })
+      .limit(3);
+    if (error) {
+      console.error("ai-chat: errore ricerca transazione da eliminare", error);
+      continue;
+    }
+    for (const row of data ?? []) {
+      if (typeof row.id === "string") ids.add(row.id);
+    }
+  }
+  return [...ids].slice(0, 3);
 }
 
 // Estrae le chiamate allo strumento create_recurring_transaction — stesso pattern di
