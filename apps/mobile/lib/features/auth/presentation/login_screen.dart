@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pip_design_system/pip_design_system.dart';
 
+import '../../../core/supabase/supabase_bootstrap.dart';
 import '../application/auth_controller.dart';
 import 'widgets/auth_page_layout.dart';
 
@@ -38,6 +39,55 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (failure != null && mounted) {
       setState(() => _errorMessage = failure.message);
     }
+  }
+
+  Future<void> _showPasswordRecoveryDialog() async {
+    final emailController = TextEditingController(text: _emailController.text);
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reimposta password'),
+        content: TextField(
+          controller: emailController,
+          keyboardType: TextInputType.emailAddress,
+          autofillHints: const [AutofillHints.email],
+          decoration: const InputDecoration(
+            labelText: 'Email',
+            hintText: 'nome@esempio.it',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final email = emailController.text.trim();
+              if (!email.contains('@')) return;
+
+              await supabaseClient.auth.resetPasswordForEmail(email);
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop();
+              }
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Se l’account esiste, riceverai un’email per reimpostare la password.',
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text('Invia email'),
+          ),
+        ],
+      ),
+    );
+
+    emailController.dispose();
   }
 
   @override
@@ -79,6 +129,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ? 'Almeno 8 caratteri'
                   : null,
               onFieldSubmitted: (_) => _submit(),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: isLoading ? null : _showPasswordRecoveryDialog,
+                child: const Text('Password dimenticata?'),
+              ),
             ),
             if (_errorMessage != null) ...[
               const SizedBox(height: AppSpacing.md),
