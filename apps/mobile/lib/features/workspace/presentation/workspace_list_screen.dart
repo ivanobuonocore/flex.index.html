@@ -8,6 +8,12 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/skeleton_list.dart';
+import '../../auth/application/session_controller.dart';
+import '../../chat/application/chat_controller.dart';
+import '../../chat/application/message_controller.dart';
+import '../../reminder/application/calendar_event_controller.dart';
+import '../../task/application/task_controller.dart';
+import '../../transaction/application/transaction_controller.dart';
 import '../application/workspace_controller.dart';
 import 'create_workspace_sheet.dart';
 import 'widgets/workspace_card.dart';
@@ -50,6 +56,47 @@ class WorkspaceListScreen extends ConsumerWidget {
             );
           }
 
+          final now = DateTime.now();
+          final user = ref.watch(sessionControllerProvider).asData?.value;
+          final events =
+              ref.watch(calendarEventsProvider(null)).asData?.value ??
+                  const <CalendarEvent>[];
+          final transactions =
+              ref.watch(transactionsProvider(null)).asData?.value ??
+                  const <Transaction>[];
+          final chats = ref.watch(chatsProvider(null)).asData?.value ??
+              const <Chat>[];
+
+          var openTasksCount = 0;
+          String? activitiesWorkspaceId;
+          for (final workspace in workspaces) {
+            final tasks = ref.watch(tasksProvider(workspace.id)).asData?.value ??
+                const <Task>[];
+            openTasksCount += openTasks(tasks).length;
+            if (workspace.category == SystemWorkspaceCategory.attivita) {
+              activitiesWorkspaceId = workspace.id;
+            }
+          }
+
+          final todayEvents = remindersDueToday(events)
+            ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+          final upcomingEvents = events
+              .where((event) => event.startsAt.isAfter(now))
+              .toList(growable: false)
+            ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+          final confirmed = confirmedThisMonth(transactions, now: now);
+
+          final chat = chats.isEmpty ? null : chats.first;
+          final messages = chat == null
+              ? const <Message>[]
+              : ref.watch(messagesProvider(chat.id)).asData?.value ??
+                  const <Message>[];
+          final assistantMessages = messages
+              .where((message) =>
+                  message.role == MessageRole.ai && message.content.trim().isNotEmpty)
+              .toList(growable: false)
+            ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
           return ListView.separated(
             padding: const EdgeInsets.all(AppSpacing.md),
             itemCount: workspaces.length + 2,
@@ -58,8 +105,18 @@ class WorkspaceListScreen extends ConsumerWidget {
             ),
             itemBuilder: (context, index) {
               if (index == 0) {
-                return _SpacesHero(
-                  count: workspaces.length,
+                return _DayOverview(
+                  userName: user?.name,
+                  appointmentsToday: todayEvents.length,
+                  openTasksCount: openTasksCount,
+                  monthBalanceCents: balanceCents(confirmed),
+                  lastAssistantMessage: assistantMessages.isEmpty
+                      ? null
+                      : assistantMessages.first.content,
+                  nextReminder:
+                      upcomingEvents.isEmpty ? null : upcomingEvents.first,
+                  activitiesWorkspaceId: activitiesWorkspaceId,
+                  spacesCount: workspaces.length,
                   onCreate: () => showCreateWorkspaceSheet(context),
                 );
               }
@@ -89,19 +146,35 @@ class WorkspaceListScreen extends ConsumerWidget {
   }
 }
 
-/// Rende la lista una vera pagina di ingresso: prima della lista l'utente
-/// vede quante aree ha a disposizione e come crearne una nuova, invece di
-/// trovarsi direttamente davanti a una sequenza di card.
-class _SpacesHero extends StatelessWidget {
-  const _SpacesHero({required this.count, required this.onCreate});
+/// Riepilogo della giornata richiesto dall'utente: rende "Spazi" una
+/// dashboard utile prima dell'elenco delle sezioni, lasciando intatte le
+/// emoji native colorate già presenti nell'app.
+class _DayOverview extends StatelessWidget {
+  const _DayOverview({
+    required this.userName,
+    required this.appointmentsToday,
+    required this.openTasksCount,
+    required this.monthBalanceCents,
+    required this.lastAssistantMessage,
+    required this.nextReminder,
+    required this.activitiesWorkspaceId,
+    required this.spacesCount,
+    required this.onCreate,
+  });
 
-  final int count;
+  final String? userName;
+  final int appointmentsToday;
+  final int openTasksCount;
+  final int monthBalanceCents;
+  final String? lastAssistantMessage;
+  final CalendarEvent? nextReminder;
+  final String? activitiesWorkspaceId;
+  final int spacesCount;
   final VoidCallback onCreate;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -122,31 +195,67 @@ class _SpacesHero extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.18),
-                  borderRadius: AppRadii.buttonRadius,
-                ),
-                child: const Icon(Icons.space_dashboard_rounded,
-                    color: Colors.white),
-              ),
-              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
-                  '$count ${count == 1 ? 'spazio attivo' : 'spazi attivi'}',
-                  style: AppTypography.heading3.copyWith(color: Colors.white),
+                  _greeting(userName),
+                  style: AppTypography.heading2.copyWith(color: Colors.white),
+                ),
+              ),
+              Text(
+                '$spacesCount ${spacesCount == 1 ? 'spazio' : 'spazi'}',
+                style: AppTypography.caption.copyWith(
+                  color: Colors.white.withOpacity(0.82),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.xs),
           Text(
-            'Organizza progetti, attività e documenti in un unico posto.',
+            'Ecco cosa sta succedendo oggi.',
             style: AppTypography.body.copyWith(
               color: Colors.white.withOpacity(0.86),
             ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _OverviewRow(
+            emoji: '📅',
+            title: appointmentsToday == 0
+                ? 'Nessun appuntamento oggi'
+                : appointmentsToday == 1
+                    ? '1 appuntamento oggi'
+                    : '$appointmentsToday appuntamenti oggi',
+            onTap: () => context.go('/appuntamenti'),
+          ),
+          _OverviewRow(
+            emoji: '✅',
+            title: openTasksCount == 0
+                ? 'Tutte le attività completate'
+                : openTasksCount == 1
+                    ? '1 attività da completare'
+                    : '$openTasksCount attività da completare',
+            onTap: activitiesWorkspaceId == null
+                ? null
+                : () => context.push('/workspace/$activitiesWorkspaceId/tasks'),
+          ),
+          _OverviewRow(
+            emoji: '💶',
+            title: 'Saldo del mese: ${_formatAmount(monthBalanceCents)}',
+            onTap: () => context.go('/balance'),
+          ),
+          _OverviewRow(
+            emoji: '🔥',
+            title: lastAssistantMessage == null
+                ? 'L’assistente è pronto ad aiutarti'
+                : _lastAssistantLabel(lastAssistantMessage!),
+            onTap: () => context.go('/chat'),
+          ),
+          _OverviewRow(
+            emoji: '⏰',
+            title: nextReminder == null
+                ? 'Nessun promemoria in arrivo'
+                : 'Prossimo: ${nextReminder!.title} alle '
+                    '${_formatTime(nextReminder!.startsAt)}',
+            onTap: () => context.go('/appuntamenti'),
           ),
           const SizedBox(height: AppSpacing.md),
           OutlinedButton.icon(
@@ -159,6 +268,92 @@ class _SpacesHero extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  String _greeting(String? name) {
+    final hour = DateTime.now().hour;
+    final moment = hour < 12
+        ? 'Buongiorno'
+        : hour < 18
+            ? 'Buon pomeriggio'
+            : 'Buonasera';
+    if (name == null || name.trim().isEmpty) return '$moment 👋';
+    return '$moment, ${name.trim()} 👋';
+  }
+
+  String _formatAmount(int cents) {
+    final sign = cents > 0 ? '+' : '';
+    return '$sign${(cents / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
+  }
+
+  String _formatTime(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _lastAssistantLabel(String message) {
+    final compact = message.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final preview = compact.length > 58
+        ? '${compact.substring(0, 58).trimRight()}…'
+        : compact;
+    return 'Assistente: $preview';
+  }
+}
+
+class _OverviewRow extends StatelessWidget {
+  const _OverviewRow({
+    required this.emoji,
+    required this.title,
+    required this.onTap,
+  });
+
+  final String emoji;
+  final String title;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Material(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: AppRadii.buttonRadius,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: AppRadii.buttonRadius,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+              vertical: AppSpacing.xs,
+            ),
+            child: Row(
+              children: [
+                Text(emoji, style: const TextStyle(fontSize: 19)),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (onTap != null)
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
