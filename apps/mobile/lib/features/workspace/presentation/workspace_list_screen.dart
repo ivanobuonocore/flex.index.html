@@ -78,7 +78,12 @@ class WorkspaceListScreen extends ConsumerWidget {
             }
           }
 
-          final todayEvents = remindersDueToday(events)
+          final todayEvents = events
+              .where((event) =>
+                  event.startsAt.year == now.year &&
+                  event.startsAt.month == now.month &&
+                  event.startsAt.day == now.day)
+              .toList(growable: false)
             ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
           final upcomingEvents = events
               .where((event) => event.startsAt.isAfter(now))
