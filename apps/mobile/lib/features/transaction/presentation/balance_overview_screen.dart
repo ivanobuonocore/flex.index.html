@@ -136,9 +136,16 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
           final confirmed =
               confirmedThisMonth(transactions, now: selectedMonth);
           final pending = pendingTransactions(transactions);
+          // Le proposte dell'assistente si confermano direttamente nella
+          // chat, dove sono nate: non devono costringere l'utente a cercarle
+          // anche qui nel Bilancio. Restano invece visibili le eventuali
+          // richieste create manualmente fuori dalla chat.
+          final pendingForBalance = pending
+              .where((transaction) => !transaction.createdByAi)
+              .toList(growable: false);
 
           if (confirmed.isEmpty &&
-              pending.isEmpty &&
+              pendingForBalance.isEmpty &&
               availableMonths.length <= 1) {
             return const EmptyState(
               icon: Icons.pie_chart_outline,
@@ -277,11 +284,11 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
               ),
               const SizedBox(height: AppSpacing.lg),
               _BudgetSection(expenseByCategory: expenseByCategory),
-              if (pending.isNotEmpty) ...[
+              if (pendingForBalance.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
                 Text('In attesa di conferma', style: AppTypography.heading3),
                 const SizedBox(height: AppSpacing.sm),
-                for (final transaction in pending) ...[
+                for (final transaction in pendingForBalance) ...[
                   _PendingTransactionTile(
                     transaction: transaction,
                     workspaceName:
@@ -2258,7 +2265,7 @@ class _PendingTransactionTile extends ConsumerWidget {
 /// dell'utente: "transazioni confermate racchiuse in pillola, sopraelevate")
 /// — angoli molto arrotondati + ombra, non la Card piatta di prima (elevation
 /// 0 nel tema globale).
-class _ConfirmedTransactionTile extends StatelessWidget {
+class _ConfirmedTransactionTile extends ConsumerWidget {
   const _ConfirmedTransactionTile(
       {required this.transaction, required this.workspaceName});
 
@@ -2266,7 +2273,7 @@ class _ConfirmedTransactionTile extends StatelessWidget {
   final String workspaceName;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isIncome = transaction.type == TransactionType.income;
     final theme = Theme.of(context);
     return Container(
@@ -2328,10 +2335,62 @@ class _ConfirmedTransactionTile extends StatelessWidget {
             _formatAmount(transaction.amountCents),
             style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
           ),
+          const SizedBox(width: AppSpacing.xs),
+          IconButton(
+            icon: const Icon(Icons.close_rounded),
+            tooltip: 'Elimina questa voce',
+            onPressed: () async {
+              final confirmed = await _confirmDeleteTransaction(
+                context,
+                transaction: transaction,
+              );
+              if (!confirmed || !context.mounted) return;
+              await ref
+                  .read(transactionFormControllerProvider.notifier)
+                  .delete(transaction.id);
+            },
+          ),
         ],
       ),
     );
   }
+}
+
+/// Una spesa influenza saldo, grafici e budget: prima di rimuoverla chiediamo
+/// sempre una conferma esplicita, sia dal Bilancio sia dalla Chat.
+Future<bool> _confirmDeleteTransaction(
+  BuildContext context, {
+  required Transaction transaction,
+}) async {
+  final typeLabel = transaction.type == TransactionType.expense
+      ? 'spesa'
+      : 'entrata';
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('Eliminare questa $typeLabel?'),
+          content: Text(
+            '${transaction.description} · ${_formatAmount(transaction.amountCents)}\n\n'
+            'Il saldo e i grafici verranno aggiornati subito.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Annulla'),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Elimina'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 }
 
 /// Pillola compatta per un tag di Transazione — solo lettura (stesso ruolo di
