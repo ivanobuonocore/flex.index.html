@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'colors.dart';
+import 'motion.dart';
 import 'radii.dart';
 import 'typography.dart';
 
@@ -82,7 +83,6 @@ abstract final class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           animationDuration: AppMotion.fast,
           elevation: 1,
-          disabledElevation: 0,
         ),
       ),
       // Stessa forma dell'`ElevatedButton` (redesign estetico — coerenza:
