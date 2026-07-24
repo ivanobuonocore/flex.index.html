@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -255,7 +257,12 @@ class _BalanceOverviewScreenState extends ConsumerState<BalanceOverviewScreen> {
                 }),
               ],
               const SizedBox(height: AppSpacing.md),
-              _BalancePieChart(incomeCents: income, expenseCents: expense),
+              _PremiumBalancePieChart(
+                balanceCents: balance,
+                incomeCents: income,
+                expenseCents: expense,
+                previousMonthPercentChange: balanceChangePercent,
+              ),
               const SizedBox(height: AppSpacing.lg),
               _TrendChart(trend: trend),
               const SizedBox(height: AppSpacing.lg),
@@ -1299,6 +1306,536 @@ class _BalancePieChartState extends State<_BalancePieChart> {
       },
     );
   }
+}
+
+/// Donut proprietario della schermata Bilancio.  Non usa il rendering
+/// predefinito della libreria per l'anello: gli archi, le separazioni, la
+/// luce e il piccolo rilievo vengono disegnati su canvas così il componente
+/// conserva la stessa qualità visiva con qualunque proporzione dei dati.
+class _PremiumBalancePieChart extends StatefulWidget {
+  const _PremiumBalancePieChart({
+    required this.balanceCents,
+    required this.incomeCents,
+    required this.expenseCents,
+    required this.previousMonthPercentChange,
+  });
+
+  final int balanceCents;
+  final int incomeCents;
+  final int expenseCents;
+  final double? previousMonthPercentChange;
+
+  @override
+  State<_PremiumBalancePieChart> createState() =>
+      _PremiumBalancePieChartState();
+}
+
+class _PremiumBalancePieChartState extends State<_PremiumBalancePieChart>
+    with TickerProviderStateMixin {
+  late final AnimationController _drawController;
+  late final AnimationController _selectionController;
+  int? _selectedIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _drawController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1050),
+    );
+    _selectionController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 340),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _drawController.forward();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _PremiumBalancePieChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.incomeCents != widget.incomeCents ||
+        oldWidget.expenseCents != widget.expenseCents ||
+        oldWidget.balanceCents != widget.balanceCents) {
+      _selectedIndex = null;
+      _selectionController.value = 0;
+      _drawController.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _drawController.dispose();
+    _selectionController.dispose();
+    super.dispose();
+  }
+
+  void _selectSlice(
+    Offset position,
+    double diameter,
+    List<_PremiumBalanceSlice> slices,
+    int total,
+  ) {
+    final center = Offset(diameter / 2, diameter / 2);
+    final vector = position - center;
+    final distance = vector.distance;
+    final radius = diameter / 2 - 22;
+    final thickness = radius * 0.42;
+    if (distance < radius - thickness / 2 - 16 ||
+        distance > radius + thickness / 2 + 18) {
+      if (_selectedIndex != null) setState(() => _selectedIndex = null);
+      return;
+    }
+
+    final start = -math.pi / 2;
+    final angle = math.atan2(vector.dy, vector.dx);
+    final normalized = (angle - start + math.pi * 2) % (math.pi * 2);
+    var accumulated = 0.0;
+    for (var index = 0; index < slices.length; index++) {
+      final sweep = math.pi * 2 * slices[index].amountCents / total;
+      if (normalized >= accumulated && normalized <= accumulated + sweep) {
+        setState(() => _selectedIndex = index);
+        _selectionController.forward(from: 0);
+        return;
+      }
+      accumulated += sweep;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.incomeCents + widget.expenseCents;
+    if (total == 0) {
+      return const Card(
+        child: SizedBox(
+          height: 180,
+          child: Center(child: Text('Nessun importo confermato questo mese.')),
+        ),
+      );
+    }
+
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final slices = <_PremiumBalanceSlice>[
+      if (widget.incomeCents > 0)
+        _PremiumBalanceSlice(
+          label: 'Entrate',
+          amountCents: widget.incomeCents,
+          colors: const [
+            Color(0xFF7CC3FF),
+            Color(0xFF3F70F7),
+            Color(0xFF293ED0),
+          ],
+        ),
+      if (widget.expenseCents > 0)
+        _PremiumBalanceSlice(
+          label: 'Uscite',
+          amountCents: widget.expenseCents,
+          colors: const [
+            Color(0xFFC8B6FF),
+            Color(0xFF8658F5),
+            Color(0xFF5B28CE),
+          ],
+        ),
+    ];
+    final selected = _selectedIndex != null && _selectedIndex! < slices.length
+        ? slices[_selectedIndex!]
+        : null;
+    final previousLabel = widget.previousMonthPercentChange == null
+        ? 'Confronto non disponibile'
+        : '${widget.previousMonthPercentChange! >= 0 ? '+' : ''}'
+            '${widget.previousMonthPercentChange!.toStringAsFixed(1).replaceAll('.', ',')}%'
+            ' vs mese scorso';
+    final isPositiveChange = (widget.previousMonthPercentChange ?? 0) >= 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.heroGradient.first.withOpacity(isDark ? 0.20 : 0.12),
+            blurRadius: 28,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              theme.colorScheme.surface,
+              Color.alphaBlend(
+                AppColors.heroGradient.first.withOpacity(isDark ? 0.12 : 0.055),
+                theme.colorScheme.surface,
+              ),
+            ],
+          ),
+          border: Border.all(
+            color: AppColors.heroGradient.first.withOpacity(isDark ? 0.24 : 0.14),
+          ),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: AppColors.heroGradient,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.heroGradient.last.withOpacity(0.22),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.donut_large_rounded,
+                      size: 16, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('Ripartizione del mese',
+                      style: AppTypography.heading3.copyWith(fontSize: 16)),
+                ),
+                Text('Tocca un arco',
+                    style: AppTypography.caption.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.48),
+                    )),
+              ],
+            ),
+            const SizedBox(height: 6),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final diameter =
+                    math.min(constraints.maxWidth, 258.0).toDouble();
+                return SizedBox(
+                  height: 260,
+                  child: Center(
+                    child: SizedBox.square(
+                      dimension: diameter,
+                      child: AnimatedBuilder(
+                        animation: Listenable.merge(
+                            [_drawController, _selectionController]),
+                        builder: (context, _) {
+                          final draw = Curves.easeOutQuart
+                              .transform(_drawController.value);
+                          final selectedLift = Curves.easeOutBack
+                              .transform(_selectionController.value);
+                          final countedBalance =
+                              (widget.balanceCents * draw).round();
+                          return Stack(
+                            alignment: Alignment.center,
+                            clipBehavior: Clip.none,
+                            children: [
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTapDown: (details) => _selectSlice(
+                                  details.localPosition,
+                                  diameter,
+                                  slices,
+                                  total,
+                                ),
+                                child: CustomPaint(
+                                  size: Size.square(diameter),
+                                  painter: _PremiumBalanceDonutPainter(
+                                    slices: slices,
+                                    total: total,
+                                    drawProgress: draw,
+                                    selectedIndex: _selectedIndex,
+                                    selectedLift: selectedLift,
+                                    trackColor: theme.colorScheme.onSurface
+                                        .withOpacity(isDark ? 0.13 : 0.075),
+                                    isDark: isDark,
+                                  ),
+                                ),
+                              ),
+                              Transform.scale(
+                                scale: 0.94 + (draw * 0.06),
+                                child: Opacity(
+                                  opacity: ((draw - 0.14) / 0.86)
+                                      .clamp(0.0, 1.0)
+                                      .toDouble(),
+                                  child: Container(
+                                    width: 126,
+                                    height: 126,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: RadialGradient(
+                                        center: const Alignment(-0.45, -0.55),
+                                        radius: 1.35,
+                                        colors: [
+                                          Colors.white.withOpacity(isDark ? 0.12 : 0.82),
+                                          theme.colorScheme.surface,
+                                        ],
+                                      ),
+                                      border: Border.all(
+                                        color: Colors.white.withOpacity(isDark ? 0.12 : 0.72),
+                                        width: 1.4,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(isDark ? 0.28 : 0.12),
+                                          blurRadius: 16,
+                                          offset: const Offset(0, 7),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text('Saldo disponibile',
+                                            style: AppTypography.caption.copyWith(
+                                              fontSize: 10,
+                                              color: theme.colorScheme.onSurface
+                                                  .withOpacity(0.58),
+                                            )),
+                                        const SizedBox(height: 3),
+                                        FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Text(
+                                            _formatSignedAmount(countedBalance),
+                                            style: AppTypography.heading3.copyWith(
+                                              fontSize: 21,
+                                              height: 1,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: -0.7,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              isPositiveChange
+                                                  ? Icons.north_east_rounded
+                                                  : Icons.south_east_rounded,
+                                              size: 12,
+                                              color: isPositiveChange
+                                                  ? const Color(0xFF1B9D7B)
+                                                  : const Color(0xFFC5526B),
+                                            ),
+                                            const SizedBox(width: 2),
+                                            Flexible(
+                                              child: Text(
+                                                previousLabel,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: AppTypography.caption.copyWith(
+                                                  fontSize: 9,
+                                                  color: theme.colorScheme.onSurface
+                                                      .withOpacity(0.54),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                bottom: 1,
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 220),
+                                  switchInCurve: Curves.easeOutCubic,
+                                  switchOutCurve: Curves.easeInCubic,
+                                  child: selected == null
+                                      ? const SizedBox.shrink()
+                                      : Container(
+                                          key: ValueKey(selected.label),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme.surface,
+                                            borderRadius: BorderRadius.circular(99),
+                                            border: Border.all(
+                                              color: selected.colors[1]
+                                                  .withOpacity(0.42),
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(0.10),
+                                                blurRadius: 10,
+                                                offset: const Offset(0, 4),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Text(
+                                            '${selected.label}  ·  ${_formatAmount(selected.amountCents)}',
+                                            style: AppTypography.caption.copyWith(
+                                              color: selected.colors[2],
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PremiumBalanceSlice {
+  const _PremiumBalanceSlice({
+    required this.label,
+    required this.amountCents,
+    required this.colors,
+  });
+
+  final String label;
+  final int amountCents;
+  final List<Color> colors;
+}
+
+class _PremiumBalanceDonutPainter extends CustomPainter {
+  const _PremiumBalanceDonutPainter({
+    required this.slices,
+    required this.total,
+    required this.drawProgress,
+    required this.selectedIndex,
+    required this.selectedLift,
+    required this.trackColor,
+    required this.isDark,
+  });
+
+  final List<_PremiumBalanceSlice> slices;
+  final int total;
+  final double drawProgress;
+  final int? selectedIndex;
+  final double selectedLift;
+  final Color trackColor;
+  final bool isDark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide / 2 - 22;
+    final thickness = radius * 0.42;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    const gap = 0.060;
+
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = thickness
+        ..color = trackColor,
+    );
+
+    var start = -math.pi / 2;
+    for (var index = 0; index < slices.length; index++) {
+      final slice = slices[index];
+      final fullSweep = math.pi * 2 * slice.amountCents / total;
+      final staggeredProgress =
+          ((drawProgress - index * 0.075) / 0.925).clamp(0.0, 1.0).toDouble();
+      final sweep =
+          math.max(0.0, fullSweep * staggeredProgress - gap).toDouble();
+      final middle = start + fullSweep / 2;
+      final lift = selectedIndex == index ? 7.5 * selectedLift : 0.0;
+      final translation = Offset(math.cos(middle) * lift, math.sin(middle) * lift);
+
+      if (sweep > 0) {
+        canvas.save();
+        canvas.translate(translation.dx, translation.dy + 5);
+        canvas.drawArc(
+          rect,
+          start + gap / 2,
+          sweep,
+          false,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = thickness
+            ..strokeCap = StrokeCap.round
+            ..color = Colors.black.withOpacity(isDark ? 0.38 : 0.17)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, 8),
+        );
+        canvas.restore();
+
+        canvas.save();
+        canvas.translate(translation.dx, translation.dy + 2.5);
+        canvas.drawArc(
+          rect,
+          start + gap / 2,
+          sweep,
+          false,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = thickness
+            ..strokeCap = StrokeCap.round
+            ..color = Color.lerp(slice.colors.last, Colors.black, 0.24)!,
+        );
+        canvas.restore();
+
+        canvas.save();
+        canvas.translate(translation.dx, translation.dy);
+        canvas.drawArc(
+          rect,
+          start + gap / 2,
+          sweep,
+          false,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = thickness
+            ..strokeCap = StrokeCap.round
+            ..shader = LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: slice.colors,
+              stops: const [0, 0.52, 1],
+            ).createShader(rect),
+        );
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: radius - thickness * 0.24),
+          start + gap / 2 + 0.025,
+          math.max(0.0, sweep - 0.05).toDouble(),
+          false,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.6
+            ..strokeCap = StrokeCap.round
+            ..color = Colors.white.withOpacity(isDark ? 0.13 : 0.29),
+        );
+        canvas.restore();
+      }
+      start += fullSweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PremiumBalanceDonutPainter oldDelegate) =>
+      oldDelegate.drawProgress != drawProgress ||
+      oldDelegate.selectedIndex != selectedIndex ||
+      oldDelegate.selectedLift != selectedLift ||
+      oldDelegate.total != total ||
+      oldDelegate.isDark != isDark;
 }
 
 const _italianMonthsShort = [
