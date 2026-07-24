@@ -253,7 +253,8 @@ class _NavItem extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }
 
@@ -397,6 +398,7 @@ class _SiriChatButtonState extends State<_SiriChatButton>
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }
