@@ -926,8 +926,10 @@ class _CategoryTrendChartState extends State<_CategoryTrendChart> {
               child: Text('Nessun importo confermato in questo periodo.'),
             )
           : BarChart(
-              swapAnimationDuration: const Duration(milliseconds: 600),
-              swapAnimationCurve: Curves.easeOutCubic,
+              swapAnimationDuration: MediaQuery.of(context).disableAnimations
+                  ? AppMotion.instant
+                  : AppMotion.chart,
+              swapAnimationCurve: AppMotion.enter,
               BarChartData(
                 maxY: maxValue * 1.2,
                 gridData: const FlGridData(show: false),
@@ -1341,11 +1343,11 @@ class _PremiumBalancePieChartState extends State<_PremiumBalancePieChart>
     super.initState();
     _drawController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1050),
+      duration: AppMotion.chart,
     );
     _selectionController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 340),
+      duration: AppMotion.standard,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _drawController.forward();
@@ -1529,10 +1531,16 @@ class _PremiumBalancePieChartState extends State<_PremiumBalancePieChart>
                         animation: Listenable.merge(
                             [_drawController, _selectionController]),
                         builder: (context, _) {
-                          final draw = Curves.easeOutQuart
-                              .transform(_drawController.value);
-                          final selectedLift = Curves.easeOutBack
-                              .transform(_selectionController.value);
+                          final reduceMotion =
+                              MediaQuery.of(context).disableAnimations;
+                          final draw = reduceMotion
+                              ? 1.0
+                              : Curves.easeOutQuart
+                                  .transform(_drawController.value);
+                          final selectedLift = reduceMotion
+                              ? 1.0
+                              : Curves.easeOutBack
+                                  .transform(_selectionController.value);
                           final countedBalance =
                               (widget.balanceCents * draw).round();
                           return Stack(
@@ -1914,8 +1922,10 @@ class _TrendChartState extends State<_TrendChart> {
                       )
                     : BarChart(
                         swapAnimationDuration:
-                            const Duration(milliseconds: 600),
-                        swapAnimationCurve: Curves.easeOutCubic,
+                            MediaQuery.of(context).disableAnimations
+                                ? AppMotion.instant
+                                : AppMotion.chart,
+                        swapAnimationCurve: AppMotion.enter,
                         BarChartData(
                           maxY: maxValue * 1.2,
                           gridData: const FlGridData(show: false),
