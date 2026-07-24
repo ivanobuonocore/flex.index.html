@@ -1245,6 +1245,9 @@ class _PendingDeletionActionTileState
       ),
     );
   }
+
+  String _formatAmount(int amountCents) =>
+      '${(amountCents / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
 }
 
 class _MessageInput extends ConsumerStatefulWidget {
