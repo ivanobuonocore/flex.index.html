@@ -33,6 +33,11 @@ class PipApp extends ConsumerWidget {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: _toFlutterThemeMode(appThemeMode),
+      // Il passaggio chiaro/scuro dissolve i token del tema invece di
+      // cambiare fotogramma all'improvviso. Durata e curva fanno parte del
+      // sistema centralizzato di movimento.
+      themeAnimationDuration: AppMotion.slow,
+      themeAnimationCurve: AppMotion.curve,
       routerConfig: router,
     );
   }
