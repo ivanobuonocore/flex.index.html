@@ -2055,7 +2055,7 @@ class _ExpenseHeatmap extends StatelessWidget {
     final leadingBlanks = DateTime(month.year, month.month, 1).weekday - 1;
     // Il calendario fa parte della schermata Bilancio: usa l'accento viola
     // dell'app, non il colore arancione riservato agli stati di avviso.
-    const accent = AppColors.heroGradient.last;
+    final accent = AppColors.heroGradient.last;
 
     return Container(
       decoration: BoxDecoration(
