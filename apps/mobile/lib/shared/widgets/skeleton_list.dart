@@ -22,8 +22,19 @@ class _SkeletonListState extends State<SkeletonList>
   // stilistici").
   late final _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1400),
-  )..repeat();
+    duration: const Duration(milliseconds: 1500),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.of(context).disableAnimations) {
+      _controller.stop();
+      _controller.value = 0;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+  }
 
   @override
   void dispose() {
