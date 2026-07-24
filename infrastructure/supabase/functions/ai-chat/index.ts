@@ -25,6 +25,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
+const DEFAULT_AI_MODEL = "claude-sonnet-4-20250514";
 // 1024 si è rivelato insufficiente in produzione: senza `thinking: disabled`,
 // il modello può usare l'intero budget in ragionamento esteso interno prima
 // di scrivere anche solo un token di risposta visibile (osservato: 1024
@@ -67,9 +68,10 @@ contesto, indicalo esplicitamente (a quale nota/attività/documento ti riferisci
 Se l'utente allega una foto, guardala e usala per rispondere (es. leggi uno scontrino, descrivi
 un documento, riconosci un oggetto) invece di ignorarla.
 
-Usa emoji pertinenti nelle tue risposte, con naturalezza (stile chat, non un'emoji per frase):
-aiutano a rendere la conversazione più calda e leggibile. Non forzarle quando il contenuto è
-serio o delicato (es. un errore, un dato finanziario critico, un argomento sensibile).
+Nelle risposte normali usa sempre una o due emoji pertinenti e colorate, in stile chat.
+Per importi, entrate, uscite e bilanci usa quando appropriato 💰 e 💸. Per appuntamenti usa
+📅, per attività ✅ e per documenti 📄. Non usare emoji solo quando il contenuto è serio o
+delicato (es. un errore, un dato finanziario critico o un argomento sensibile).
 
 Non hai pulsanti di suggerimento nell'interfaccia: se è naturale nel contesto, proponi tu a
 parole cosa l'utente potrebbe fare dopo (es. "Vuoi che te lo ricordi?", "Vuoi che lo aggiunga
@@ -97,7 +99,10 @@ categoria specifica calza, usa "altro" — non lasciare il campo indeciso. Le tr
 restano "in attesa di conferma" finché l'utente non le conferma esplicitamente nella sezione
 Bilancio: non contano ancora nel saldo. Includi sempre, oltre all'eventuale uso dello strumento,
 una risposta testuale breve che nomini cosa hai registrato (tipo, descrizione e importo di
-ciascuna transazione) e che è in attesa di conferma.`;
+ciascuna transazione) e che è in attesa di conferma. Usa questo strumento solo per una nuova
+spesa o entrata dichiarata nell'ULTIMO messaggio dell'utente: non estrarre mai dati dai messaggi
+precedenti, non registrare di nuovo spese già presenti nella cronologia e non riproporre mai
+transazioni già confermate o già in attesa.`;
 
 // Addendum al system prompt, solo quando è disponibile un Workspace reale (stesso gate di
 // TRANSACTION_TOOL_INSTRUCTIONS — vedi `transactionToolEnabled`): richiesta esplicita
@@ -142,7 +147,7 @@ const TRANSACTION_CATEGORIES = [
 // `kDefaultAiModel` in apps/mobile/lib/features/chat/data/supabase_chat_repository.dart
 // (duplicato invece di condiviso, stessa convenzione già usata per TRANSACTION_CATEGORIES
 // tra Dart e TypeScript).
-const RECEIPT_EXTRACTION_MODEL = "claude-sonnet-5";
+const RECEIPT_EXTRACTION_MODEL = DEFAULT_AI_MODEL;
 
 // System prompt della lettura isolata di uno scontrino: forza l'uso di
 // extract_transactions (tool_choice, non "auto") perché qui serve sempre un risultato
@@ -680,6 +685,12 @@ Deno.serve(async (req) => {
       return jsonError("Nessun messaggio da elaborare.", 400);
     }
 
+    // Le vecchie Chat possono conservare un nome di modello non supportato:
+    // il fallback evita che tutta la conversazione smetta di rispondere.
+    const aiModel = chat.ai_model === DEFAULT_AI_MODEL
+      ? chat.ai_model
+      : DEFAULT_AI_MODEL;
+
     const anthropicResponse = await fetch(ANTHROPIC_API_URL, {
       method: "POST",
       headers: {
@@ -688,15 +699,10 @@ Deno.serve(async (req) => {
         "anthropic-version": ANTHROPIC_VERSION,
       },
       body: JSON.stringify({
-        model: chat.ai_model,
+        model: aiModel,
         max_tokens: MAX_OUTPUT_TOKENS,
         system: systemPrompt,
         messages: anthropicMessages,
-        // Un assistente conversazionale non ha bisogno di ragionamento esteso
-        // interno: disabilitato esplicitamente, non solo omesso, perché senza
-        // questo il modello può comunque usarlo di sua iniziativa (vedi
-        // commento su MAX_OUTPUT_TOKENS più sopra).
-        thinking: { type: "disabled" },
         // query_balance_summary/query_reminders sono sempre presenti (a differenza di
         // extract_transactions/create_reminder/manage_tasks, che restano condizionati al
         // Workspace attivo).
@@ -779,11 +785,10 @@ Deno.serve(async (req) => {
           "anthropic-version": ANTHROPIC_VERSION,
         },
         body: JSON.stringify({
-          model: chat.ai_model,
+          model: aiModel,
           max_tokens: MAX_OUTPUT_TOKENS,
           system: systemPrompt,
           messages: followUpMessages,
-          thinking: { type: "disabled" },
         }),
       });
 
@@ -801,11 +806,56 @@ Deno.serve(async (req) => {
       replyText = extractText(followUpBody) ?? replyText;
     }
 
-    const suggestions = transactionToolEnabled
+    const extractedSuggestions = transactionToolEnabled
       ? extractTransactionSuggestions(anthropicBody)
         .map(sanitizeTransaction)
         .filter((s): s is TransactionSuggestion => s !== null)
       : [];
+
+    // Protezione idempotente: se il modello riprende una spesa già presente
+    // nella cronologia della stessa Chat, non deve crearne una seconda riga.
+    // Il confronto include tipo, descrizione, importo e data, così una nuova
+    // spesa diversa continua a essere registrata normalmente.
+    const { data: existingAiTransactions, error: existingAiTransactionsError } =
+      extractedSuggestions.length === 0
+        ? { data: [], error: null }
+        : await supabase
+          .from("transactions")
+          .select("type, description, amount_cents, occurred_at")
+          .eq("chat_id", body.chatId)
+          .eq("created_by_ai", true)
+          .is("deleted_at", null);
+    if (existingAiTransactionsError) {
+      console.error(
+        "ai-chat: errore lettura transazioni esistenti",
+        existingAiTransactionsError,
+      );
+    }
+    const transactionKey = (transaction: {
+      type: string;
+      description: string;
+      amountCents: number;
+      occurredAt: string;
+    }) =>
+      `${transaction.type}|${transaction.description.trim().toLowerCase().replaceAll(/\s+/g, " ")}|${transaction.amountCents}|${transaction.occurredAt.slice(0, 10)}`;
+    const existingTransactionKeys = new Set(
+      (existingAiTransactions ?? []).map((transaction: {
+        type: string;
+        description: string;
+        amount_cents: number;
+        occurred_at: string;
+      }) => transactionKey({
+        type: transaction.type,
+        description: transaction.description,
+        amountCents: transaction.amount_cents,
+        occurredAt: transaction.occurred_at,
+      })),
+    );
+    const suggestions = extractedSuggestions.filter((suggestion) =>
+      !existingTransactionKeys.has(transactionKey(suggestion))
+    );
+    const duplicateSuggestionsSkipped =
+      suggestions.length < extractedSuggestions.length;
 
     let transactionInsertFailed = false;
     // Id delle transazioni appena inserite (richiesta esplicita dell'utente: "Conferma/
@@ -1055,7 +1105,10 @@ Deno.serve(async (req) => {
     if (memoryInsertFailed) failedInserts.push("le informazioni da ricordare");
 
     let finalReplyText = replyText;
-    if (failedInserts.length > 0) {
+    if (duplicateSuggestionsSkipped && suggestions.length === 0) {
+      finalReplyText =
+        "Queste spese risultano già registrate nel Bilancio, quindi non le ho duplicate.";
+    } else if (failedInserts.length > 0) {
       finalReplyText =
         `Non sono riuscito a salvare: ${failedInserts.join(", ")}. Riprova.` +
         (replyText ? `\n\n${replyText}` : "");
@@ -1341,16 +1394,33 @@ async function buildAnthropicMessages(
     row.role === "user" || row.role === "ai"
   );
 
+  // Se una chiamata precedente all'AI è fallita, la Chat può contenere due
+  // messaggi consecutivi dell'utente. L'API Messages richiede invece ruoli
+  // alternati: uniamo le righe adiacenti dello stesso ruolo, mantenendo per
+  // eventuali allegati solo quelli dell'ultima riga dell'utente.
+  const normalizedRows: any[] = [];
+  for (const row of rows) {
+    const previous = normalizedRows[normalizedRows.length - 1];
+    if (previous && previous.role === row.role) {
+      previous.content = `${previous.content}\n\n${row.content}`;
+      if (row.role === "user") {
+        previous.attachment_ids = row.attachment_ids;
+      }
+    } else {
+      normalizedRows.push({ ...row });
+    }
+  }
+
   let lastUserRowIndex = -1;
-  for (let i = rows.length - 1; i >= 0; i--) {
-    if (rows[i].role === "user") {
+  for (let i = normalizedRows.length - 1; i >= 0; i--) {
+    if (normalizedRows[i].role === "user") {
       lastUserRowIndex = i;
       break;
     }
   }
 
   return await Promise.all(
-    rows.map(async (row, index) => {
+    normalizedRows.map(async (row, index) => {
       const role = row.role === "ai" ? "assistant" : "user";
       const attachmentIds: string[] = Array.isArray(row.attachment_ids)
         ? row.attachment_ids
