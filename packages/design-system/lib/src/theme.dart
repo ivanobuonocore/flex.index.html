@@ -80,6 +80,9 @@ abstract final class AppTheme {
         style: ElevatedButton.styleFrom(
           shape: RoundedRectangleBorder(borderRadius: AppRadii.buttonRadius),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          animationDuration: AppMotion.fast,
+          elevation: 1,
+          disabledElevation: 0,
         ),
       ),
       // Stessa forma dell'`ElevatedButton` (redesign estetico — coerenza:
@@ -92,11 +95,13 @@ abstract final class AppTheme {
           shape: RoundedRectangleBorder(borderRadius: AppRadii.buttonRadius),
           side: BorderSide(color: colorScheme.primary.withOpacity(0.4)),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          animationDuration: AppMotion.fast,
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           shape: RoundedRectangleBorder(borderRadius: AppRadii.buttonRadius),
+          animationDuration: AppMotion.fast,
         ),
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
@@ -152,6 +157,10 @@ abstract final class AppTheme {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: AppRadii.standardRadius),
       ),
+      tooltipTheme: TooltipThemeData(
+        waitDuration: AppMotion.fast,
+        showDuration: const Duration(seconds: 2),
+      ),
       // Nessuna ombra/tinta al passaggio dello scroll sotto l'AppBar
       // (redesign estetico): coerente con `GradientAppBar`, che gestisce la
       // propria profondità con `AppShadows.glow` sul contenitore esterno,
@@ -165,6 +174,45 @@ abstract final class AppTheme {
         color: isDark ? AppColors.hairlineDark : AppColors.hairlineLight,
         thickness: 1,
         space: 1,
+      ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: _PipPageTransitionsBuilder(),
+          TargetPlatform.iOS: _PipPageTransitionsBuilder(),
+          TargetPlatform.macOS: _PipPageTransitionsBuilder(),
+          TargetPlatform.windows: _PipPageTransitionsBuilder(),
+          TargetPlatform.linux: _PipPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: _PipPageTransitionsBuilder(),
+        },
+      ),
+    );
+  }
+}
+
+/// Cambio schermata breve, senza spostare la struttura: dissolve e sale di
+/// pochi pixel, con rispetto automatico della preferenza riduci movimento.
+class _PipPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _PipPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (MediaQuery.of(context).disableAnimations) return child;
+
+    final curved = CurvedAnimation(parent: animation, curve: AppMotion.curve);
+    return FadeTransition(
+      opacity: curved,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.018),
+          end: Offset.zero,
+        ).animate(curved),
+        child: child,
       ),
     );
   }
