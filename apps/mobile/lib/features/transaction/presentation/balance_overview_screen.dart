@@ -1386,7 +1386,7 @@ class _PremiumBalancePieChartState extends State<_PremiumBalancePieChart>
     final thickness = radius * 0.42;
     if (distance < radius - thickness / 2 - 16 ||
         distance > radius + thickness / 2 + 18) {
-      if (_selectedIndex != null) setState(() => _selectedIndex = null);
+      _setSelectedIndex(null);
       return;
     }
 
@@ -1397,11 +1397,23 @@ class _PremiumBalancePieChartState extends State<_PremiumBalancePieChart>
     for (var index = 0; index < slices.length; index++) {
       final sweep = math.pi * 2 * slices[index].amountCents / total;
       if (normalized >= accumulated && normalized <= accumulated + sweep) {
-        setState(() => _selectedIndex = index);
-        _selectionController.forward(from: 0);
+        _setSelectedIndex(index);
         return;
       }
       accumulated += sweep;
+    }
+    _setSelectedIndex(null);
+  }
+
+  /// Unifica tap e passaggio del cursore: evita di riavviare l'animazione ad
+  /// ogni pixel del mouse quando l'utente resta sullo stesso spicchio.
+  void _setSelectedIndex(int? index) {
+    if (_selectedIndex == index) return;
+    setState(() => _selectedIndex = index);
+    if (index == null) {
+      _selectionController.reverse();
+    } else {
+      _selectionController.forward(from: 0);
     }
   }
 
@@ -1511,7 +1523,7 @@ class _PremiumBalancePieChartState extends State<_PremiumBalancePieChart>
                   child: Text('Ripartizione del mese',
                       style: AppTypography.heading3.copyWith(fontSize: 16)),
                 ),
-                Text('Tocca un arco',
+                Text('Tocca o passa su un arco',
                     style: AppTypography.caption.copyWith(
                       color: theme.colorScheme.onSurface.withOpacity(0.48),
                     )),
@@ -1547,25 +1559,35 @@ class _PremiumBalancePieChartState extends State<_PremiumBalancePieChart>
                             alignment: Alignment.center,
                             clipBehavior: Clip.none,
                             children: [
-                              GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTapDown: (details) => _selectSlice(
-                                  details.localPosition,
+                              MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                onHover: (event) => _selectSlice(
+                                  event.localPosition,
                                   diameter,
                                   slices,
                                   total,
                                 ),
-                                child: CustomPaint(
-                                  size: Size.square(diameter),
-                                  painter: _PremiumBalanceDonutPainter(
-                                    slices: slices,
-                                    total: total,
-                                    drawProgress: draw,
-                                    selectedIndex: _selectedIndex,
-                                    selectedLift: selectedLift,
-                                    trackColor: theme.colorScheme.onSurface
-                                        .withOpacity(isDark ? 0.13 : 0.075),
-                                    isDark: isDark,
+                                onExit: (_) => _setSelectedIndex(null),
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTapDown: (details) => _selectSlice(
+                                    details.localPosition,
+                                    diameter,
+                                    slices,
+                                    total,
+                                  ),
+                                  child: CustomPaint(
+                                    size: Size.square(diameter),
+                                    painter: _PremiumBalanceDonutPainter(
+                                      slices: slices,
+                                      total: total,
+                                      drawProgress: draw,
+                                      selectedIndex: _selectedIndex,
+                                      selectedLift: selectedLift,
+                                      trackColor: theme.colorScheme.onSurface
+                                          .withOpacity(isDark ? 0.13 : 0.075),
+                                      isDark: isDark,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -2031,7 +2053,9 @@ class _ExpenseHeatmap extends StatelessWidget {
     // weekday: 1 (lunedì) .. 7 (domenica) — stessa convenzione di
     // MonthCalendarGrid, la settimana parte sempre di lunedì.
     final leadingBlanks = DateTime(month.year, month.month, 1).weekday - 1;
-    const accent = AppColors.error;
+    // Il calendario fa parte della schermata Bilancio: usa l'accento viola
+    // dell'app, non il colore arancione riservato agli stati di avviso.
+    const accent = AppColors.heroGradient.last;
 
     return Container(
       decoration: BoxDecoration(
