@@ -16,7 +16,6 @@ import '../../../shared/widgets/document_thumbnail.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
-import '../../../shared/widgets/motion_entrance.dart';
 import '../../../shared/widgets/success_pulse.dart';
 import '../../auth/application/session_controller.dart';
 import '../../reminder/application/calendar_event_controller.dart';
@@ -757,12 +756,7 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
       itemBuilder: (context, index) {
         if (index == displayMessages.length) return const _TypingBubble();
         final message = displayMessages[index];
-        return MotionEntrance(
-          key: ValueKey(message.timestamp.microsecondsSinceEpoch),
-          delay: Duration(milliseconds: index.clamp(0, 4).toInt() * 20),
-          offset: const Offset(0, 6),
-          child: _MessageBubble(message: message),
-        );
+        return _MessageBubble(message: message);
       },
     );
   }
