@@ -109677,7 +109677,7 @@ if(h.length===0){q=B.NL
 s=1
 break}p=4
 s=7
-return A.n(i.c7("chats").jn(0,A.a3(["owner_id",m,"workspace_id",b,"title",h,"ai_model","claude-sonnet-5","status","active"],t.N,t.T)).fu().fz(0),$async$Gy)
+return A.n(i.c7("chats").jn(0,A.a3(["owner_id",m,"workspace_id",b,"title",h,"ai_model","claude-sonnet-4-20250514","status","active"],t.N,t.T)).fu().fz(0),$async$Gy)
 case 7:l=d
 i=n.a1S(l)
 q=new A.c2(i,t.sG)
