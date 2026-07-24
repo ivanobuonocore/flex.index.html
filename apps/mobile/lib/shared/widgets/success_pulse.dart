@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pip_design_system/pip_design_system.dart';
 
 /// Micro-animazione di conferma (richiesta esplicita dell'utente: "migliorie
 /// grafiche... micro-animazioni di conferma"): quando [play] passa da falso a
@@ -21,23 +22,23 @@ class _SuccessPulseState extends State<SuccessPulse>
     with SingleTickerProviderStateMixin {
   late final _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 380),
+    duration: AppMotion.standard,
   );
   late final _scale = TweenSequence<double>([
     TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 1.35)
-            .chain(CurveTween(curve: Curves.easeOut)),
+        tween: Tween(begin: 1.0, end: 1.12)
+            .chain(CurveTween(curve: AppMotion.enter)),
         weight: 50),
     TweenSequenceItem(
-        tween: Tween(begin: 1.35, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeIn)),
+        tween: Tween(begin: 1.12, end: 1.0)
+            .chain(CurveTween(curve: AppMotion.curve)),
         weight: 50),
   ]).animate(_controller);
 
   @override
   void didUpdateWidget(covariant SuccessPulse oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.play && !oldWidget.play) {
+    if (widget.play && !oldWidget.play && !MediaQuery.of(context).disableAnimations) {
       _controller.forward(from: 0);
     }
   }
