@@ -148,7 +148,10 @@ class _DayCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = AppColors.heroGradient[0];
+    // Il giorno selezionato e gli appuntamenti usano il viola del sistema:
+    // evita qualsiasi richiamo arancione e resta coerente con l'header
+    // blu → viola della schermata Appuntamenti.
+    final accent = AppColors.heroGradient.last;
     final hasEvent = eventCount > 0;
 
     // Richiesta esplicita dell'utente: il giorno di un appuntamento deve
