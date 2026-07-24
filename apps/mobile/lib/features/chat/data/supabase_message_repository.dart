@@ -113,6 +113,10 @@ Message parseMessageRow(Map<String, dynamic> row) {
     pendingTransactionIds:
         (row['pending_transaction_ids'] as List<dynamic>?)?.cast<String>() ??
             const [],
+    pendingDeletionTransactionIds:
+        (row['pending_deletion_transaction_ids'] as List<dynamic>?)
+                ?.cast<String>() ??
+            const [],
   );
 }
 
