@@ -23,6 +23,7 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
     // Badge sul pulsante Chat (richiesta esplicita dell'utente: "badge sulla
     // tab... Chat"): conta le transazioni suggerite dall'AI ancora da
     // confermare/scartare (AI Constitution, Principio 1) — è lì, dentro la
@@ -42,8 +43,8 @@ class AppShell extends ConsumerWidget {
       body: TweenAnimationBuilder<double>(
         key: ValueKey(navigationShell.currentIndex),
         tween: Tween(begin: 0, end: 1),
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
+        duration: reduceMotion ? AppMotion.instant : AppMotion.slow,
+        curve: AppMotion.curve,
         builder: (context, value, child) => Opacity(
           opacity: value,
           child: Transform.translate(
@@ -230,8 +231,10 @@ class _NavItem extends StatelessWidget {
         onTap: onTap,
         child: AnimatedScale(
           scale: selected ? 1 : 0.92,
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
+          duration: MediaQuery.of(context).disableAnimations
+              ? AppMotion.instant
+              : AppMotion.fast,
+          curve: AppMotion.curve,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -287,9 +290,24 @@ class _SiriChatButtonState extends State<_SiriChatButton>
     with SingleTickerProviderStateMixin {
   late final _rotation = AnimationController(
     vsync: this,
-    duration: const Duration(seconds: 3),
+    duration: const Duration(milliseconds: 480),
   );
   bool _hovering = false;
+  bool _pressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Un solo respiro all'apertura: il FAB resta vivo ma non entra in un
+    // ciclo continuo che potrebbe distrarre.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _pulse());
+  }
+
+  @override
+  void didUpdateWidget(covariant _SiriChatButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selected && !oldWidget.selected) _pulse();
+  }
 
   @override
   void dispose() {
@@ -300,15 +318,22 @@ class _SiriChatButtonState extends State<_SiriChatButton>
   void _setHovering(bool hovering) {
     if (_hovering == hovering) return;
     setState(() => _hovering = hovering);
-    if (hovering) {
-      _rotation.repeat();
-    } else {
-      _rotation.stop();
-    }
+    if (hovering) _pulse();
+  }
+
+  void _pulse() {
+    if (!mounted || MediaQuery.of(context).disableAnimations) return;
+    _rotation.forward(from: 0);
+  }
+
+  void _setPressed(bool pressed) {
+    if (_pressed == pressed) return;
+    setState(() => _pressed = pressed);
   }
 
   @override
   Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
     final glowIntensity = widget.selected ? 0.55 : 0.35;
 
     return Tooltip(
@@ -320,39 +345,52 @@ class _SiriChatButtonState extends State<_SiriChatButton>
           customBorder: const CircleBorder(),
           onTap: widget.onTap,
           onHover: _setHovering,
-          child: AnimatedBuilder(
-            animation: _rotation,
-            builder: (context, child) {
+          onTapDown: (_) => _setPressed(true),
+          onTapUp: (_) => _setPressed(false),
+          onTapCancel: () => _setPressed(false),
+          child: AnimatedScale(
+            scale: _pressed ? AppMotion.pressedScale : 1,
+            duration: reduceMotion ? AppMotion.instant : AppMotion.press,
+            curve: AppMotion.curve,
+            child: AnimatedBuilder(
+              animation: _rotation,
+              builder: (context, child) {
+                final pulse = reduceMotion
+                    ? 0.0
+                    : math.sin(_rotation.value * math.pi) * 0.035;
               return Badge(
                 isLabelVisible: widget.pendingCount > 0,
                 label: Text('${widget.pendingCount}'),
                 backgroundColor: AppColors.error,
-                child: Container(
-                  width: _chatButtonSize,
-                  height: _chatButtonSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: SweepGradient(
-                      colors: [...AppColors.siriGlow, AppColors.siriGlow.first],
-                      transform:
-                          GradientRotation(_rotation.value * 2 * math.pi),
-                    ),
-                    boxShadow: [
-                      for (final color in AppColors.siriGlow)
-                        BoxShadow(
-                          color: color.withOpacity(
-                            (_hovering ? glowIntensity * 1.4 : glowIntensity) /
-                                AppColors.siriGlow.length,
+                child: Transform.scale(
+                  scale: 1 + pulse,
+                  child: Container(
+                    width: _chatButtonSize,
+                    height: _chatButtonSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: SweepGradient(
+                        colors: [...AppColors.siriGlow, AppColors.siriGlow.first],
+                        transform:
+                            GradientRotation(_rotation.value * 2 * math.pi),
+                      ),
+                      boxShadow: [
+                        for (final color in AppColors.siriGlow)
+                          BoxShadow(
+                            color: color.withOpacity(
+                              (_hovering ? glowIntensity * 1.4 : glowIntensity) /
+                                  AppColors.siriGlow.length,
+                            ),
+                            blurRadius: _hovering
+                                ? 24
+                                : (widget.selected ? 22 : 15),
+                            spreadRadius: _hovering ? 2 : (widget.selected ? 1 : 0),
                           ),
-                          blurRadius:
-                              _hovering ? 28 : (widget.selected ? 24 : 16),
-                          spreadRadius:
-                              _hovering ? 3 : (widget.selected ? 2 : 0),
-                        ),
-                    ],
+                      ],
+                    ),
+                    child: const Icon(Icons.chat_bubble_rounded,
+                        color: Colors.white, size: 28),
                   ),
-                  child: const Icon(Icons.chat_bubble_rounded,
-                      color: Colors.white, size: 28),
                 ),
               );
             },
