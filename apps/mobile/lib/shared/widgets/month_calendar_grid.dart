@@ -170,15 +170,33 @@ class _DayCell extends StatelessWidget {
         (isSelected || hasEvent) ? Colors.white : theme.colorScheme.onSurface;
     final markerColor = (isSelected || hasEvent) ? Colors.white : accent;
 
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+
     return Padding(
       padding: const EdgeInsets.all(2),
-      child: Material(
-        color: fillColor,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: Center(
+      child: AnimatedContainer(
+        duration: reduceMotion ? AppMotion.instant : AppMotion.fast,
+        curve: AppMotion.curve,
+        decoration: BoxDecoration(
+          color: fillColor,
+          shape: BoxShape.circle,
+          boxShadow: isSelected && !reduceMotion
+              ? [
+                  BoxShadow(
+                    color: accent.withOpacity(0.22),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : null,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
