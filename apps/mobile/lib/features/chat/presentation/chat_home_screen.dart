@@ -16,6 +16,7 @@ import '../../../shared/widgets/document_thumbnail.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../../shared/widgets/gradient_app_bar.dart';
 import '../../../shared/widgets/loading_view.dart';
+import '../../../shared/widgets/motion_entrance.dart';
 import '../../../shared/widgets/success_pulse.dart';
 import '../../auth/application/session_controller.dart';
 import '../../reminder/application/calendar_event_controller.dart';
@@ -755,7 +756,13 @@ class _MessagesAreaState extends ConsumerState<_MessagesArea> {
       itemCount: itemCount,
       itemBuilder: (context, index) {
         if (index == displayMessages.length) return const _TypingBubble();
-        return _MessageBubble(message: displayMessages[index]);
+        final message = displayMessages[index];
+        return MotionEntrance(
+          key: ValueKey(message.timestamp.microsecondsSinceEpoch),
+          delay: Duration(milliseconds: index.clamp(0, 4).toInt() * 20),
+          offset: const Offset(0, 6),
+          child: _MessageBubble(message: message),
+        );
       },
     );
   }
@@ -908,6 +915,17 @@ class _MessageBubble extends ConsumerWidget {
                   left: 28 + AppSpacing.xs, top: AppSpacing.xs),
               child: _PendingTransactionActions(
                 transactionIds: message.pendingTransactionIds,
+              ),
+            ),
+          // L'assistente non elimina mai una voce in autonomia: quando ha
+          // trovato una spesa richiesta dall'utente mostra questa conferma
+          // direttamente in chat, senza costringerlo a passare dal Bilancio.
+          if (!isUser && message.pendingDeletionTransactionIds.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(
+                  left: 28 + AppSpacing.xs, top: AppSpacing.xs),
+              child: _PendingDeletionActions(
+                transactionIds: message.pendingDeletionTransactionIds,
               ),
             ),
         ],
@@ -1123,6 +1141,116 @@ class _PendingTransactionActionTileState
 
   String _formatAmount(int amountCents) =>
       '${(amountCents / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
+}
+
+/// Conferma di eliminazione proposta dall'assistente. Le voci restano nel
+/// Bilancio finché l'utente non preme esplicitamente "Elimina" qui sotto.
+class _PendingDeletionActions extends ConsumerWidget {
+  const _PendingDeletionActions({required this.transactionIds});
+
+  final List<String> transactionIds;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final transactions = ref.watch(transactionsProvider(null)).value ?? [];
+    final ids = transactionIds.toSet();
+    final candidates = transactions
+        .where((transaction) => ids.contains(transaction.id))
+        .toList(growable: false);
+    if (candidates.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final transaction in candidates) ...[
+          _PendingDeletionActionTile(transaction: transaction),
+          const SizedBox(height: AppSpacing.xs),
+        ],
+      ],
+    );
+  }
+}
+
+class _PendingDeletionActionTile extends ConsumerStatefulWidget {
+  const _PendingDeletionActionTile({required this.transaction});
+
+  final Transaction transaction;
+
+  @override
+  ConsumerState<_PendingDeletionActionTile> createState() =>
+      _PendingDeletionActionTileState();
+}
+
+class _PendingDeletionActionTileState
+    extends ConsumerState<_PendingDeletionActionTile> {
+  bool _deleted = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_deleted) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final isBusy = ref.watch(transactionFormControllerProvider).isLoading;
+    final isExpense = widget.transaction.type == TransactionType.expense;
+
+    return Container(
+      constraints:
+          BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: AppRadii.buttonRadius,
+        border: Border.all(color: theme.colorScheme.error.withOpacity(0.35)),
+        boxShadow: AppShadows.card(isDark: theme.brightness == Brightness.dark),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Sei sicuro di voler eliminare questa voce?',
+            style: AppTypography.caption.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            children: [
+              Text(isExpense ? '💸' : '💰', style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  '${widget.transaction.description} · '
+                  '${_formatAmount(widget.transaction.amountCents)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.colorScheme.error,
+                foregroundColor: theme.colorScheme.onError,
+              ),
+              onPressed: isBusy
+                  ? null
+                  : () async {
+                      final failure = await ref
+                          .read(transactionFormControllerProvider.notifier)
+                          .delete(widget.transaction.id);
+                      if (failure == null && mounted) {
+                        setState(() => _deleted = true);
+                      }
+                    },
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text('Elimina'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _MessageInput extends ConsumerStatefulWidget {
