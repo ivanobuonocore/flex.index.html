@@ -4,7 +4,7 @@ const TEMP = 'flutter-temp-cache';
 const CACHE_NAME = 'flutter-app-cache';
 
 const RESOURCES = {"favicon.png": "45239d3af5fa34f0ff771fd25ddc4b7d",
-"flutter_bootstrap.js": "ac5909c1b00bf65dbe3e3c9f872a544b",
+"flutter_bootstrap.js": "3adb3d9b7fdc763a8b01eba6da181218",
 "icons/Icon-192.png": "daf66a5502442b23f1209e69fb905bfa",
 "icons/Icon-512.png": "2329708329bb1dbf7787c486315164f9",
 "icons/Icon-maskable-512.png": "a637197fdcb0a489e8242290eebb78f6",
@@ -12,7 +12,7 @@ const RESOURCES = {"favicon.png": "45239d3af5fa34f0ff771fd25ddc4b7d",
 "push-worker.js": "39b6de19bd482e9f591e261f2fe9b990",
 "index.html": "926a28622f2e4de2c1d23bb6e8a23972",
 "/": "926a28622f2e4de2c1d23bb6e8a23972",
-"main.dart.js": "6990c611ea2dd85ec1ea5774ff11d7fc",
+"main.dart.js": "1f419187fba2c424588ef05b5bac740d",
 "flutter.js": "f393d3c16b631f36852323de8e583132",
 "canvaskit/skwasm.wasm": "9f0c0c02b82a910d12ce0543ec130e60",
 "canvaskit/skwasm.js": "694fda5704053957c2594de355805228",
